@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Feeding Report Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-pen: #0f3460;
+            --accent-primary: #e94560;
+            --accent-secondary: #f39c12;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --status-all: #2ecc71;
+            --status-three-quarter: #9acd32;
+            --status-half: #f1c40f;
+            --status-quarter: #e67e22;
+            --status-none: #e74c3c;
+            --shadow: 0 4px 15px rgba(0,0,0,0.3);
+            --radius: 12px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            overflow-x: hidden;
+            width: 100%;
+            max-width: 100%;
+        }
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+            min-height: 100vh;
+            color: var(--text-primary);
+            padding: 15px;
+            padding-bottom: 100px;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 1.6rem;
+            font-weight: 800;
+            margin-bottom: 20px;
+            color: var(--accent-primary);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        /* Dog Entry Section */
+        .entry-section {
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: var(--shadow);
+        }
+
+        .entry-row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .entry-row input {
+            padding: 12px 15px;
+            border: 2px solid var(--bg-pen);
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: inherit;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            width: 100%;
+            min-width: 0;
+        }
+
+        .entry-row input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+
+        .entry-row input::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 700;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            min-width: 80px;
+        }
+
+        .btn-primary {
+            background: var(--accent-primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #d63850;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: var(--bg-pen);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: #1a4a7a;
+        }
+
+        .btn-success {
+            background: var(--status-all);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #27ae60;
+        }
+
+        /* Staging Area */
+        .staging-area {
+            min-height: 80px;
+            background: var(--bg-primary);
+            border: 2px dashed var(--bg-pen);
+            border-radius: 8px;
+            padding: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-content: flex-start;
+        }
+
+        .staging-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .staging-header span {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .bin {
+            width: 45px;
+            height: 45px;
+            background: var(--bg-primary);
+            border: 2px dashed var(--status-none);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .bin.drag-over {
+            background: var(--status-none);
+            border-style: solid;
+            transform: scale(1.1);
+        }
+
+        /* Dog Card */
+        .dog-card {
+            background: var(--accent-primary);
+            color: white;
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: grab;
+            user-select: none;
+            touch-action: none;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(233, 69, 96, 0.4);
+        }
+
+        .dog-card:active {
+            cursor: grabbing;
+        }
+
+        .dog-card.dragging {
+            opacity: 0.8;
+            transform: scale(1.05);
+            box-shadow: 0 8px 25px rgba(233, 69, 96, 0.5);
+        }
+
+        /* Pens Grid */
+        .pens-container {
+            margin-bottom: 20px;
+        }
+
+        .pen-row-label {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 15px 0 8px 5px;
+        }
+
+        .pen-row {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+        }
+
+        .pen {
+            background: var(--bg-pen);
+            border-radius: var(--radius);
+            min-height: 150px;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            border: 2px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .pen.drag-over {
+            border-color: var(--accent-primary);
+            background: rgba(233, 69, 96, 0.1);
+        }
+
+        .pen-header {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-align: center;
+            padding-bottom: 5px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .pen-dogs {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            overflow: visible;
+        }
+
+        /* Dog in Pen */
+        .pen-dog {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 6px;
+            border-left: 4px solid var(--status-all);
+            transition: all 0.2s ease;
+        }
+
+        .pen-dog.status-all { border-left-color: var(--status-all); }
+        .pen-dog.status-three-quarter { border-left-color: var(--status-three-quarter); }
+        .pen-dog.status-half { border-left-color: var(--status-half); }
+        .pen-dog.status-quarter { border-left-color: var(--status-quarter); }
+        .pen-dog.status-none { border-left-color: var(--status-none); }
+
+        .pen-dog-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .pen-dog-name {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            cursor: grab;
+            touch-action: none;
+            flex: 1;
+            padding: 2px 0;
+        }
+
+        .pen-dog-remove {
+            width: 18px;
+            height: 18px;
+            background: var(--status-none);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 0.7rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .pen-dog-controls {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 4px;
+            align-items: center;
+        }
+
+        .pen-dog-controls select {
+            padding: 4px 2px;
+            border: 1px solid var(--bg-pen);
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-family: inherit;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            cursor: pointer;
+            min-width: 50px;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .toggle-btn {
+            padding: 4px 6px;
+            border: 1px solid var(--bg-pen);
+            border-radius: 4px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            font-family: inherit;
+            cursor: pointer;
+            background: var(--bg-primary);
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+            min-width: 28px;
+        }
+
+        .toggle-btn.active {
+            background: var(--accent-secondary);
+            color: white;
+            border-color: var(--accent-secondary);
+        }
+
+        /* Bottom Controls */
+        .bottom-controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--bg-secondary);
+            padding: 15px;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
+            z-index: 100;
+        }
+
+        .meal-selector {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .meal-selector label {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+        }
+
+        .meal-selector select {
+            padding: 10px 15px;
+            border: 2px solid var(--bg-pen);
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            cursor: pointer;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+        }
+
+        /* Preview Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            max-width: 500px;
+            width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow);
+        }
+
+        .modal-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--bg-pen);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            font-size: 1.1rem;
+            color: var(--accent-primary);
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .preview-pen {
+            margin-bottom: 15px;
+        }
+
+        .preview-pen-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--accent-secondary);
+            margin-bottom: 8px;
+        }
+
+        .preview-dog {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            background: var(--bg-primary);
+            border-radius: 6px;
+            margin-bottom: 5px;
+            font-size: 0.85rem;
+        }
+
+        .preview-dog-name {
+            flex: 1;
+            font-weight: 700;
+        }
+
+        .preview-dog-status {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .preview-dog-extras {
+            color: var(--accent-secondary);
+            font-weight: 700;
+        }
+
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid var(--bg-pen);
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        /* Count badge */
+        .count-badge {
+            background: var(--accent-primary);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        /* Empty state */
+        .empty-message {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            text-align: center;
+            padding: 20px;
+            font-style: italic;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+            .pen {
+                min-height: 120px;
+                padding: 6px;
+            }
+
+            .pen-header {
+                font-size: 0.6rem;
+            }
+
+            .pen-dog-name {
+                font-size: 0.7rem;
+            }
+
+            .pen-dog-controls select {
+                font-size: 0.65rem;
+                padding: 3px 1px;
+            }
+
+            .toggle-btn {
+                font-size: 0.6rem;
+                padding: 3px 4px;
+                min-width: 24px;
+            }
+
+            h1 {
+                font-size: 1.3rem;
+            }
+        }
+
+        @media (max-width: 400px) {
+            .pen-row {
+                grid-template-columns: repeat(5, 1fr);
+                gap: 4px;
+            }
+
+            .pen {
+                padding: 4px;
+                min-height: 100px;
+            }
+
+            body {
+                padding: 10px;
+                padding-bottom: 100px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>🐕 Feeding Report</h1>
+
+    <!-- Dog Entry Section -->
+    <div class="entry-section">
+        <div class="entry-row">
+            <input type="text" id="dogNameInput" placeholder="Enter dog name..." autocomplete="off">
+            <button class="btn btn-primary" onclick="addDog()">Add</button>
+        </div>
+        <div class="staging-header">
+            <span>Dogs to assign <span class="count-badge" id="stagingCount">0</span></span>
+            <div class="bin" id="deleteBin">🗑️</div>
+        </div>
+        <div class="staging-area" id="stagingArea">
+            <div class="empty-message" id="stagingEmpty">Add dogs above, then drag them to pens</div>
+        </div>
+    </div>
+
+    <!-- Pens Container -->
+    <div class="pens-container">
+        <div class="pen-row-label">Top Pens</div>
+        <div class="pen-row" id="topPens">
+            <!-- Generated by JS -->
+        </div>
+        
+        <div class="pen-row-label">Bottom Pens</div>
+        <div class="pen-row" id="bottomPens">
+            <!-- Generated by JS -->
+        </div>
+    </div>
+
+    <!-- Bottom Controls -->
+    <div class="bottom-controls">
+        <div class="meal-selector">
+            <label>Meal Type:</label>
+            <select id="mealType">
+                <option value="breakfast">🌅 Breakfast</option>
+                <option value="lunch">☀️ Lunch</option>
+                <option value="dinner">🌙 Dinner</option>
+            </select>
+        </div>
+        <div class="action-buttons">
+            <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+            <button class="btn btn-primary" onclick="showPreview()">Preview</button>
+            <button class="btn btn-success" onclick="submitReport()">Submit</button>
+        </div>
+    </div>
+
+    <!-- Preview Modal -->
+    <div class="modal-overlay" id="previewModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>📋 Report Preview</h2>
+                <button class="modal-close" onclick="closePreview()">×</button>
+            </div>
+            <div class="modal-body" id="previewContent">
+                <!-- Generated by JS -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closePreview()">Back</button>
+                <button class="btn btn-success" onclick="submitReport()">Submit</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let dogs = [];
+        let pens = {};
+        let draggedElement = null;
+        let draggedDogId = null;
+        let draggedFromPen = null;
+
+        // Initialize pens
+        function initPens() {
+            const topPensContainer = document.getElementById('topPens');
+            const bottomPensContainer = document.getElementById('bottomPens');
+
+            for (let i = 1; i <= 5; i++) {
+                pens[`top-${i}`] = [];
+                pens[`bottom-${i}`] = [];
+
+                topPensContainer.innerHTML += createPenHTML(`top-${i}`, `Top ${i}`);
+                bottomPensContainer.innerHTML += createPenHTML(`bottom-${i}`, `Bottom ${i}`);
+            }
+
+            // Add drop listeners to pens
+            document.querySelectorAll('.pen').forEach(pen => {
+                pen.addEventListener('pointerenter', handlePenEnter);
+                pen.addEventListener('pointerleave', handlePenLeave);
+            });
+
+            // Add drop listener to bin
+            const bin = document.getElementById('deleteBin');
+            bin.addEventListener('pointerenter', handleBinEnter);
+            bin.addEventListener('pointerleave', handleBinLeave);
+
+            // Add drop listener to staging area
+            const staging = document.getElementById('stagingArea');
+            staging.addEventListener('pointerenter', handleStagingEnter);
+            staging.addEventListener('pointerleave', handleStagingLeave);
+        }
+
+        function createPenHTML(penId, label) {
+            return `
+                <div class="pen" data-pen-id="${penId}">
+                    <div class="pen-header">${label}</div>
+                    <div class="pen-dogs" id="pen-${penId}"></div>
+                </div>
+            `;
+        }
+
+        // Add dog from input
+        function addDog() {
+            const input = document.getElementById('dogNameInput');
+            const name = input.value.trim();
+            
+            if (name) {
+                const dog = {
+                    id: Date.now() + Math.random(),
+                    name: name,
+                    status: 'all',
+                    supplements: false,
+                    prescription: false
+                };
+                dogs.push(dog);
+                renderStagingArea();
+                input.value = '';
+                input.focus();
+            }
+        }
+
+        // Handle Enter key in input
+        document.getElementById('dogNameInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') addDog();
+        });
+
+        // Render staging area
+        function renderStagingArea() {
+            const staging = document.getElementById('stagingArea');
+            const emptyMsg = document.getElementById('stagingEmpty');
+            const countBadge = document.getElementById('stagingCount');
+
+            const unassignedDogs = dogs.filter(d => !getDogPen(d.id));
+            countBadge.textContent = unassignedDogs.length;
+
+            if (unassignedDogs.length === 0) {
+                staging.innerHTML = '<div class="empty-message" id="stagingEmpty">Add dogs above, then drag them to pens</div>';
+                return;
+            }
+
+            staging.innerHTML = unassignedDogs.map(dog => `
+                <div class="dog-card" data-dog-id="${dog.id}" 
+                     onpointerdown="startDrag(event, ${dog.id})">
+                    ${dog.name}
+                </div>
+            `).join('');
+        }
+
+        // Get which pen a dog is in
+        function getDogPen(dogId) {
+            for (const [penId, penDogs] of Object.entries(pens)) {
+                if (penDogs.includes(dogId)) return penId;
+            }
+            return null;
+        }
+
+        // Drag and Drop with Pointer Events
+        function startDrag(e, dogId) {
+            e.preventDefault();
+            
+            const target = e.target.closest('.dog-card, .pen-dog-name');
+            if (!target) return;
+
+            draggedDogId = dogId;
+            draggedFromPen = getDogPen(dogId);
+            
+            // Create visual clone for dragging
+            const dog = dogs.find(d => d.id === dogId);
+            draggedElement = document.createElement('div');
+            draggedElement.className = 'dog-card dragging';
+            draggedElement.textContent = dog.name;
+            draggedElement.style.position = 'fixed';
+            draggedElement.style.pointerEvents = 'none';
+            draggedElement.style.zIndex = '1000';
+            document.body.appendChild(draggedElement);
+
+            moveAt(e.clientX, e.clientY);
+
+            document.addEventListener('pointermove', onPointerMove);
+            document.addEventListener('pointerup', onPointerUp);
+        }
+
+        function moveAt(x, y) {
+            if (draggedElement) {
+                draggedElement.style.left = (x - 40) + 'px';
+                draggedElement.style.top = (y - 15) + 'px';
+            }
+        }
+
+        function onPointerMove(e) {
+            moveAt(e.clientX, e.clientY);
+        }
+
+        function onPointerUp(e) {
+            document.removeEventListener('pointermove', onPointerMove);
+            document.removeEventListener('pointerup', onPointerUp);
+
+            if (draggedElement) {
+                draggedElement.remove();
+                draggedElement = null;
+            }
+
+            // Find what we're dropping on
+            const elemBelow = document.elementFromPoint(e.clientX, e.clientY);
+            
+            if (elemBelow) {
+                // Check if dropping on bin
+                if (elemBelow.closest('#deleteBin')) {
+                    deleteDog(draggedDogId);
+                }
+                // Check if dropping on a pen
+                else if (elemBelow.closest('.pen')) {
+                    const pen = elemBelow.closest('.pen');
+                    const penId = pen.dataset.penId;
+                    dropDogInPen(draggedDogId, penId);
+                }
+                // Check if dropping on staging area
+                else if (elemBelow.closest('#stagingArea')) {
+                    moveDogToStaging(draggedDogId);
+                }
+            }
+
+            // Reset drag state
+            draggedDogId = null;
+            draggedFromPen = null;
+
+            // Clear all drag-over states
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+        }
+
+        function handlePenEnter(e) {
+            if (draggedDogId) {
+                e.currentTarget.classList.add('drag-over');
+            }
+        }
+
+        function handlePenLeave(e) {
+            e.currentTarget.classList.remove('drag-over');
+        }
+
+        function handleBinEnter(e) {
+            if (draggedDogId) {
+                e.currentTarget.classList.add('drag-over');
+            }
+        }
+
+        function handleBinLeave(e) {
+            e.currentTarget.classList.remove('drag-over');
+        }
+
+        function handleStagingEnter(e) {
+            if (draggedDogId && draggedFromPen) {
+                e.currentTarget.style.borderColor = 'var(--accent-primary)';
+            }
+        }
+
+        function handleStagingLeave(e) {
+            e.currentTarget.style.borderColor = '';
+        }
+
+        // Drop dog in pen
+        function dropDogInPen(dogId, penId) {
+            // Check pen capacity (max 5)
+            if (pens[penId].length >= 5) {
+                alert('This pen already has 5 dogs!');
+                return;
+            }
+
+            // Remove from current pen if in one
+            if (draggedFromPen) {
+                pens[draggedFromPen] = pens[draggedFromPen].filter(id => id !== dogId);
+            }
+
+            // Add to new pen
+            if (!pens[penId].includes(dogId)) {
+                pens[penId].push(dogId);
+            }
+
+            renderAllPens();
+            renderStagingArea();
+        }
+
+        // Move dog back to staging
+        function moveDogToStaging(dogId) {
+            for (const penId of Object.keys(pens)) {
+                pens[penId] = pens[penId].filter(id => id !== dogId);
+            }
+            renderAllPens();
+            renderStagingArea();
+        }
+
+        // Delete dog
+        function deleteDog(dogId) {
+            dogs = dogs.filter(d => d.id !== dogId);
+            for (const penId of Object.keys(pens)) {
+                pens[penId] = pens[penId].filter(id => id !== dogId);
+            }
+            renderAllPens();
+            renderStagingArea();
+        }
+
+        // Render all pens
+        function renderAllPens() {
+            for (const [penId, penDogs] of Object.entries(pens)) {
+                const container = document.getElementById(`pen-${penId}`);
+                if (penDogs.length === 0) {
+                    container.innerHTML = '';
+                    continue;
+                }
+
+                container.innerHTML = penDogs.map(dogId => {
+                    const dog = dogs.find(d => d.id === dogId);
+                    if (!dog) return '';
+                    return createPenDogHTML(dog);
+                }).join('');
+            }
+        }
+
+        function createPenDogHTML(dog) {
+            const statusClass = `status-${dog.status.replace('/', '-').replace(' ', '-')}`;
+            return `
+                <div class="pen-dog ${statusClass}" data-dog-id="${dog.id}">
+                    <div class="pen-dog-header">
+                        <span class="pen-dog-name" onpointerdown="startDrag(event, ${dog.id})">${dog.name}</span>
+                        <button class="pen-dog-remove" onclick="moveDogToStaging(${dog.id})">×</button>
+                    </div>
+                    <div class="pen-dog-controls">
+                        <select onchange="updateDogStatus(${dog.id}, this.value)">
+                            <option value="all" ${dog.status === 'all' ? 'selected' : ''}>All</option>
+                            <option value="three-quarter" ${dog.status === 'three-quarter' ? 'selected' : ''}>¾</option>
+                            <option value="half" ${dog.status === 'half' ? 'selected' : ''}>½</option>
+                            <option value="quarter" ${dog.status === 'quarter' ? 'selected' : ''}>¼</option>
+                            <option value="none" ${dog.status === 'none' ? 'selected' : ''}>None</option>
+                        </select>
+                        <button class="toggle-btn ${dog.supplements ? 'active' : ''}" onclick="toggleSupplement(${dog.id})">+S</button>
+                        <button class="toggle-btn ${dog.prescription ? 'active' : ''}" onclick="togglePrescription(${dog.id})">+P</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Update dog status
+        function updateDogStatus(dogId, status) {
+            const dog = dogs.find(d => d.id === dogId);
+            if (dog) {
+                dog.status = status;
+                renderAllPens();
+            }
+        }
+
+        // Toggle supplements
+        function toggleSupplement(dogId) {
+            const dog = dogs.find(d => d.id === dogId);
+            if (dog) {
+                dog.supplements = !dog.supplements;
+                renderAllPens();
+            }
+        }
+
+        // Toggle prescription
+        function togglePrescription(dogId) {
+            const dog = dogs.find(d => d.id === dogId);
+            if (dog) {
+                dog.prescription = !dog.prescription;
+                renderAllPens();
+            }
+        }
+
+        // Clear all
+        function clearAll() {
+            if (confirm('Clear all dogs and reset?')) {
+                dogs = [];
+                for (const penId of Object.keys(pens)) {
+                    pens[penId] = [];
+                }
+                renderAllPens();
+                renderStagingArea();
+            }
+        }
+
+        // Get status label
+        function getStatusLabel(status) {
+            const labels = {
+                'all': 'All ✓',
+                'three-quarter': '¾',
+                'half': '½',
+                'quarter': '¼',
+                'none': 'None ⚠️'
+            };
+            return labels[status] || status;
+        }
+
+        // Get status color
+        function getStatusColor(status) {
+            const colors = {
+                'all': 'var(--status-all)',
+                'three-quarter': 'var(--status-three-quarter)',
+                'half': 'var(--status-half)',
+                'quarter': 'var(--status-quarter)',
+                'none': 'var(--status-none)'
+            };
+            return colors[status] || 'var(--status-all)';
+        }
+
+        // Show preview
+        function showPreview() {
+            const mealType = document.getElementById('mealType').value;
+            const mealLabels = {
+                'breakfast': '🌅 Breakfast',
+                'lunch': '☀️ Lunch',
+                'dinner': '🌙 Dinner'
+            };
+
+            let hasAnyDogs = false;
+            let previewHTML = `<h3 style="margin-bottom: 15px; color: var(--accent-secondary);">${mealLabels[mealType]}</h3>`;
+
+            for (const [penId, penDogs] of Object.entries(pens)) {
+                if (penDogs.length === 0) continue;
+                hasAnyDogs = true;
+
+                const penLabel = penId.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                previewHTML += `<div class="preview-pen">
+                    <div class="preview-pen-title">${penLabel}</div>`;
+
+                for (const dogId of penDogs) {
+                    const dog = dogs.find(d => d.id === dogId);
+                    if (!dog) continue;
+
+                    const extras = [];
+                    if (dog.supplements) extras.push('+S');
+                    if (dog.prescription) extras.push('+P');
+
+                    previewHTML += `
+                        <div class="preview-dog">
+                            <span class="preview-dog-name">${dog.name}</span>
+                            <span class="preview-dog-status" style="background: ${getStatusColor(dog.status)}; color: white;">
+                                ${getStatusLabel(dog.status)}
+                            </span>
+                            ${extras.length > 0 ? `<span class="preview-dog-extras">${extras.join(' ')}</span>` : ''}
+                        </div>
+                    `;
+                }
+
+                previewHTML += '</div>';
+            }
+
+            if (!hasAnyDogs) {
+                previewHTML += '<div class="empty-message">No dogs assigned to pens yet!</div>';
+            }
+
+            document.getElementById('previewContent').innerHTML = previewHTML;
+            document.getElementById('previewModal').classList.add('active');
+        }
+
+        // Close preview
+        function closePreview() {
+            document.getElementById('previewModal').classList.remove('active');
+        }
+
+        // Submit report (placeholder for now)
+        function submitReport() {
+            // Collect all dog data from pens
+            const reportData = {
+                mealType: document.getElementById('mealType').value,
+                timestamp: new Date().toISOString(),
+                pens: {}
+            };
+
+            let totalDogs = 0;
+
+            for (const [penId, penDogs] of Object.entries(pens)) {
+                if (penDogs.length === 0) continue;
+                
+                reportData.pens[penId] = penDogs.map(dogId => {
+                    const dog = dogs.find(d => d.id === dogId);
+                    if (!dog) return null;
+                    totalDogs++;
+                    return {
+                        name: dog.name,
+                        status: dog.status,
+                        supplements: dog.supplements,
+                        prescription: dog.prescription
+                    };
+                }).filter(d => d !== null);
+            }
+
+            if (totalDogs === 0) {
+                alert('No dogs to submit! Please assign dogs to pens first.');
+                return;
+            }
+
+            // For now, just log and show success
+            console.log('Report Data:', reportData);
+            
+            closePreview();
+            alert(`✅ Report ready!\n\n${totalDogs} dogs for ${reportData.mealType}.\n\n(Backend integration coming next!)`);
+        }
+
+        // Initialize on load
+        initPens();
+    </script>
+</body>
+</html>
