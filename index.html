@@ -32,10 +32,8 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        html, body {
+        html {
             overflow-x: hidden;
-            width: 100%;
-            max-width: 100%;
         }
 
         body {
@@ -43,6 +41,8 @@
             background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
             min-height: 100vh;
             color: var(--text-primary);
+            overflow-x: hidden;
+            width: 100%;
         }
 
         /* Main Container */
@@ -51,6 +51,8 @@
             margin: 0 auto;
             padding: 20px;
             min-height: 100vh;
+            width: 100%;
+            overflow-x: hidden;
         }
 
         h1 {
@@ -98,12 +100,12 @@
         }
 
         .entry-row {
-            display: flex;
+            display: grid;
+            grid-template-columns: 1fr auto;
             gap: 10px;
         }
 
         .entry-row input {
-            flex: 1;
             padding: 12px 15px;
             border: 2px solid var(--bg-pen);
             border-radius: 8px;
@@ -112,6 +114,7 @@
             background: var(--bg-primary);
             color: var(--text-primary);
             min-width: 0;
+            width: 100%;
             transition: border-color 0.2s ease;
         }
 
@@ -135,6 +138,7 @@
             transition: all 0.2s ease;
             text-transform: uppercase;
             letter-spacing: 1px;
+            white-space: nowrap;
         }
 
         .btn:hover {
@@ -284,6 +288,7 @@
             display: flex;
             flex-direction: column;
             gap: 20px;
+            min-width: 0; /* Prevent grid blowout */
         }
 
         /* Pens Grid */
@@ -292,6 +297,7 @@
             border-radius: var(--radius);
             padding: 20px;
             box-shadow: var(--shadow);
+            overflow-x: auto; /* Allow horizontal scroll if needed */
         }
 
         .pen-row-label {
@@ -309,7 +315,7 @@
 
         .pen-row {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: repeat(5, minmax(140px, 1fr));
             gap: 12px;
         }
 
@@ -426,6 +432,7 @@
             color: var(--text-primary);
             cursor: pointer;
             transition: border-color 0.2s ease;
+            min-width: 55px;
         }
 
         .pen-dog-controls select:hover {
@@ -476,6 +483,7 @@
             gap: 10px;
             align-items: center;
             flex: 1;
+            min-width: 200px;
         }
 
         .meal-selector label {
@@ -495,7 +503,8 @@
             color: var(--text-primary);
             cursor: pointer;
             transition: border-color 0.2s ease;
-            min-width: 180px;
+            flex: 1;
+            min-width: 150px;
         }
 
         .meal-selector select:hover {
@@ -505,10 +514,12 @@
         .action-buttons {
             display: flex;
             gap: 12px;
+            flex-wrap: wrap;
         }
 
         .action-buttons .btn {
             min-width: 100px;
+            flex: 1;
         }
 
         /* Preview Modal */
@@ -606,11 +617,13 @@
             border-radius: 8px;
             margin-bottom: 8px;
             font-size: 0.95rem;
+            flex-wrap: wrap;
         }
 
         .preview-dog-name {
             flex: 1;
             font-weight: 700;
+            min-width: 80px;
         }
 
         .preview-dog-status {
@@ -661,30 +674,61 @@
             width: 100%;
         }
 
-        /* ========== MOBILE RESPONSIVE ========== */
+        /* ========== TABLET RESPONSIVE (≤1024px) ========== */
         @media (max-width: 1024px) {
             .layout {
                 grid-template-columns: 1fr;
+                gap: 15px;
             }
 
             .sidebar {
                 position: relative;
                 top: auto;
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 15px;
+            }
+
+            .entry-section {
+                grid-column: 1 / -1;
             }
 
             .staging-area {
-                max-height: 150px;
+                max-height: 120px;
+                min-height: 80px;
+            }
+
+            .bin-section {
+                display: flex;
+                align-items: stretch;
+            }
+
+            .bin {
+                height: 100%;
+                min-height: 80px;
+            }
+
+            /* Pens - keep 5 columns but allow horizontal scroll */
+            .pens-section {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .pen-row {
+                grid-template-columns: repeat(5, minmax(130px, 1fr));
+                min-width: max-content;
             }
 
             .pen {
-                min-height: 160px;
+                min-height: 180px;
+                min-width: 130px;
             }
         }
 
+        /* ========== MOBILE RESPONSIVE (≤768px) ========== */
         @media (max-width: 768px) {
             .container {
                 padding: 15px;
-                padding-bottom: 20px;
             }
 
             h1 {
@@ -692,12 +736,27 @@
                 margin-bottom: 15px;
             }
 
+            .sidebar {
+                grid-template-columns: 1fr;
+            }
+
+            .staging-area {
+                max-height: 100px;
+            }
+
+            .bin {
+                height: 50px;
+                min-height: 50px;
+            }
+
             .pen-row {
+                grid-template-columns: repeat(5, minmax(110px, 1fr));
                 gap: 8px;
             }
 
             .pen {
-                min-height: 140px;
+                min-height: 150px;
+                min-width: 110px;
                 padding: 8px;
             }
 
@@ -714,54 +773,81 @@
             }
 
             .pen-dog-controls select {
-                font-size: 0.75rem;
-                padding: 5px 6px;
+                font-size: 0.7rem;
+                padding: 5px 4px;
+                min-width: 45px;
             }
 
             .toggle-btn {
-                font-size: 0.7rem;
-                padding: 5px 8px;
+                font-size: 0.65rem;
+                padding: 5px 6px;
             }
 
             .controls-row {
                 flex-direction: column;
                 align-items: stretch;
+                gap: 12px;
             }
 
             .meal-selector {
                 width: 100%;
             }
 
-            .meal-selector select {
-                flex: 1;
-            }
-
             .action-buttons {
                 display: grid;
-                grid-template-columns: 1fr 1fr 1fr;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 10px;
             }
 
             .action-buttons .btn {
                 min-width: auto;
+                padding: 12px 10px;
             }
         }
 
+        /* ========== SMALL MOBILE (≤500px) ========== */
         @media (max-width: 500px) {
             .container {
                 padding: 10px;
-                padding-bottom: 15px;
             }
 
             h1 {
-                font-size: 1.3rem;
+                font-size: 1.2rem;
+                margin-bottom: 12px;
+            }
+
+            .entry-section, .staging-section, .bin-section, .pens-section, .controls-section {
+                padding: 12px;
+                border-radius: 10px;
+            }
+
+            .section-title {
+                font-size: 0.75rem;
+            }
+
+            .entry-row input {
+                padding: 10px 12px;
+                font-size: 14px;
+            }
+
+            .btn {
+                padding: 10px 14px;
+                font-size: 12px;
+            }
+
+            .dog-card {
+                padding: 8px 12px;
+                font-size: 0.8rem;
             }
 
             .pen-row {
-                gap: 5px;
+                grid-template-columns: repeat(5, minmax(90px, 1fr));
+                gap: 6px;
             }
 
             .pen {
                 min-height: 120px;
+                min-width: 90px;
                 padding: 6px;
                 border-radius: 8px;
             }
@@ -792,27 +878,49 @@
             }
 
             .pen-dog-controls {
-                gap: 4px;
+                gap: 3px;
             }
 
             .pen-dog-controls select {
-                font-size: 0.65rem;
-                padding: 4px;
+                font-size: 0.6rem;
+                padding: 4px 2px;
+                min-width: 38px;
             }
 
             .toggle-btn {
-                font-size: 0.6rem;
-                padding: 4px 6px;
+                font-size: 0.55rem;
+                padding: 4px 5px;
             }
 
-            .dog-card {
-                padding: 8px 12px;
-                font-size: 0.8rem;
+            .pen-row-label {
+                font-size: 0.75rem;
+                margin-bottom: 8px;
             }
 
-            .entry-section, .staging-section, .bin-section, .pens-section, .controls-section {
-                padding: 12px;
-                border-radius: 10px;
+            .meal-selector select {
+                padding: 10px 12px;
+                font-size: 14px;
+            }
+
+            .action-buttons .btn {
+                padding: 10px 8px;
+                font-size: 11px;
+            }
+        }
+
+        /* Scroll hint indicator */
+        .scroll-hint {
+            display: none;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            padding: 5px;
+            margin-bottom: 5px;
+        }
+
+        @media (max-width: 1024px) {
+            .scroll-hint {
+                display: block;
             }
         }
     </style>
@@ -822,7 +930,7 @@
         <h1>🐕 Feeding Report</h1>
 
         <div class="layout">
-            <!-- Sidebar (Left) -->
+            <!-- Sidebar (Left on desktop, Top on mobile) -->
             <div class="sidebar">
                 <!-- Dog Entry Section -->
                 <div class="entry-section">
@@ -840,7 +948,7 @@
                         <span class="count-badge" id="stagingCount">0</span>
                     </div>
                     <div class="staging-area" id="stagingArea">
-                        <div class="empty-message" id="stagingEmpty">Add dogs above, then drag to pens →</div>
+                        <div class="empty-message" id="stagingEmpty">Add dogs above, then drag to pens</div>
                     </div>
                 </div>
 
@@ -853,10 +961,12 @@
                 </div>
             </div>
 
-            <!-- Main Content (Right) -->
+            <!-- Main Content (Right on desktop, Bottom on mobile) -->
             <div class="main-content">
                 <!-- Pens Grid -->
                 <div class="pens-section">
+                    <div class="scroll-hint">← Swipe to see all pens →</div>
+                    
                     <div class="pen-row-label">Top Pens</div>
                     <div class="pen-row" id="topPens">
                         <!-- Generated by JS -->
@@ -988,7 +1098,7 @@
             countBadge.textContent = unassignedDogs.length;
 
             if (unassignedDogs.length === 0) {
-                staging.innerHTML = '<div class="empty-message" id="stagingEmpty">Add dogs above, then drag to pens →</div>';
+                staging.innerHTML = '<div class="empty-message" id="stagingEmpty">Add dogs above, then drag to pens</div>';
                 return;
             }
 
@@ -1080,7 +1190,7 @@
 
             // Clear all drag-over states
             document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-            document.getElementById('stagingArea').style.borderColor = '';
+            document.getElementById('stagingArea').classList.remove('drag-over');
         }
 
         function handlePenEnter(e) {
