@@ -43,46 +43,76 @@
             background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
             min-height: 100vh;
             color: var(--text-primary);
-            padding: 15px;
-            padding-bottom: 100px;
+        }
+
+        /* Main Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            min-height: 100vh;
         }
 
         h1 {
             text-align: center;
-            font-size: 1.6rem;
+            font-size: 1.8rem;
             font-weight: 800;
-            margin-bottom: 20px;
+            margin-bottom: 25px;
             color: var(--accent-primary);
             text-transform: uppercase;
             letter-spacing: 2px;
+        }
+
+        /* Desktop Layout - Sidebar + Main */
+        .layout {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 25px;
+            align-items: start;
+        }
+
+        /* Sidebar (Left) */
+        .sidebar {
+            position: sticky;
+            top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
         }
 
         /* Dog Entry Section */
         .entry-section {
             background: var(--bg-secondary);
             border-radius: var(--radius);
-            padding: 15px;
-            margin-bottom: 15px;
+            padding: 18px;
             box-shadow: var(--shadow);
         }
 
+        .section-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--accent-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+        }
+
         .entry-row {
-            display: grid;
-            grid-template-columns: 1fr auto;
+            display: flex;
             gap: 10px;
-            margin-bottom: 15px;
         }
 
         .entry-row input {
+            flex: 1;
             padding: 12px 15px;
             border: 2px solid var(--bg-pen);
             border-radius: 8px;
-            font-size: 16px;
+            font-size: 15px;
             font-family: inherit;
             background: var(--bg-primary);
             color: var(--text-primary);
-            width: 100%;
             min-width: 0;
+            transition: border-color 0.2s ease;
         }
 
         .entry-row input:focus {
@@ -95,7 +125,7 @@
         }
 
         .btn {
-            padding: 12px 20px;
+            padding: 12px 18px;
             border: none;
             border-radius: 8px;
             font-size: 14px;
@@ -105,7 +135,15 @@
             transition: all 0.2s ease;
             text-transform: uppercase;
             letter-spacing: 1px;
-            min-width: 80px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .btn:active {
+            transform: translateY(0);
         }
 
         .btn-primary {
@@ -115,7 +153,6 @@
 
         .btn-primary:hover {
             background: #d63850;
-            transform: translateY(-2px);
         }
 
         .btn-secondary {
@@ -137,57 +174,87 @@
         }
 
         /* Staging Area */
-        .staging-area {
-            min-height: 80px;
-            background: var(--bg-primary);
-            border: 2px dashed var(--bg-pen);
-            border-radius: 8px;
-            padding: 10px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            align-content: flex-start;
+        .staging-section {
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            padding: 18px;
+            box-shadow: var(--shadow);
+            flex: 1;
         }
 
         .staging-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
         }
 
-        .staging-header span {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            font-weight: 600;
+        .staging-area {
+            min-height: 120px;
+            max-height: 300px;
+            overflow-y: auto;
+            background: var(--bg-primary);
+            border: 2px dashed var(--bg-pen);
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-content: flex-start;
+            transition: border-color 0.2s ease, background 0.2s ease;
+        }
+
+        .staging-area.drag-over {
+            border-color: var(--accent-primary);
+            background: rgba(233, 69, 96, 0.1);
+        }
+
+        .bin-section {
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            padding: 15px;
+            box-shadow: var(--shadow);
         }
 
         .bin {
-            width: 45px;
-            height: 45px;
+            width: 100%;
+            height: 60px;
             background: var(--bg-primary);
             border: 2px dashed var(--status-none);
             border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.5rem;
+            gap: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-secondary);
             cursor: pointer;
             transition: all 0.2s ease;
+        }
+
+        .bin:hover {
+            border-color: var(--status-none);
+            color: var(--status-none);
         }
 
         .bin.drag-over {
             background: var(--status-none);
             border-style: solid;
-            transform: scale(1.1);
+            color: white;
+            transform: scale(1.02);
+        }
+
+        .bin-icon {
+            font-size: 1.5rem;
         }
 
         /* Dog Card */
         .dog-card {
             background: var(--accent-primary);
             color: white;
-            padding: 8px 14px;
-            border-radius: 20px;
+            padding: 10px 16px;
+            border-radius: 25px;
             font-size: 0.9rem;
             font-weight: 700;
             cursor: grab;
@@ -197,59 +264,83 @@
             box-shadow: 0 2px 8px rgba(233, 69, 96, 0.4);
         }
 
+        .dog-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(233, 69, 96, 0.5);
+        }
+
         .dog-card:active {
             cursor: grabbing;
         }
 
         .dog-card.dragging {
-            opacity: 0.8;
-            transform: scale(1.05);
-            box-shadow: 0 8px 25px rgba(233, 69, 96, 0.5);
+            opacity: 0.9;
+            transform: scale(1.08);
+            box-shadow: 0 10px 30px rgba(233, 69, 96, 0.6);
+        }
+
+        /* Main Content (Right) */
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
         }
 
         /* Pens Grid */
-        .pens-container {
-            margin-bottom: 20px;
+        .pens-section {
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            padding: 20px;
+            box-shadow: var(--shadow);
         }
 
         .pen-row-label {
-            font-size: 0.8rem;
+            font-size: 0.9rem;
             font-weight: 700;
-            color: var(--text-secondary);
+            color: var(--accent-secondary);
             text-transform: uppercase;
             letter-spacing: 1px;
-            margin: 15px 0 8px 5px;
+            margin: 0 0 12px 5px;
+        }
+
+        .pen-row-label:not(:first-child) {
+            margin-top: 20px;
         }
 
         .pen-row {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
-            gap: 8px;
+            gap: 12px;
         }
 
         .pen {
             background: var(--bg-pen);
             border-radius: var(--radius);
-            min-height: 150px;
-            padding: 8px;
+            min-height: 200px;
+            padding: 12px;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 8px;
             border: 2px solid transparent;
             transition: all 0.2s ease;
         }
 
+        .pen:hover {
+            border-color: rgba(233, 69, 96, 0.3);
+        }
+
         .pen.drag-over {
             border-color: var(--accent-primary);
-            background: rgba(233, 69, 96, 0.1);
+            background: rgba(233, 69, 96, 0.15);
+            transform: scale(1.02);
         }
 
         .pen-header {
-            font-size: 0.7rem;
+            font-size: 0.85rem;
             font-weight: 700;
             color: var(--text-secondary);
             text-align: center;
-            padding-bottom: 5px;
+            padding-bottom: 8px;
             border-bottom: 1px solid rgba(255,255,255,0.1);
         }
 
@@ -257,17 +348,21 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 8px;
             overflow: visible;
         }
 
         /* Dog in Pen */
         .pen-dog {
             background: var(--bg-secondary);
-            border-radius: 8px;
-            padding: 6px;
-            border-left: 4px solid var(--status-all);
+            border-radius: 10px;
+            padding: 10px;
+            border-left: 5px solid var(--status-all);
             transition: all 0.2s ease;
+        }
+
+        .pen-dog:hover {
+            background: rgba(22, 33, 62, 0.8);
         }
 
         .pen-dog.status-all { border-left-color: var(--status-all); }
@@ -280,11 +375,11 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 5px;
+            margin-bottom: 8px;
         }
 
         .pen-dog-name {
-            font-size: 0.75rem;
+            font-size: 0.9rem;
             font-weight: 700;
             color: var(--text-primary);
             cursor: grab;
@@ -294,53 +389,65 @@
         }
 
         .pen-dog-remove {
-            width: 18px;
-            height: 18px;
+            width: 22px;
+            height: 22px;
             background: var(--status-none);
             border: none;
             border-radius: 50%;
             color: white;
-            font-size: 0.7rem;
+            font-size: 0.85rem;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
+            transition: all 0.2s ease;
+        }
+
+        .pen-dog-remove:hover {
+            background: #c0392b;
+            transform: scale(1.1);
         }
 
         .pen-dog-controls {
             display: grid;
             grid-template-columns: 1fr auto auto;
-            gap: 4px;
+            gap: 6px;
             align-items: center;
         }
 
         .pen-dog-controls select {
-            padding: 4px 2px;
+            padding: 6px 8px;
             border: 1px solid var(--bg-pen);
-            border-radius: 4px;
-            font-size: 0.7rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
             font-family: inherit;
             background: var(--bg-primary);
             color: var(--text-primary);
             cursor: pointer;
-            min-width: 50px;
-            -webkit-appearance: none;
-            appearance: none;
+            transition: border-color 0.2s ease;
+        }
+
+        .pen-dog-controls select:hover {
+            border-color: var(--accent-primary);
         }
 
         .toggle-btn {
-            padding: 4px 6px;
-            border: 1px solid var(--bg-pen);
-            border-radius: 4px;
-            font-size: 0.65rem;
+            padding: 6px 10px;
+            border: 2px solid var(--bg-pen);
+            border-radius: 6px;
+            font-size: 0.75rem;
             font-weight: 700;
             font-family: inherit;
             cursor: pointer;
             background: var(--bg-primary);
             color: var(--text-secondary);
             transition: all 0.2s ease;
-            min-width: 28px;
+        }
+
+        .toggle-btn:hover {
+            border-color: var(--accent-secondary);
+            color: var(--accent-secondary);
         }
 
         .toggle-btn.active {
@@ -350,48 +457,58 @@
         }
 
         /* Bottom Controls */
-        .bottom-controls {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
+        .controls-section {
             background: var(--bg-secondary);
-            padding: 15px;
-            box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
-            z-index: 100;
+            border-radius: var(--radius);
+            padding: 20px;
+            box-shadow: var(--shadow);
+        }
+
+        .controls-row {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
         }
 
         .meal-selector {
-            display: grid;
-            grid-template-columns: auto 1fr;
+            display: flex;
             gap: 10px;
             align-items: center;
-            margin-bottom: 12px;
+            flex: 1;
         }
 
         .meal-selector label {
-            font-size: 0.85rem;
+            font-size: 0.9rem;
             font-weight: 700;
             color: var(--text-secondary);
+            white-space: nowrap;
         }
 
         .meal-selector select {
-            padding: 10px 15px;
+            padding: 12px 20px;
             border: 2px solid var(--bg-pen);
             border-radius: 8px;
-            font-size: 14px;
+            font-size: 15px;
             font-family: inherit;
             background: var(--bg-primary);
             color: var(--text-primary);
             cursor: pointer;
-            -webkit-appearance: none;
-            appearance: none;
+            transition: border-color 0.2s ease;
+            min-width: 180px;
+        }
+
+        .meal-selector select:hover {
+            border-color: var(--accent-primary);
         }
 
         .action-buttons {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .action-buttons .btn {
+            min-width: 100px;
         }
 
         /* Preview Modal */
@@ -402,7 +519,7 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0,0,0,0.8);
+            background: rgba(0,0,0,0.85);
             z-index: 200;
             align-items: center;
             justify-content: center;
@@ -416,23 +533,27 @@
         .modal {
             background: var(--bg-secondary);
             border-radius: var(--radius);
-            max-width: 500px;
+            max-width: 600px;
             width: 100%;
-            max-height: 80vh;
+            max-height: 85vh;
             overflow-y: auto;
-            box-shadow: var(--shadow);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
         }
 
         .modal-header {
-            padding: 15px 20px;
+            padding: 20px 25px;
             border-bottom: 1px solid var(--bg-pen);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            position: sticky;
+            top: 0;
+            background: var(--bg-secondary);
+            z-index: 10;
         }
 
         .modal-header h2 {
-            font-size: 1.1rem;
+            font-size: 1.3rem;
             color: var(--accent-primary);
         }
 
@@ -440,34 +561,51 @@
             background: none;
             border: none;
             color: var(--text-secondary);
-            font-size: 1.5rem;
+            font-size: 2rem;
             cursor: pointer;
+            transition: color 0.2s ease;
+            line-height: 1;
+        }
+
+        .modal-close:hover {
+            color: var(--accent-primary);
         }
 
         .modal-body {
-            padding: 20px;
+            padding: 25px;
+        }
+
+        .preview-meal-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--accent-secondary);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--bg-pen);
         }
 
         .preview-pen {
-            margin-bottom: 15px;
+            margin-bottom: 20px;
         }
 
         .preview-pen-title {
-            font-size: 0.85rem;
+            font-size: 0.95rem;
             font-weight: 700;
-            color: var(--accent-secondary);
-            margin-bottom: 8px;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         .preview-dog {
             display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 8px 12px;
+            gap: 12px;
+            padding: 12px 15px;
             background: var(--bg-primary);
-            border-radius: 6px;
-            margin-bottom: 5px;
-            font-size: 0.85rem;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
         }
 
         .preview-dog-name {
@@ -476,138 +614,279 @@
         }
 
         .preview-dog-status {
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 0.75rem;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
             font-weight: 700;
         }
 
         .preview-dog-extras {
             color: var(--accent-secondary);
             font-weight: 700;
+            font-size: 0.9rem;
         }
 
         .modal-footer {
-            padding: 15px 20px;
+            padding: 20px 25px;
             border-top: 1px solid var(--bg-pen);
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            position: sticky;
+            bottom: 0;
+            background: var(--bg-secondary);
+        }
+
+        .modal-footer .btn {
+            min-width: 120px;
         }
 
         /* Count badge */
         .count-badge {
             background: var(--accent-primary);
             color: white;
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: 0.75rem;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.8rem;
             font-weight: 700;
         }
 
         /* Empty state */
         .empty-message {
             color: var(--text-secondary);
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             text-align: center;
             padding: 20px;
             font-style: italic;
+            width: 100%;
         }
 
-        /* Responsive adjustments */
-        @media (max-width: 600px) {
+        /* ========== MOBILE RESPONSIVE ========== */
+        @media (max-width: 1024px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                position: relative;
+                top: auto;
+            }
+
+            .staging-area {
+                max-height: 150px;
+            }
+
             .pen {
-                min-height: 120px;
-                padding: 6px;
+                min-height: 160px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+                padding-bottom: 20px;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+                margin-bottom: 15px;
+            }
+
+            .pen-row {
+                gap: 8px;
+            }
+
+            .pen {
+                min-height: 140px;
+                padding: 8px;
             }
 
             .pen-header {
-                font-size: 0.6rem;
+                font-size: 0.75rem;
+            }
+
+            .pen-dog {
+                padding: 8px;
+            }
+
+            .pen-dog-name {
+                font-size: 0.8rem;
+            }
+
+            .pen-dog-controls select {
+                font-size: 0.75rem;
+                padding: 5px 6px;
+            }
+
+            .toggle-btn {
+                font-size: 0.7rem;
+                padding: 5px 8px;
+            }
+
+            .controls-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .meal-selector {
+                width: 100%;
+            }
+
+            .meal-selector select {
+                flex: 1;
+            }
+
+            .action-buttons {
+                display: grid;
+                grid-template-columns: 1fr 1fr 1fr;
+            }
+
+            .action-buttons .btn {
+                min-width: auto;
+            }
+        }
+
+        @media (max-width: 500px) {
+            .container {
+                padding: 10px;
+                padding-bottom: 15px;
+            }
+
+            h1 {
+                font-size: 1.3rem;
+            }
+
+            .pen-row {
+                gap: 5px;
+            }
+
+            .pen {
+                min-height: 120px;
+                padding: 6px;
+                border-radius: 8px;
+            }
+
+            .pen-header {
+                font-size: 0.65rem;
+                padding-bottom: 5px;
+            }
+
+            .pen-dog {
+                padding: 6px;
+                border-radius: 6px;
+                border-left-width: 4px;
+            }
+
+            .pen-dog-header {
+                margin-bottom: 5px;
             }
 
             .pen-dog-name {
                 font-size: 0.7rem;
             }
 
+            .pen-dog-remove {
+                width: 18px;
+                height: 18px;
+                font-size: 0.7rem;
+            }
+
+            .pen-dog-controls {
+                gap: 4px;
+            }
+
             .pen-dog-controls select {
                 font-size: 0.65rem;
-                padding: 3px 1px;
+                padding: 4px;
             }
 
             .toggle-btn {
                 font-size: 0.6rem;
-                padding: 3px 4px;
-                min-width: 24px;
+                padding: 4px 6px;
             }
 
-            h1 {
-                font-size: 1.3rem;
-            }
-        }
-
-        @media (max-width: 400px) {
-            .pen-row {
-                grid-template-columns: repeat(5, 1fr);
-                gap: 4px;
+            .dog-card {
+                padding: 8px 12px;
+                font-size: 0.8rem;
             }
 
-            .pen {
-                padding: 4px;
-                min-height: 100px;
-            }
-
-            body {
-                padding: 10px;
-                padding-bottom: 100px;
+            .entry-section, .staging-section, .bin-section, .pens-section, .controls-section {
+                padding: 12px;
+                border-radius: 10px;
             }
         }
     </style>
 </head>
 <body>
-    <h1>🐕 Feeding Report</h1>
+    <div class="container">
+        <h1>🐕 Feeding Report</h1>
 
-    <!-- Dog Entry Section -->
-    <div class="entry-section">
-        <div class="entry-row">
-            <input type="text" id="dogNameInput" placeholder="Enter dog name..." autocomplete="off">
-            <button class="btn btn-primary" onclick="addDog()">Add</button>
-        </div>
-        <div class="staging-header">
-            <span>Dogs to assign <span class="count-badge" id="stagingCount">0</span></span>
-            <div class="bin" id="deleteBin">🗑️</div>
-        </div>
-        <div class="staging-area" id="stagingArea">
-            <div class="empty-message" id="stagingEmpty">Add dogs above, then drag them to pens</div>
-        </div>
-    </div>
+        <div class="layout">
+            <!-- Sidebar (Left) -->
+            <div class="sidebar">
+                <!-- Dog Entry Section -->
+                <div class="entry-section">
+                    <div class="section-title">Add Dogs</div>
+                    <div class="entry-row">
+                        <input type="text" id="dogNameInput" placeholder="Enter dog name..." autocomplete="off">
+                        <button class="btn btn-primary" onclick="addDog()">Add</button>
+                    </div>
+                </div>
 
-    <!-- Pens Container -->
-    <div class="pens-container">
-        <div class="pen-row-label">Top Pens</div>
-        <div class="pen-row" id="topPens">
-            <!-- Generated by JS -->
-        </div>
-        
-        <div class="pen-row-label">Bottom Pens</div>
-        <div class="pen-row" id="bottomPens">
-            <!-- Generated by JS -->
-        </div>
-    </div>
+                <!-- Staging Area -->
+                <div class="staging-section">
+                    <div class="staging-header">
+                        <span class="section-title">Dogs to Assign</span>
+                        <span class="count-badge" id="stagingCount">0</span>
+                    </div>
+                    <div class="staging-area" id="stagingArea">
+                        <div class="empty-message" id="stagingEmpty">Add dogs above, then drag to pens →</div>
+                    </div>
+                </div>
 
-    <!-- Bottom Controls -->
-    <div class="bottom-controls">
-        <div class="meal-selector">
-            <label>Meal Type:</label>
-            <select id="mealType">
-                <option value="breakfast">🌅 Breakfast</option>
-                <option value="lunch">☀️ Lunch</option>
-                <option value="dinner">🌙 Dinner</option>
-            </select>
-        </div>
-        <div class="action-buttons">
-            <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
-            <button class="btn btn-primary" onclick="showPreview()">Preview</button>
-            <button class="btn btn-success" onclick="submitReport()">Submit</button>
+                <!-- Bin -->
+                <div class="bin-section">
+                    <div class="bin" id="deleteBin">
+                        <span class="bin-icon">🗑️</span>
+                        <span>Drop to Delete</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content (Right) -->
+            <div class="main-content">
+                <!-- Pens Grid -->
+                <div class="pens-section">
+                    <div class="pen-row-label">Top Pens</div>
+                    <div class="pen-row" id="topPens">
+                        <!-- Generated by JS -->
+                    </div>
+                    
+                    <div class="pen-row-label">Bottom Pens</div>
+                    <div class="pen-row" id="bottomPens">
+                        <!-- Generated by JS -->
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="controls-section">
+                    <div class="controls-row">
+                        <div class="meal-selector">
+                            <label>Meal Type:</label>
+                            <select id="mealType">
+                                <option value="breakfast">🌅 Breakfast</option>
+                                <option value="lunch">☀️ Lunch</option>
+                                <option value="dinner">🌙 Dinner</option>
+                            </select>
+                        </div>
+                        <div class="action-buttons">
+                            <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+                            <button class="btn btn-primary" onclick="showPreview()">Preview</button>
+                            <button class="btn btn-success" onclick="submitReport()">Submit</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -703,14 +982,13 @@
         // Render staging area
         function renderStagingArea() {
             const staging = document.getElementById('stagingArea');
-            const emptyMsg = document.getElementById('stagingEmpty');
             const countBadge = document.getElementById('stagingCount');
 
             const unassignedDogs = dogs.filter(d => !getDogPen(d.id));
             countBadge.textContent = unassignedDogs.length;
 
             if (unassignedDogs.length === 0) {
-                staging.innerHTML = '<div class="empty-message" id="stagingEmpty">Add dogs above, then drag them to pens</div>';
+                staging.innerHTML = '<div class="empty-message" id="stagingEmpty">Add dogs above, then drag to pens →</div>';
                 return;
             }
 
@@ -781,7 +1059,7 @@
             
             if (elemBelow) {
                 // Check if dropping on bin
-                if (elemBelow.closest('#deleteBin')) {
+                if (elemBelow.closest('#deleteBin') || elemBelow.closest('.bin-section')) {
                     deleteDog(draggedDogId);
                 }
                 // Check if dropping on a pen
@@ -791,7 +1069,7 @@
                     dropDogInPen(draggedDogId, penId);
                 }
                 // Check if dropping on staging area
-                else if (elemBelow.closest('#stagingArea')) {
+                else if (elemBelow.closest('#stagingArea') || elemBelow.closest('.staging-section')) {
                     moveDogToStaging(draggedDogId);
                 }
             }
@@ -802,6 +1080,7 @@
 
             // Clear all drag-over states
             document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            document.getElementById('stagingArea').style.borderColor = '';
         }
 
         function handlePenEnter(e) {
@@ -816,22 +1095,22 @@
 
         function handleBinEnter(e) {
             if (draggedDogId) {
-                e.currentTarget.classList.add('drag-over');
+                document.getElementById('deleteBin').classList.add('drag-over');
             }
         }
 
         function handleBinLeave(e) {
-            e.currentTarget.classList.remove('drag-over');
+            document.getElementById('deleteBin').classList.remove('drag-over');
         }
 
         function handleStagingEnter(e) {
             if (draggedDogId && draggedFromPen) {
-                e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                document.getElementById('stagingArea').classList.add('drag-over');
             }
         }
 
         function handleStagingLeave(e) {
-            e.currentTarget.style.borderColor = '';
+            document.getElementById('stagingArea').classList.remove('drag-over');
         }
 
         // Drop dog in pen
@@ -988,7 +1267,7 @@
             };
 
             let hasAnyDogs = false;
-            let previewHTML = `<h3 style="margin-bottom: 15px; color: var(--accent-secondary);">${mealLabels[mealType]}</h3>`;
+            let previewHTML = `<div class="preview-meal-title">${mealLabels[mealType]}</div>`;
 
             for (const [penId, penDogs] of Object.entries(pens)) {
                 if (penDogs.length === 0) continue;
