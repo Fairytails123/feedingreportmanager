@@ -12,10 +12,13 @@
             --bg-primary: #1a1a2e;
             --bg-secondary: #16213e;
             --bg-pen: #0f3460;
+            --bg-card: #1e3a5f;
             --accent-primary: #e94560;
             --accent-secondary: #f39c12;
+            --accent-success: #2ecc71;
             --text-primary: #ffffff;
             --text-secondary: #a0a0a0;
+            --text-muted: #6c7a89;
             --status-all: #2ecc71;
             --status-three-quarter: #9acd32;
             --status-half: #f1c40f;
@@ -23,6 +26,7 @@
             --status-none: #e74c3c;
             --shadow: 0 4px 15px rgba(0,0,0,0.3);
             --radius: 12px;
+            --radius-sm: 8px;
         }
 
         * {
@@ -32,8 +36,10 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        html {
+        html, body {
             overflow-x: hidden;
+            width: 100%;
+            max-width: 100%;
         }
 
         body {
@@ -41,113 +47,93 @@
             background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
             min-height: 100vh;
             color: var(--text-primary);
-            overflow-x: hidden;
-            width: 100%;
+            padding-bottom: 100px;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            padding: 15px 20px;
+            text-align: center;
+            border-bottom: 2px solid var(--accent-primary);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: var(--accent-primary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+        }
+
+        .header .status {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .header .status.connected {
+            color: var(--accent-success);
+        }
+
+        .header .status.error {
+            color: var(--status-none);
         }
 
         /* Main Container */
         .container {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
-            min-height: 100vh;
-            width: 100%;
-            overflow-x: hidden;
+            padding: 15px;
         }
 
-        h1 {
-            text-align: center;
-            font-size: 1.8rem;
-            font-weight: 800;
-            margin-bottom: 25px;
-            color: var(--accent-primary);
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-
-        /* Desktop Layout - Sidebar + Main */
-        .layout {
-            display: grid;
-            grid-template-columns: 280px 1fr;
-            gap: 25px;
-            align-items: start;
-        }
-
-        /* Sidebar (Left) */
-        .sidebar {
-            position: sticky;
-            top: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        /* Dog Entry Section */
-        .entry-section {
-            background: var(--bg-secondary);
+        /* Dog Input Section */
+        .input-section {
+            background: var(--bg-card);
             border-radius: var(--radius);
-            padding: 18px;
-            box-shadow: var(--shadow);
+            padding: 15px;
+            margin-bottom: 15px;
         }
 
-        .section-title {
-            font-size: 0.85rem;
-            font-weight: 700;
-            color: var(--accent-secondary);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 12px;
-        }
-
-        .entry-row {
-            display: grid;
-            grid-template-columns: 1fr auto;
+        .input-row {
+            display: flex;
             gap: 10px;
         }
 
-        .entry-row input {
+        .input-row input {
+            flex: 1;
             padding: 12px 15px;
-            border: 2px solid var(--bg-pen);
-            border-radius: 8px;
-            font-size: 15px;
-            font-family: inherit;
-            background: var(--bg-primary);
+            border: 2px solid transparent;
+            border-radius: var(--radius-sm);
+            background: var(--bg-secondary);
             color: var(--text-primary);
+            font-family: inherit;
+            font-size: 1rem;
+            outline: none;
             min-width: 0;
-            width: 100%;
-            transition: border-color 0.2s ease;
         }
 
-        .entry-row input:focus {
-            outline: none;
+        .input-row input:focus {
             border-color: var(--accent-primary);
         }
 
-        .entry-row input::placeholder {
-            color: var(--text-secondary);
+        .input-row input::placeholder {
+            color: var(--text-muted);
         }
 
         .btn {
-            padding: 12px 18px;
+            padding: 12px 20px;
             border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 700;
+            border-radius: var(--radius-sm);
             font-family: inherit;
+            font-size: 1rem;
+            font-weight: 700;
             cursor: pointer;
-            transition: all 0.2s ease;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            transition: all 0.2s;
             white-space: nowrap;
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        }
-
-        .btn:active {
-            transform: translateY(0);
         }
 
         .btn-primary {
@@ -156,121 +142,58 @@
         }
 
         .btn-primary:hover {
-            background: #d63850;
-        }
-
-        .btn-secondary {
-            background: var(--bg-pen);
-            color: var(--text-primary);
-        }
-
-        .btn-secondary:hover {
-            background: #1a4a7a;
+            background: #d63d55;
         }
 
         .btn-success {
-            background: var(--status-all);
+            background: var(--accent-success);
             color: white;
         }
 
-        .btn-success:hover {
-            background: #27ae60;
+        .btn-secondary {
+            background: var(--text-muted);
+            color: white;
         }
 
         /* Staging Area */
         .staging-section {
-            background: var(--bg-secondary);
+            background: var(--bg-card);
             border-radius: var(--radius);
-            padding: 18px;
-            box-shadow: var(--shadow);
-            flex: 1;
+            padding: 15px;
+            margin-bottom: 15px;
+            min-height: 80px;
         }
 
-        .staging-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
+        .staging-section h3 {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         .staging-area {
-            min-height: 120px;
-            max-height: 350px;
-            overflow-y: auto;
-            background: var(--bg-primary);
-            border: 2px dashed var(--bg-pen);
-            border-radius: 8px;
-            padding: 12px;
             display: flex;
             flex-wrap: wrap;
-            gap: 10px;
-            align-content: flex-start;
-            transition: border-color 0.2s ease, background 0.2s ease;
+            gap: 8px;
+            min-height: 40px;
         }
 
         .staging-area.drag-over {
-            border-color: var(--accent-primary);
             background: rgba(233, 69, 96, 0.1);
+            border-radius: var(--radius-sm);
         }
 
-        .bin-section {
-            background: var(--bg-secondary);
-            border-radius: var(--radius);
-            padding: 15px;
-            box-shadow: var(--shadow);
-        }
-
-        .bin {
-            width: 100%;
-            height: 60px;
-            background: var(--bg-primary);
-            border: 2px dashed var(--status-none);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            font-size: 1rem;
-            font-weight: 600;
-            color: var(--text-secondary);
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .bin:hover {
-            border-color: var(--status-none);
-            color: var(--status-none);
-        }
-
-        .bin.drag-over {
-            background: var(--status-none);
-            border-style: solid;
-            color: white;
-            transform: scale(1.02);
-        }
-
-        .bin-icon {
-            font-size: 1.5rem;
-        }
-
-        /* Dog Card */
+        /* Dog Cards */
         .dog-card {
-            background: var(--accent-primary);
-            color: white;
-            padding: 10px 16px;
-            border-radius: 25px;
-            font-size: 0.9rem;
-            font-weight: 700;
+            background: var(--bg-pen);
+            border-radius: var(--radius-sm);
+            padding: 8px 12px;
             cursor: grab;
             user-select: none;
             touch-action: none;
-            transition: all 0.2s ease;
-            box-shadow: 0 2px 8px rgba(233, 69, 96, 0.4);
-        }
-
-        .dog-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(233, 69, 96, 0.5);
+            transition: transform 0.15s, box-shadow 0.15s;
+            border-left: 4px solid var(--text-muted);
         }
 
         .dog-card:active {
@@ -278,434 +201,341 @@
         }
 
         .dog-card.dragging {
-            opacity: 0.9;
-            transform: scale(1.08);
-            box-shadow: 0 10px 30px rgba(233, 69, 96, 0.6);
+            opacity: 0.5;
+            transform: scale(1.05);
+            box-shadow: var(--shadow);
         }
 
-        /* Unmatched dog card in staging */
-        .dog-card-unmatched {
-            background: var(--bg-secondary);
-            border: 2px solid var(--status-quarter);
-            border-radius: 10px;
-            padding: 10px;
-            min-width: 150px;
-            max-width: 200px;
+        .dog-card .dog-name {
+            font-weight: 600;
+            font-size: 0.95rem;
         }
 
-        .unmatched-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        .dog-card.unmatched {
+            border-left-color: var(--accent-secondary);
+            padding: 10px 12px;
+            cursor: default;
+        }
+
+        .dog-card.unmatched .warning-icon {
+            color: var(--accent-secondary);
+            margin-right: 5px;
+        }
+
+        .dog-card.unmatched .dog-name {
+            font-size: 0.85rem;
             margin-bottom: 8px;
         }
 
-        .unmatched-name {
-            font-size: 0.8rem;
-            font-weight: 700;
-            color: var(--status-quarter);
-        }
-
-        .unmatched-remove {
-            width: 20px;
-            height: 20px;
-            background: var(--status-none);
-            border: none;
-            border-radius: 50%;
-            color: white;
-            font-size: 0.8rem;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s ease;
-        }
-
-        .unmatched-remove:hover {
-            background: #c0392b;
-            transform: scale(1.1);
-        }
-
-        .unmatched-select {
+        .match-select {
             width: 100%;
             padding: 8px 10px;
-            border: 2px solid var(--status-quarter);
-            border-radius: 6px;
-            font-size: 0.75rem;
-            font-family: inherit;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            cursor: pointer;
-            transition: border-color 0.2s ease;
-        }
-
-        .unmatched-select:hover {
-            border-color: var(--accent-secondary);
-        }
-
-        .unmatched-select:focus {
-            outline: none;
-            border-color: var(--accent-primary);
-        }
-
-        .unmatched-error {
-            font-size: 0.7rem;
-            color: var(--status-none);
-            text-align: center;
-            padding: 5px;
-        }
-
-        /* Main Content (Right) */
-        .main-content {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            min-width: 0;
-        }
-
-        /* Pens Grid */
-        .pens-section {
+            border: 1px solid var(--accent-secondary);
+            border-radius: 4px;
             background: var(--bg-secondary);
-            border-radius: var(--radius);
-            padding: 20px;
-            box-shadow: var(--shadow);
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.85rem;
+            cursor: pointer;
         }
 
-        .pen-row-label {
+        .no-match-error {
+            font-size: 0.75rem;
+            color: var(--status-none);
+            margin: 5px 0;
+        }
+
+        .delete-btn {
+            background: var(--status-none);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            margin-top: 5px;
+        }
+
+        /* Pens Section */
+        .pens-section {
+            margin-bottom: 15px;
+        }
+
+        .pens-section h3 {
             font-size: 0.9rem;
-            font-weight: 700;
-            color: var(--accent-secondary);
+            color: var(--text-secondary);
+            margin-bottom: 10px;
             text-transform: uppercase;
             letter-spacing: 1px;
-            margin: 0 0 12px 5px;
+            padding: 0 5px;
         }
 
-        .pen-row-label:not(:first-child) {
-            margin-top: 20px;
-        }
-
-        .pen-row {
+        .pens-grid {
             display: grid;
-            grid-template-columns: repeat(5, minmax(150px, 1fr));
-            gap: 12px;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .pens-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 500px) {
+            .pens-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
         }
 
         .pen {
             background: var(--bg-pen);
             border-radius: var(--radius);
-            min-height: 220px;
-            padding: 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            border: 2px solid transparent;
-            transition: all 0.2s ease;
-        }
-
-        .pen:hover {
-            border-color: rgba(233, 69, 96, 0.3);
+            padding: 10px;
+            min-height: 150px;
+            border: 2px dashed var(--text-muted);
+            transition: all 0.2s;
         }
 
         .pen.drag-over {
             border-color: var(--accent-primary);
-            background: rgba(233, 69, 96, 0.15);
-            transform: scale(1.02);
+            background: rgba(233, 69, 96, 0.1);
+        }
+
+        .pen.full {
+            border-color: var(--status-none);
         }
 
         .pen-header {
-            font-size: 0.85rem;
-            font-weight: 700;
-            color: var(--text-secondary);
             text-align: center;
+            font-weight: 700;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
             padding-bottom: 8px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
+            border-bottom: 1px solid var(--text-muted);
         }
 
         .pen-dogs {
-            flex: 1;
             display: flex;
             flex-direction: column;
             gap: 8px;
-            overflow: visible;
         }
 
-        /* Dog in Pen */
-        .pen-dog {
-            background: var(--bg-secondary);
-            border-radius: 10px;
+        /* Dog Card in Pen */
+        .pen-dog-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-sm);
             padding: 10px;
-            border-left: 5px solid var(--status-all);
-            transition: all 0.2s ease;
+            border-left: 4px solid var(--status-all);
+            cursor: grab;
+            touch-action: none;
         }
 
-        .pen-dog:hover {
-            background: rgba(22, 33, 62, 0.8);
+        .pen-dog-card.dragging {
+            opacity: 0.5;
         }
 
-        .pen-dog.status-all { border-left-color: var(--status-all); }
-        .pen-dog.status-three-quarter { border-left-color: var(--status-three-quarter); }
-        .pen-dog.status-half { border-left-color: var(--status-half); }
-        .pen-dog.status-quarter { border-left-color: var(--status-quarter); }
-        .pen-dog.status-none { border-left-color: var(--status-none); }
-
-        .pen-dog-header {
+        .pen-dog-card .dog-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 8px;
         }
 
-        .pen-dog-name {
-            font-size: 0.85rem;
+        .pen-dog-card .dog-name {
             font-weight: 700;
-            color: var(--text-primary);
-            cursor: grab;
-            touch-action: none;
-            flex: 1;
-            padding: 2px 0;
+            font-size: 0.9rem;
         }
 
-        .pen-dog-remove {
-            width: 22px;
-            height: 22px;
-            background: var(--status-none);
+        .pen-dog-card .remove-btn {
+            background: none;
             border: none;
-            border-radius: 50%;
-            color: white;
-            font-size: 0.85rem;
+            color: var(--text-muted);
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            transition: all 0.2s ease;
+            font-size: 1.2rem;
+            padding: 0 5px;
         }
 
-        .pen-dog-remove:hover {
-            background: #c0392b;
-            transform: scale(1.1);
+        .pen-dog-card .remove-btn:hover {
+            color: var(--status-none);
         }
 
-        .pen-dog-controls {
+        /* Dog Controls */
+        .dog-controls {
             display: flex;
-            flex-wrap: wrap;
             gap: 6px;
+            flex-wrap: wrap;
             align-items: center;
         }
 
-        .pen-dog-controls select {
-            padding: 6px 8px;
-            border: 1px solid var(--bg-pen);
-            border-radius: 6px;
-            font-size: 0.75rem;
-            font-family: inherit;
-            background: var(--bg-primary);
+        .dog-controls select {
+            padding: 5px 8px;
+            border: 1px solid var(--text-muted);
+            border-radius: 4px;
+            background: var(--bg-secondary);
             color: var(--text-primary);
-            cursor: pointer;
-            transition: border-color 0.2s ease;
-            min-width: 55px;
-        }
-
-        .pen-dog-controls select:hover {
-            border-color: var(--accent-primary);
+            font-family: inherit;
+            font-size: 0.8rem;
+            min-width: 60px;
         }
 
         .toggle-btn {
-            padding: 6px 10px;
-            border: 2px solid var(--bg-pen);
-            border-radius: 6px;
-            font-size: 0.7rem;
-            font-weight: 700;
-            font-family: inherit;
-            cursor: pointer;
-            background: var(--bg-primary);
+            padding: 5px 10px;
+            border: 1px solid var(--text-muted);
+            border-radius: 4px;
+            background: var(--bg-secondary);
             color: var(--text-secondary);
-            transition: all 0.2s ease;
-        }
-
-        .toggle-btn:hover {
-            border-color: var(--accent-secondary);
-            color: var(--accent-secondary);
+            font-family: inherit;
+            font-size: 0.75rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
         }
 
         .toggle-btn.active {
             background: var(--accent-secondary);
-            color: white;
             border-color: var(--accent-secondary);
-        }
-
-        .toggle-btn.active-prescription {
-            background: var(--accent-primary);
             color: white;
-            border-color: var(--accent-primary);
         }
 
-        /* Supplement Options Panel */
-        .supplement-options {
+        /* Expanded Supplements */
+        .supplements-panel {
             display: none;
             margin-top: 8px;
-            padding: 8px;
-            background: rgba(15, 52, 96, 0.5);
-            border-radius: 6px;
-            border: 1px solid var(--accent-secondary);
+            padding-top: 8px;
+            border-top: 1px dashed var(--text-muted);
         }
 
-        .supplement-options.active {
+        .supplements-panel.active {
             display: block;
         }
 
-        .supplement-options-title {
-            font-size: 0.65rem;
-            font-weight: 700;
-            color: var(--accent-secondary);
-            margin-bottom: 6px;
-            text-transform: uppercase;
-        }
-
-        .supplement-checkboxes {
+        .supplement-checks {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 4px;
+            gap: 5px;
         }
 
-        .supplement-checkbox {
+        .supplement-check {
             display: flex;
             align-items: center;
-            gap: 4px;
-            font-size: 0.65rem;
-            color: var(--text-primary);
-            cursor: pointer;
-        }
-
-        .supplement-checkbox input {
-            width: 14px;
-            height: 14px;
-            cursor: pointer;
-            accent-color: var(--accent-secondary);
-        }
-
-        .supplement-checkbox span {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        /* Prescription Comment Box */
-        .prescription-comment {
-            display: none;
-            margin-top: 8px;
-            padding: 8px;
-            background: rgba(233, 69, 96, 0.15);
-            border-radius: 6px;
-            border: 1px solid var(--accent-primary);
-        }
-
-        .prescription-comment.active {
-            display: block;
-        }
-
-        .prescription-comment-title {
-            font-size: 0.65rem;
-            font-weight: 700;
-            color: var(--accent-primary);
-            margin-bottom: 6px;
-            text-transform: uppercase;
-        }
-
-        .prescription-input {
-            width: 100%;
-            padding: 6px 8px;
-            border: 1px solid var(--bg-pen);
-            border-radius: 4px;
-            font-size: 0.7rem;
-            font-family: inherit;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            transition: border-color 0.2s ease;
-        }
-
-        .prescription-input:focus {
-            outline: none;
-            border-color: var(--accent-primary);
-        }
-
-        .prescription-input::placeholder {
+            gap: 5px;
+            font-size: 0.75rem;
             color: var(--text-secondary);
         }
 
-        /* Bottom Controls */
-        .controls-section {
+        .supplement-check input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent-secondary);
+        }
+
+        /* Prescription Panel */
+        .prescription-panel {
+            display: none;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px dashed var(--text-muted);
+        }
+
+        .prescription-panel.active {
+            display: block;
+        }
+
+        .prescription-panel input {
+            width: 100%;
+            padding: 6px 10px;
+            border: 1px solid var(--accent-primary);
+            border-radius: 4px;
             background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.85rem;
+        }
+
+        .prescription-panel input::placeholder {
+            color: var(--text-muted);
+        }
+
+        /* Status Colors */
+        .pen-dog-card[data-status="All"] { border-left-color: var(--status-all); }
+        .pen-dog-card[data-status="3/4"] { border-left-color: var(--status-three-quarter); }
+        .pen-dog-card[data-status="1/2"] { border-left-color: var(--status-half); }
+        .pen-dog-card[data-status="1/4"] { border-left-color: var(--status-quarter); }
+        .pen-dog-card[data-status="None"] { border-left-color: var(--status-none); }
+
+        /* Bin (Delete Zone) */
+        .bin-zone {
+            background: linear-gradient(135deg, #c0392b, #e74c3c);
             border-radius: var(--radius);
-            padding: 20px;
-            box-shadow: var(--shadow);
+            padding: 15px;
+            text-align: center;
+            margin-bottom: 15px;
+            opacity: 0.5;
+            transition: all 0.2s;
+        }
+
+        .bin-zone.drag-over {
+            opacity: 1;
+            transform: scale(1.02);
+        }
+
+        .bin-zone .bin-icon {
+            font-size: 1.5rem;
+            margin-bottom: 5px;
+        }
+
+        .bin-zone .bin-text {
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        /* Bottom Controls */
+        .bottom-controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--bg-secondary);
+            border-top: 2px solid var(--accent-primary);
+            padding: 15px 20px;
+            z-index: 100;
         }
 
         .controls-row {
             display: flex;
-            gap: 15px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-
-        .meal-selector {
-            display: flex;
             gap: 10px;
             align-items: center;
-            flex: 1;
-            min-width: 200px;
+            justify-content: center;
+            flex-wrap: wrap;
+            max-width: 600px;
+            margin: 0 auto;
         }
 
-        .meal-selector label {
-            font-size: 0.9rem;
-            font-weight: 700;
-            color: var(--text-secondary);
-            white-space: nowrap;
-        }
-
-        .meal-selector select {
-            padding: 12px 20px;
-            border: 2px solid var(--bg-pen);
-            border-radius: 8px;
-            font-size: 15px;
-            font-family: inherit;
+        .meal-select {
+            padding: 10px 15px;
+            border: 2px solid var(--accent-primary);
+            border-radius: var(--radius-sm);
             background: var(--bg-primary);
             color: var(--text-primary);
-            cursor: pointer;
-            transition: border-color 0.2s ease;
-            flex: 1;
-            min-width: 150px;
+            font-family: inherit;
+            font-size: 0.95rem;
+            font-weight: 600;
         }
 
-        .meal-selector select:hover {
-            border-color: var(--accent-primary);
-        }
-
-        .action-buttons {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-        }
-
-        .action-buttons .btn {
-            min-width: 100px;
-            flex: 1;
-        }
-
-        /* Preview Modal */
+        /* Modal */
         .modal-overlay {
-            display: none;
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0,0,0,0.85);
-            z-index: 200;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
             align-items: center;
             justify-content: center;
+            z-index: 200;
             padding: 20px;
         }
 
@@ -716,27 +546,22 @@
         .modal {
             background: var(--bg-secondary);
             border-radius: var(--radius);
-            max-width: 600px;
+            max-width: 500px;
             width: 100%;
-            max-height: 85vh;
+            max-height: 80vh;
             overflow-y: auto;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
         }
 
         .modal-header {
-            padding: 20px 25px;
-            border-bottom: 1px solid var(--bg-pen);
+            padding: 15px 20px;
+            border-bottom: 2px solid var(--accent-primary);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            position: sticky;
-            top: 0;
-            background: var(--bg-secondary);
-            z-index: 10;
         }
 
         .modal-header h2 {
-            font-size: 1.3rem;
+            font-size: 1.2rem;
             color: var(--accent-primary);
         }
 
@@ -744,486 +569,146 @@
             background: none;
             border: none;
             color: var(--text-secondary);
-            font-size: 2rem;
+            font-size: 1.5rem;
             cursor: pointer;
-            transition: color 0.2s ease;
-            line-height: 1;
-        }
-
-        .modal-close:hover {
-            color: var(--accent-primary);
         }
 
         .modal-body {
-            padding: 25px;
-        }
-
-        .preview-meal-title {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: var(--accent-secondary);
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid var(--bg-pen);
+            padding: 20px;
         }
 
         .preview-pen {
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
 
-        .preview-pen-title {
-            font-size: 0.95rem;
+        .preview-pen-header {
             font-weight: 700;
-            color: var(--text-secondary);
-            margin-bottom: 10px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            color: var(--accent-secondary);
+            margin-bottom: 8px;
+            font-size: 0.9rem;
         }
 
         .preview-dog {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px 15px;
-            background: var(--bg-primary);
-            border-radius: 8px;
-            margin-bottom: 8px;
-            font-size: 0.95rem;
-            flex-wrap: wrap;
+            padding: 8px 12px;
+            background: var(--bg-pen);
+            border-radius: 4px;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
         }
 
-        .preview-dog-name {
-            flex: 1;
-            font-weight: 700;
-            min-width: 80px;
-        }
-
-        .preview-dog-status {
-            padding: 4px 12px;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            font-weight: 700;
-        }
-
-        .preview-dog-extras {
+        .preview-dog .extras {
             color: var(--accent-secondary);
-            font-weight: 700;
-            font-size: 0.85rem;
-        }
-
-        .preview-dog-supplements {
-            width: 100%;
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            margin-top: 4px;
-            padding-left: 10px;
-            border-left: 2px solid var(--accent-secondary);
+            font-size: 0.8rem;
         }
 
         .modal-footer {
-            padding: 20px 25px;
+            padding: 15px 20px;
             border-top: 1px solid var(--bg-pen);
             display: flex;
-            gap: 12px;
+            gap: 10px;
             justify-content: flex-end;
-            position: sticky;
+        }
+
+        /* Loading Overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
             bottom: 0;
-            background: var(--bg-secondary);
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 300;
+            flex-direction: column;
         }
 
-        .modal-footer .btn {
-            min-width: 120px;
+        .loading-overlay.active {
+            display: flex;
         }
 
-        /* Count badge */
-        .count-badge {
-            background: var(--accent-primary);
-            color: white;
-            padding: 3px 10px;
-            border-radius: 12px;
-            font-size: 0.8rem;
-            font-weight: 700;
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid var(--bg-pen);
+            border-top-color: var(--accent-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
         }
 
-        /* Empty state */
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            margin-top: 15px;
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+
+        /* Empty State */
         .empty-message {
-            color: var(--text-secondary);
-            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-style: italic;
             text-align: center;
             padding: 20px;
-            font-style: italic;
-            width: 100%;
-        }
-
-        /* Scroll hint indicator */
-        .scroll-hint {
-            display: none;
-            text-align: center;
-            color: var(--text-secondary);
-            font-size: 0.75rem;
-            padding: 5px;
-            margin-bottom: 5px;
-        }
-
-        /* ========== TABLET RESPONSIVE (≤1024px) ========== */
-        @media (max-width: 1024px) {
-            .layout {
-                grid-template-columns: 1fr;
-                gap: 15px;
-            }
-
-            .sidebar {
-                position: relative;
-                top: auto;
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 15px;
-            }
-
-            .entry-section {
-                grid-column: 1 / -1;
-            }
-
-            .staging-area {
-                max-height: 120px;
-                min-height: 80px;
-            }
-
-            .bin-section {
-                display: flex;
-                align-items: stretch;
-            }
-
-            .bin {
-                height: 100%;
-                min-height: 80px;
-            }
-
-            .scroll-hint {
-                display: block;
-            }
-
-            .pen-row {
-                grid-template-columns: repeat(5, minmax(140px, 1fr));
-                min-width: max-content;
-            }
-
-            .pen {
-                min-height: 200px;
-                min-width: 140px;
-            }
-        }
-
-        /* ========== MOBILE RESPONSIVE (≤768px) ========== */
-        @media (max-width: 768px) {
-            .container {
-                padding: 15px;
-            }
-
-            h1 {
-                font-size: 1.5rem;
-                margin-bottom: 15px;
-            }
-
-            .sidebar {
-                grid-template-columns: 1fr;
-            }
-
-            .staging-area {
-                max-height: 100px;
-            }
-
-            .bin {
-                height: 50px;
-                min-height: 50px;
-            }
-
-            .pen-row {
-                grid-template-columns: repeat(5, minmax(120px, 1fr));
-                gap: 8px;
-            }
-
-            .pen {
-                min-height: 180px;
-                min-width: 120px;
-                padding: 8px;
-            }
-
-            .pen-header {
-                font-size: 0.75rem;
-            }
-
-            .pen-dog {
-                padding: 8px;
-            }
-
-            .pen-dog-name {
-                font-size: 0.75rem;
-            }
-
-            .pen-dog-controls select {
-                font-size: 0.65rem;
-                padding: 5px 4px;
-                min-width: 45px;
-            }
-
-            .toggle-btn {
-                font-size: 0.6rem;
-                padding: 5px 6px;
-            }
-
-            .supplement-options-title {
-                font-size: 0.6rem;
-            }
-
-            .supplement-checkbox {
-                font-size: 0.6rem;
-            }
-
-            .supplement-checkbox input {
-                width: 12px;
-                height: 12px;
-            }
-
-            .prescription-comment-title {
-                font-size: 0.6rem;
-            }
-
-            .prescription-input {
-                font-size: 0.65rem;
-                padding: 5px 6px;
-            }
-
-            .controls-row {
-                flex-direction: column;
-                align-items: stretch;
-                gap: 12px;
-            }
-
-            .meal-selector {
-                width: 100%;
-            }
-
-            .action-buttons {
-                display: grid;
-                grid-template-columns: repeat(3, 1fr);
-                gap: 10px;
-            }
-
-            .action-buttons .btn {
-                min-width: auto;
-                padding: 12px 10px;
-            }
-        }
-
-        /* ========== SMALL MOBILE (≤500px) ========== */
-        @media (max-width: 500px) {
-            .container {
-                padding: 10px;
-            }
-
-            h1 {
-                font-size: 1.2rem;
-                margin-bottom: 12px;
-            }
-
-            .entry-section, .staging-section, .bin-section, .pens-section, .controls-section {
-                padding: 12px;
-                border-radius: 10px;
-            }
-
-            .section-title {
-                font-size: 0.75rem;
-            }
-
-            .entry-row input {
-                padding: 10px 12px;
-                font-size: 14px;
-            }
-
-            .btn {
-                padding: 10px 14px;
-                font-size: 12px;
-            }
-
-            .dog-card {
-                padding: 8px 12px;
-                font-size: 0.8rem;
-            }
-
-            .dog-card-unmatched {
-                min-width: 130px;
-                max-width: 160px;
-                padding: 8px;
-            }
-
-            .unmatched-name {
-                font-size: 0.7rem;
-            }
-
-            .unmatched-select {
-                font-size: 0.7rem;
-                padding: 6px 8px;
-            }
-
-            .pen-row {
-                grid-template-columns: repeat(5, minmax(100px, 1fr));
-                gap: 6px;
-            }
-
-            .pen {
-                min-height: 160px;
-                min-width: 100px;
-                padding: 6px;
-                border-radius: 8px;
-            }
-
-            .pen-header {
-                font-size: 0.65rem;
-                padding-bottom: 5px;
-            }
-
-            .pen-dog {
-                padding: 6px;
-                border-radius: 6px;
-                border-left-width: 4px;
-            }
-
-            .pen-dog-header {
-                margin-bottom: 5px;
-            }
-
-            .pen-dog-name {
-                font-size: 0.7rem;
-            }
-
-            .pen-dog-remove {
-                width: 18px;
-                height: 18px;
-                font-size: 0.7rem;
-            }
-
-            .pen-dog-controls {
-                gap: 4px;
-            }
-
-            .pen-dog-controls select {
-                font-size: 0.6rem;
-                padding: 4px 2px;
-                min-width: 40px;
-            }
-
-            .toggle-btn {
-                font-size: 0.55rem;
-                padding: 4px 5px;
-            }
-
-            .supplement-checkboxes {
-                grid-template-columns: 1fr;
-            }
-
-            .supplement-checkbox {
-                font-size: 0.55rem;
-            }
-
-            .prescription-comment-title {
-                font-size: 0.55rem;
-            }
-
-            .prescription-input {
-                font-size: 0.6rem;
-                padding: 4px 5px;
-            }
-
-            .pen-row-label {
-                font-size: 0.75rem;
-                margin-bottom: 8px;
-            }
-
-            .meal-selector select {
-                padding: 10px 12px;
-                font-size: 14px;
-            }
-
-            .action-buttons .btn {
-                padding: 10px 8px;
-                font-size: 11px;
-            }
         }
     </style>
 </head>
 <body>
+    <!-- Header -->
+    <div class="header">
+        <h1>🍽️ Feeding Report Manager</h1>
+        <div class="status" id="connectionStatus">Connecting...</div>
+    </div>
+
+    <!-- Main Container -->
     <div class="container">
-        <h1>🐕 Feeding Report</h1>
-
-        <div class="layout">
-            <!-- Sidebar (Left on desktop, Top on mobile) -->
-            <div class="sidebar">
-                <!-- Dog Entry Section -->
-                <div class="entry-section">
-                    <div class="section-title">Add Dogs</div>
-                    <div class="entry-row">
-                        <input type="text" id="dogNameInput" placeholder="Enter dog name (e.g. Luna G)..." autocomplete="off">
-                        <button class="btn btn-primary" onclick="addDog()">Add</button>
-                    </div>
-                </div>
-
-                <!-- Staging Area -->
-                <div class="staging-section">
-                    <div class="staging-header">
-                        <span class="section-title">Dogs to Assign</span>
-                        <span class="count-badge" id="stagingCount">0</span>
-                    </div>
-                    <div class="staging-area" id="stagingArea">
-                        <div class="empty-message" id="stagingEmpty">Add dogs above, then drag to pens</div>
-                    </div>
-                </div>
-
-                <!-- Bin -->
-                <div class="bin-section">
-                    <div class="bin" id="deleteBin">
-                        <span class="bin-icon">🗑️</span>
-                        <span>Drop to Delete</span>
-                    </div>
-                </div>
+        <!-- Dog Input -->
+        <div class="input-section">
+            <div class="input-row">
+                <input type="text" id="dogInput" placeholder="Type dog name (e.g. Luna G)..." autocomplete="off">
+                <button class="btn btn-primary" onclick="addDog()">Add</button>
             </div>
+        </div>
 
-            <!-- Main Content (Right on desktop, Bottom on mobile) -->
-            <div class="main-content">
-                <!-- Pens Grid -->
-                <div class="pens-section">
-                    <div class="scroll-hint">← Swipe to see all pens →</div>
-                    
-                    <div class="pen-row-label">Top Pens</div>
-                    <div class="pen-row" id="topPens">
-                        <!-- Generated by JS -->
-                    </div>
-                    
-                    <div class="pen-row-label">Bottom Pens</div>
-                    <div class="pen-row" id="bottomPens">
-                        <!-- Generated by JS -->
-                    </div>
-                </div>
+        <!-- Staging Area -->
+        <div class="staging-section">
+            <h3>🐕 Dogs to Assign (<span id="stagingCount">0</span>)</h3>
+            <div class="staging-area" id="stagingArea"></div>
+        </div>
 
-                <!-- Controls -->
-                <div class="controls-section">
-                    <div class="controls-row">
-                        <div class="meal-selector">
-                            <label>Meal Type:</label>
-                            <select id="mealType">
-                                <option value="Morning Meal">🌅 Breakfast</option>
-                                <option value="Lunch Meal">☀️ Lunch</option>
-                                <option value="Evening Meal">🌙 Dinner</option>
-                            </select>
-                        </div>
-                        <div class="action-buttons">
-                            <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
-                            <button class="btn btn-primary" onclick="showPreview()">Preview</button>
-                            <button class="btn btn-success" onclick="submitReport()">Submit</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <!-- Delete Bin -->
+        <div class="bin-zone" id="binZone">
+            <div class="bin-icon">🗑️</div>
+            <div class="bin-text">Drag here to remove</div>
+        </div>
+
+        <!-- Top Pens (1-5) -->
+        <div class="pens-section">
+            <h3>Top Pens (1-5)</h3>
+            <div class="pens-grid" id="topPens"></div>
+        </div>
+
+        <!-- Bottom Pens (6-10) -->
+        <div class="pens-section">
+            <h3>Bottom Pens (6-10)</h3>
+            <div class="pens-grid" id="bottomPens"></div>
+        </div>
+    </div>
+
+    <!-- Bottom Controls -->
+    <div class="bottom-controls">
+        <div class="controls-row">
+            <select class="meal-select" id="mealType">
+                <option value="Morning Meal">🌅 Morning</option>
+                <option value="Lunch Meal">☀️ Lunch</option>
+                <option value="Evening Meal">🌙 Evening</option>
+            </select>
+            <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+            <button class="btn btn-primary" onclick="showPreview()">Preview</button>
+            <button class="btn btn-success" onclick="submitReport()">Submit</button>
         </div>
     </div>
 
@@ -1234,23 +719,33 @@
                 <h2>📋 Report Preview</h2>
                 <button class="modal-close" onclick="closePreview()">×</button>
             </div>
-            <div class="modal-body" id="previewContent">
-                <!-- Generated by JS -->
-            </div>
+            <div class="modal-body" id="previewContent"></div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closePreview()">Back</button>
-                <button class="btn btn-success" onclick="submitReport()">Submit</button>
+                <button class="btn btn-success" onclick="submitReport()">Submit to Telegram</button>
             </div>
         </div>
     </div>
 
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loadingText">Loading...</div>
+    </div>
+
     <script>
-        // JotForm dog names list (from form field 13)
-        const JOTFORM_DOG_NAMES = [
+        // ============================================
+        // CONFIGURATION
+        // ============================================
+        
+        // !!! IMPORTANT: Replace this with your deployed Apps Script URL !!!
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwP74AXOe1cZmHKTxi9KbMhZJU48EHRFI7NQ6Og65_FcTVB1sMQuqgkPKIkr7Fm7e40mw/exec';
+        
+        // Fallback dog list (used if API fails) - from JotForm field 13
+        const FALLBACK_DOG_NAMES = [
             "Aldo","Alfie","April","Argo","Arlo","Banjo","Barney Homewood","Barney Leeming","Baron","Bay","Beano","Bella","Belle","Benson","Betsy","Birdy","Blue","Bluey","Bo","Bonnie Gallagher","Bonnie Lockwood","Bramble","Branko","Bruce","Bruno","Buddy Dann","Buddy Dargan","Buddy Selby","Casper Hamilton","Casper Kukreja","Che","Chester","Chloe","Clifford","Daisy Cremin","Daisy Parsons","Darcy Campbell","Darcy Dunn","Darwin","Delphine","Dexter","Dicee","Diego Gonsavles","Diego Wojcik","Dierdra","Digby","Dolly","Dottie","Dougie","Dudley","Dusty","Echo","Eddie","Effie","Enzo","Fenton","Ferox","Flaco","Fletcher","Florence","Freddie","Fredo","Frida Walsh","George Elliston","George Jackson","George Mohammed","Gina","Goldie","Haggis","Hattie Campbell","Hattie Duncan","Henry","Holly","Hugo","Incy","Ivy","Jack","Jeff","Jessie","Keti","Kip","Koji","Leo","Lily","Lola Bowles","Lola Fenloni","Lola Hall","Luke","Luna Crockford","Luna Grimshaw","Mac","Macy","Maggie","Margo","Marli","Marloe","Marlow","Martha","Max Tigwell","Max Wang","Merlin Crowley","Merlin Mayne","Miles","Miley","Millie Bowles","Millie Carter","Millie Cartwright","Millie Ellis","Milo McVey","Missy Evans","Mocha Gasper","Mocha Kolumbajew","Mochi","Moka","Mollie","Mos Wan","Moss Harris","Naira","Nala Sands","Nala Warnes","Narla Tester","Ned","Neo","Nevis","Nina","Obie","Oliver","Otis","Peggy Gibbons","Peggy Lucas","Pepper","Petch","Pippin","Pluto","Poppy Clark","Poppy Lancaster","Poppy Lass","Poppy Pike","Ralph Goddard","Raven","Reggie Daly","Reggie Foreman","Reggie Russel","Rex","Rita","River","Rocco","Roman","Roxy","Ruby Brooker","Ruby Favell","Ruby Jones","Rudy","Ruffles","Rufus","Rupy","Sam","Sebastian","Shadow Podkalicka","Shadow Wightman","Snoopy","Sonny","Sophie","Stanley James","Star","Storm","Tallulah","Tam","Tasha","Ted Lambie","Teddy Brown","Teddy Jamison","Terry","Tilly Mills","Tokyo","Warwick","Winnie Awele","Winnie Evans","Winnie Hall","Winnie Lancaster","Winnie Ryan","Woody Johns","Woody Warren","Zero","Ziggy"
         ];
-
-        // Supplement types (matching JotForm field 7)
+        
         const SUPPLEMENT_TYPES = [
             { id: 'calming', label: 'Calming', jotformValue: 'Calming Tablets' },
             { id: 'hemp', label: 'Hemp', jotformValue: 'Hemp Oil' },
@@ -1267,60 +762,154 @@
             'none': 'None'
         };
 
-        // State
-        let dogs = [];
-        let pens = {};
-        let draggedElement = null;
+        const FEEDING_OPTIONS = [
+            { value: 'all', label: 'All' },
+            { value: 'three-quarter', label: '¾' },
+            { value: 'half', label: '½' },
+            { value: 'quarter', label: '¼' },
+            { value: 'none', label: 'None' }
+        ];
+        
+        const MAX_DOGS_PER_PEN = 5;
+
+        // ============================================
+        // STATE
+        // ============================================
+        
+        let masterDogList = []; // From Google Sheet Lookup tab
+        let dogNameList = []; // Just the names for matching
+        let dogs = []; // Current session dogs
+        let pens = {}; // pen-1 to pen-10 -> array of dog IDs
         let draggedDogId = null;
         let draggedFromPen = null;
+        let draggedElement = null;
 
-        // Initialize pens
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            initPens();
+            setupEventListeners();
+            await loadDogList();
+        });
+
         function initPens() {
-            const topPensContainer = document.getElementById('topPens');
-            const bottomPensContainer = document.getElementById('bottomPens');
-
+            const topPensEl = document.getElementById('topPens');
+            const bottomPensEl = document.getElementById('bottomPens');
+            
+            // Create pens 1-5 (top)
             for (let i = 1; i <= 5; i++) {
-                pens[`top-${i}`] = [];
-                pens[`bottom-${i}`] = [];
-
-                topPensContainer.innerHTML += createPenHTML(`top-${i}`, `Top ${i}`);
-                bottomPensContainer.innerHTML += createPenHTML(`bottom-${i}`, `Bottom ${i}`);
+                const penId = `pen-${i}`;
+                pens[penId] = [];
+                topPensEl.innerHTML += createPenHTML(penId, i);
             }
-
-            // Add drop listeners to pens
-            document.querySelectorAll('.pen').forEach(pen => {
-                pen.addEventListener('pointerenter', handlePenEnter);
-                pen.addEventListener('pointerleave', handlePenLeave);
-            });
-
-            // Add drop listener to bin
-            const bin = document.getElementById('deleteBin');
-            bin.addEventListener('pointerenter', handleBinEnter);
-            bin.addEventListener('pointerleave', handleBinLeave);
-
-            // Add drop listener to staging area
-            const staging = document.getElementById('stagingArea');
-            staging.addEventListener('pointerenter', handleStagingEnter);
-            staging.addEventListener('pointerleave', handleStagingLeave);
+            
+            // Create pens 6-10 (bottom)
+            for (let i = 6; i <= 10; i++) {
+                const penId = `pen-${i}`;
+                pens[penId] = [];
+                bottomPensEl.innerHTML += createPenHTML(penId, i);
+            }
         }
 
-        function createPenHTML(penId, label) {
+        function createPenHTML(penId, penNum) {
             return `
-                <div class="pen" data-pen-id="${penId}">
-                    <div class="pen-header">${label}</div>
-                    <div class="pen-dogs" id="pen-${penId}"></div>
+                <div class="pen" id="${penId}" data-pen="${penId}">
+                    <div class="pen-header">Pen ${penNum}</div>
+                    <div class="pen-dogs" id="${penId}-dogs"></div>
                 </div>
             `;
         }
 
-        // Match dog name to JotForm list
+        function setupEventListeners() {
+            // Input field events
+            const input = document.getElementById('dogInput');
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') addDog();
+            });
+
+            // Setup drag zones
+            setupDragZones();
+        }
+
+        // ============================================
+        // API CALLS
+        // ============================================
+        
+        async function loadDogList() {
+            showLoading('Loading dog list...');
+            
+            try {
+                const response = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'getDogList' })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    masterDogList = result.dogs;
+                    dogNameList = result.dogs.map(d => d.name);
+                    updateStatus(`✓ Connected (${result.count} dogs)`, 'connected');
+                } else {
+                    throw new Error(result.error || 'Failed to load dogs');
+                }
+            } catch (error) {
+                console.error('Load error:', error);
+                // Use fallback list
+                dogNameList = FALLBACK_DOG_NAMES;
+                masterDogList = FALLBACK_DOG_NAMES.map(name => ({ name, email: '', parentName: '' }));
+                
+                if (APPS_SCRIPT_URL === 'YOUR_APPS_SCRIPT_WEB_APP_URL_HERE') {
+                    updateStatus('⚠ Demo mode - set APPS_SCRIPT_URL', 'error');
+                } else {
+                    updateStatus(`⚠ Offline mode (${dogNameList.length} dogs)`, 'error');
+                }
+            }
+            
+            hideLoading();
+        }
+
+        async function submitToBackend(reportData) {
+            showLoading('Submitting report...');
+            
+            try {
+                const response = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'submitReport',
+                        ...reportData
+                    })
+                });
+                
+                const result = await response.json();
+                hideLoading();
+                
+                return result;
+            } catch (error) {
+                hideLoading();
+                return { success: false, error: error.toString() };
+            }
+        }
+
+        // ============================================
+        // NAME MATCHING FUNCTIONS
+        // ============================================
+        
+        /**
+         * Match dog name to master list
+         * Supports: "Luna" (first name only) or "Luna G" (first name + surname initial)
+         */
         function matchDogName(inputName) {
             const parts = inputName.trim().split(/\s+/);
             const firstName = parts[0];
             const surnameInitial = parts.length > 1 ? parts.slice(1).join(' ').toUpperCase() : null;
 
             // Find all matches
-            const matches = JOTFORM_DOG_NAMES.filter(fullName => {
+            const matches = dogNameList.filter(fullName => {
                 const nameParts = fullName.split(' ');
                 const jotFirstName = nameParts[0];
                 const jotSurname = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
@@ -1342,46 +931,17 @@
             return matches;
         }
 
-        // Add dog from input
-        function addDog() {
-            const input = document.getElementById('dogNameInput');
-            const name = input.value.trim();
-            
-            if (name) {
-                const matches = matchDogName(name);
-                
-                const dog = {
-                    id: Date.now() + Math.random(),
-                    inputName: name,
-                    matchedName: matches.length === 1 ? matches[0] : null,
-                    possibleMatches: matches,
-                    status: 'all',
-                    prescription: false,
-                    prescriptionComment: '',
-                    supplements: false,
-                    supplementTypes: []
-                };
-                
-                dogs.push(dog);
-                renderStagingArea();
-                input.value = '';
-                input.focus();
-            }
-        }
-
-        // Handle Enter key in input
-        document.getElementById('dogNameInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') addDog();
-        });
-
-        // Fuzzy match dog name - finds similar names when exact match fails
+        /**
+         * Fuzzy match dog name - finds similar names when exact match fails
+         * Uses scoring algorithm to rank matches
+         */
         function fuzzyMatchDogName(inputName) {
             const input = inputName.trim().toLowerCase();
             const inputParts = input.split(/\s+/);
             const firstName = inputParts[0];
             
-            // Score each JotForm name based on similarity
-            const scored = JOTFORM_DOG_NAMES.map(fullName => {
+            // Score each dog name based on similarity
+            const scored = dogNameList.map(fullName => {
                 const nameParts = fullName.toLowerCase().split(' ');
                 const jotFirstName = nameParts[0];
                 
@@ -1430,30 +990,88 @@
                 .map(s => s.name);
         }
 
-        // Render staging area
-        function renderStagingArea() {
-            const staging = document.getElementById('stagingArea');
-            const countBadge = document.getElementById('stagingCount');
-
-            const unassignedDogs = dogs.filter(d => !getDogPen(d.id));
-            countBadge.textContent = unassignedDogs.length;
-
-            if (unassignedDogs.length === 0) {
-                staging.innerHTML = '<div class="empty-message" id="stagingEmpty">Add dogs above, then drag to pens</div>';
+        // ============================================
+        // DOG INPUT & MANAGEMENT
+        // ============================================
+        
+        function addDog() {
+            const input = document.getElementById('dogInput');
+            const name = input.value.trim();
+            
+            if (!name) return;
+            
+            // Check if already added
+            if (dogs.some(d => d.inputName.toLowerCase() === name.toLowerCase())) {
+                alert(`${name} is already added!`);
                 return;
             }
+            
+            // Try to match to master list
+            const matches = matchDogName(name);
+            
+            const dog = {
+                id: 'dog-' + Date.now() + Math.random(),
+                inputName: name,
+                matchedName: matches.length === 1 ? matches[0] : null,
+                possibleMatches: matches,
+                status: 'all',
+                supplements: false,
+                supplementTypes: [],
+                prescription: false,
+                prescriptionMedicine: ''
+            };
+            
+            dogs.push(dog);
+            input.value = '';
+            input.focus();
+            renderStagingArea();
+        }
 
-            staging.innerHTML = unassignedDogs.map(dog => {
-                const displayName = dog.matchedName || dog.inputName;
+        function selectStagingMatch(dogId, matchedName) {
+            const dog = dogs.find(d => d.id === dogId);
+            if (dog && matchedName) {
+                dog.matchedName = matchedName;
+                renderStagingArea();
+            }
+        }
+
+        function deleteDog(dogId) {
+            // Remove from pens
+            for (const penId of Object.keys(pens)) {
+                pens[penId] = pens[penId].filter(id => id !== dogId);
+            }
+            // Remove from dogs array
+            dogs = dogs.filter(d => d.id !== dogId);
+            renderStagingArea();
+            for (let i = 1; i <= 10; i++) {
+                renderPen(`pen-${i}`);
+            }
+        }
+
+        // ============================================
+        // RENDERING
+        // ============================================
+        
+        function renderStagingArea() {
+            const stagingArea = document.getElementById('stagingArea');
+            const stagingDogs = dogs.filter(d => !getDogPen(d.id));
+            
+            document.getElementById('stagingCount').textContent = stagingDogs.length;
+            
+            if (stagingDogs.length === 0) {
+                stagingArea.innerHTML = '<div class="empty-message">Add dogs above, then drag them to pens</div>';
+                return;
+            }
+            
+            stagingArea.innerHTML = stagingDogs.map(dog => {
                 const isMatched = dog.matchedName || dog.possibleMatches.length === 1;
                 
                 if (isMatched) {
                     // Matched dog - show as draggable card
                     const finalName = dog.matchedName || dog.possibleMatches[0];
                     return `
-                        <div class="dog-card" data-dog-id="${dog.id}"
-                             onpointerdown="startDrag(event, ${dog.id})">
-                            ${finalName}
+                        <div class="dog-card" id="${dog.id}" data-dog-id="${dog.id}">
+                            <span class="dog-name">${escapeHtml(finalName)}</span>
                         </div>
                     `;
                 } else {
@@ -1465,348 +1083,103 @@
                     if (fuzzyMatches.length === 0) {
                         // No matches at all - show error state
                         return `
-                            <div class="dog-card-unmatched" data-dog-id="${dog.id}">
-                                <div class="unmatched-header">
-                                    <span class="unmatched-name">⚠️ "${dog.inputName}"</span>
-                                    <button class="unmatched-remove" onclick="deleteDog(${dog.id})">×</button>
+                            <div class="dog-card unmatched" id="${dog.id}" data-dog-id="${dog.id}">
+                                <div class="dog-name">
+                                    <span class="warning-icon">⚠️</span>
+                                    "${escapeHtml(dog.inputName)}"
                                 </div>
-                                <div class="unmatched-error">No matching dogs found</div>
+                                <div class="no-match-error">No matching dogs found</div>
+                                <button class="delete-btn" onclick="deleteDog('${dog.id}')">Remove</button>
                             </div>
                         `;
                     }
                     
                     return `
-                        <div class="dog-card-unmatched" data-dog-id="${dog.id}">
-                            <div class="unmatched-header">
-                                <span class="unmatched-name">⚠️ "${dog.inputName}"</span>
-                                <button class="unmatched-remove" onclick="deleteDog(${dog.id})">×</button>
+                        <div class="dog-card unmatched" id="${dog.id}" data-dog-id="${dog.id}">
+                            <div class="dog-name">
+                                <span class="warning-icon">⚠️</span>
+                                "${escapeHtml(dog.inputName)}"
                             </div>
-                            <select class="unmatched-select" onchange="selectStagingMatch(${dog.id}, this.value)">
+                            <select class="match-select" onchange="selectStagingMatch('${dog.id}', this.value)">
                                 <option value="">Select correct dog...</option>
-                                ${fuzzyMatches.map(m => `<option value="${m}">${m}</option>`).join('')}
+                                ${fuzzyMatches.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('')}
                             </select>
                         </div>
                     `;
                 }
             }).join('');
-        }
-
-        // Select match from staging area dropdown
-        function selectStagingMatch(dogId, matchedName) {
-            const dog = dogs.find(d => d.id === dogId);
-            if (dog && matchedName) {
-                dog.matchedName = matchedName;
-                renderStagingArea();
-            }
-        }
-
-        // Get which pen a dog is in
-        function getDogPen(dogId) {
-            for (const [penId, penDogs] of Object.entries(pens)) {
-                if (penDogs.includes(dogId)) return penId;
-            }
-            return null;
-        }
-
-        // Drag and Drop with Pointer Events
-        function startDrag(e, dogId) {
-            e.preventDefault();
             
-            const target = e.target.closest('.dog-card, .pen-dog-name');
-            if (!target) return;
+            // Setup drag for matched staging cards only
+            stagingDogs.forEach(dog => {
+                const isMatched = dog.matchedName || dog.possibleMatches.length === 1;
+                if (isMatched) {
+                    const el = document.getElementById(dog.id);
+                    if (el) setupDragForElement(el, null);
+                }
+            });
+        }
 
-            draggedDogId = dogId;
-            draggedFromPen = getDogPen(dogId);
+        function renderPen(penId) {
+            const penDogsEl = document.getElementById(`${penId}-dogs`);
+            const penDogIds = pens[penId] || [];
             
-            // Create visual clone for dragging
-            const dog = dogs.find(d => d.id === dogId);
-            draggedElement = document.createElement('div');
-            draggedElement.className = 'dog-card dragging';
-            draggedElement.textContent = dog.matchedName || dog.inputName;
-            draggedElement.style.position = 'fixed';
-            draggedElement.style.pointerEvents = 'none';
-            draggedElement.style.zIndex = '1000';
-            document.body.appendChild(draggedElement);
-
-            moveAt(e.clientX, e.clientY);
-
-            document.addEventListener('pointermove', onPointerMove);
-            document.addEventListener('pointerup', onPointerUp);
-        }
-
-        function moveAt(x, y) {
-            if (draggedElement) {
-                draggedElement.style.left = (x - 40) + 'px';
-                draggedElement.style.top = (y - 15) + 'px';
-            }
-        }
-
-        function onPointerMove(e) {
-            moveAt(e.clientX, e.clientY);
-        }
-
-        function onPointerUp(e) {
-            document.removeEventListener('pointermove', onPointerMove);
-            document.removeEventListener('pointerup', onPointerUp);
-
-            if (draggedElement) {
-                draggedElement.remove();
-                draggedElement = null;
-            }
-
-            // Find what we're dropping on
-            const elemBelow = document.elementFromPoint(e.clientX, e.clientY);
+            const penEl = document.getElementById(penId);
+            penEl.classList.toggle('full', penDogIds.length >= MAX_DOGS_PER_PEN);
             
-            if (elemBelow) {
-                // Check if dropping on bin
-                if (elemBelow.closest('#deleteBin') || elemBelow.closest('.bin-section')) {
-                    deleteDog(draggedDogId);
-                }
-                // Check if dropping on a pen
-                else if (elemBelow.closest('.pen')) {
-                    const pen = elemBelow.closest('.pen');
-                    const penId = pen.dataset.penId;
-                    dropDogInPen(draggedDogId, penId);
-                }
-                // Check if dropping on staging area
-                else if (elemBelow.closest('#stagingArea') || elemBelow.closest('.staging-section')) {
-                    moveDogToStaging(draggedDogId);
-                }
-            }
-
-            // Reset drag state
-            draggedDogId = null;
-            draggedFromPen = null;
-
-            // Clear all drag-over states
-            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-            document.getElementById('stagingArea').classList.remove('drag-over');
-        }
-
-        function handlePenEnter(e) {
-            if (draggedDogId) {
-                e.currentTarget.classList.add('drag-over');
-            }
-        }
-
-        function handlePenLeave(e) {
-            e.currentTarget.classList.remove('drag-over');
-        }
-
-        function handleBinEnter(e) {
-            if (draggedDogId) {
-                document.getElementById('deleteBin').classList.add('drag-over');
-            }
-        }
-
-        function handleBinLeave(e) {
-            document.getElementById('deleteBin').classList.remove('drag-over');
-        }
-
-        function handleStagingEnter(e) {
-            if (draggedDogId && draggedFromPen) {
-                document.getElementById('stagingArea').classList.add('drag-over');
-            }
-        }
-
-        function handleStagingLeave(e) {
-            document.getElementById('stagingArea').classList.remove('drag-over');
-        }
-
-        // Drop dog in pen
-        function dropDogInPen(dogId, penId) {
-            const dog = dogs.find(d => d.id === dogId);
-            if (!dog) return;
-
-            // Check if dog is matched
-            const isMatched = dog.matchedName || dog.possibleMatches.length === 1;
-            if (!isMatched) {
-                alert('Please select the correct dog name from the dropdown before assigning to a pen.');
+            if (penDogIds.length === 0) {
+                penDogsEl.innerHTML = '';
                 return;
             }
-
-            // Check pen capacity (max 5)
-            if (pens[penId].length >= 5) {
-                alert('This pen already has 5 dogs!');
-                return;
-            }
-
-            // Remove from current pen if in one
-            if (draggedFromPen) {
-                pens[draggedFromPen] = pens[draggedFromPen].filter(id => id !== dogId);
-            }
-
-            // Add to new pen
-            if (!pens[penId].includes(dogId)) {
-                pens[penId].push(dogId);
-            }
-
-            renderAllPens();
-            renderStagingArea();
-        }
-
-        // Move dog back to staging
-        function moveDogToStaging(dogId) {
-            for (const penId of Object.keys(pens)) {
-                pens[penId] = pens[penId].filter(id => id !== dogId);
-            }
-            renderAllPens();
-            renderStagingArea();
-        }
-
-        // Delete dog
-        function deleteDog(dogId) {
-            dogs = dogs.filter(d => d.id !== dogId);
-            for (const penId of Object.keys(pens)) {
-                pens[penId] = pens[penId].filter(id => id !== dogId);
-            }
-            renderAllPens();
-            renderStagingArea();
-        }
-
-        // Render all pens
-        function renderAllPens() {
-            for (const [penId, penDogs] of Object.entries(pens)) {
-                const container = document.getElementById(`pen-${penId}`);
-                if (penDogs.length === 0) {
-                    container.innerHTML = '';
-                    continue;
-                }
-
-                container.innerHTML = penDogs.map(dogId => {
-                    const dog = dogs.find(d => d.id === dogId);
-                    if (!dog) return '';
-                    return createPenDogHTML(dog);
-                }).join('');
-            }
-        }
-
-        function createPenDogHTML(dog) {
-            const statusClass = `status-${dog.status}`;
-            const displayName = dog.matchedName || (dog.possibleMatches.length === 1 ? dog.possibleMatches[0] : dog.inputName);
-
-            // Build supplement checkboxes
-            const supplementCheckboxes = SUPPLEMENT_TYPES.map(supp => `
-                <label class="supplement-checkbox">
-                    <input type="checkbox" 
-                           ${dog.supplementTypes.includes(supp.id) ? 'checked' : ''}
-                           onchange="toggleSupplementType(${dog.id}, '${supp.id}')">
-                    <span>${supp.label}</span>
-                </label>
-            `).join('');
-
-            return `
-                <div class="pen-dog ${statusClass}" data-dog-id="${dog.id}">
-                    <div class="pen-dog-header">
-                        <span class="pen-dog-name" onpointerdown="startDrag(event, ${dog.id})">${displayName}</span>
-                        <button class="pen-dog-remove" onclick="moveDogToStaging(${dog.id})">×</button>
-                    </div>
-                    <div class="pen-dog-controls">
-                        <select onchange="updateDogStatus(${dog.id}, this.value)">
-                            <option value="all" ${dog.status === 'all' ? 'selected' : ''}>All</option>
-                            <option value="three-quarter" ${dog.status === 'three-quarter' ? 'selected' : ''}>¾</option>
-                            <option value="half" ${dog.status === 'half' ? 'selected' : ''}>½</option>
-                            <option value="quarter" ${dog.status === 'quarter' ? 'selected' : ''}>¼</option>
-                            <option value="none" ${dog.status === 'none' ? 'selected' : ''}>None</option>
-                        </select>
-                        <button class="toggle-btn ${dog.supplements ? 'active' : ''}" onclick="toggleSupplement(${dog.id})">+S</button>
-                        <button class="toggle-btn ${dog.prescription ? 'active-prescription' : ''}" onclick="togglePrescription(${dog.id})">+P</button>
-                    </div>
-                    <div class="supplement-options ${dog.supplements ? 'active' : ''}" id="supp-${dog.id}">
-                        <div class="supplement-options-title">Supplement Types</div>
-                        <div class="supplement-checkboxes">
-                            ${supplementCheckboxes}
+            
+            penDogsEl.innerHTML = penDogIds.map(dogId => {
+                const dog = dogs.find(d => d.id === dogId);
+                if (!dog) return '';
+                
+                const displayName = dog.matchedName || dog.possibleMatches[0] || dog.inputName;
+                const statusColor = getStatusColor(dog.status);
+                
+                return `
+                    <div class="pen-dog-card" id="${dog.id}" data-dog-id="${dog.id}" data-status="${dog.status}" style="border-left-color: ${statusColor}">
+                        <div class="dog-header">
+                            <span class="dog-name">${escapeHtml(displayName)}</span>
+                            <button class="remove-btn" onclick="removeDogFromPen('${dog.id}', '${penId}')">×</button>
+                        </div>
+                        <div class="dog-controls">
+                            <select onchange="updateDogStatus('${dog.id}', this.value)">
+                                ${FEEDING_OPTIONS.map(opt => 
+                                    `<option value="${opt.value}" ${dog.status === opt.value ? 'selected' : ''}>${opt.label}</option>`
+                                ).join('')}
+                            </select>
+                            <button class="toggle-btn ${dog.supplements ? 'active' : ''}" onclick="toggleSupplements('${dog.id}')">+S</button>
+                            <button class="toggle-btn ${dog.prescription ? 'active' : ''}" onclick="togglePrescription('${dog.id}')">+P</button>
+                        </div>
+                        <div class="supplements-panel ${dog.supplements ? 'active' : ''}" id="supp-${dog.id}">
+                            <div class="supplement-checks">
+                                ${SUPPLEMENT_TYPES.map(supp => `
+                                    <label class="supplement-check">
+                                        <input type="checkbox" 
+                                            ${dog.supplementTypes.includes(supp.id) ? 'checked' : ''} 
+                                            onchange="toggleSupplementType('${dog.id}', '${supp.id}')">
+                                        ${supp.label}
+                                    </label>
+                                `).join('')}
+                            </div>
+                        </div>
+                        <div class="prescription-panel ${dog.prescription ? 'active' : ''}" id="presc-${dog.id}">
+                            <input type="text" 
+                                placeholder="Medicine name..." 
+                                value="${escapeHtml(dog.prescriptionMedicine)}"
+                                onchange="updatePrescriptionMedicine('${dog.id}', this.value)">
                         </div>
                     </div>
-                    <div class="prescription-comment ${dog.prescription ? 'active' : ''}" id="presc-${dog.id}">
-                        <div class="prescription-comment-title">Medicine Name</div>
-                        <input type="text" 
-                               class="prescription-input" 
-                               placeholder="Enter medicine name..."
-                               value="${dog.prescriptionComment || ''}"
-                               onchange="updatePrescriptionComment(${dog.id}, this.value)"
-                               onclick="event.stopPropagation()">
-                    </div>
-                </div>
-            `;
-        }
-
-        // Update dog status
-        function updateDogStatus(dogId, status) {
-            const dog = dogs.find(d => d.id === dogId);
-            if (dog) {
-                dog.status = status;
-                renderAllPens();
-            }
-        }
-
-        // Toggle supplements (shows/hides supplement type options)
-        function toggleSupplement(dogId) {
-            const dog = dogs.find(d => d.id === dogId);
-            if (dog) {
-                dog.supplements = !dog.supplements;
-                if (!dog.supplements) {
-                    dog.supplementTypes = []; // Clear selections when toggled off
-                }
-                renderAllPens();
-            }
-        }
-
-        // Toggle individual supplement type
-        function toggleSupplementType(dogId, suppType) {
-            const dog = dogs.find(d => d.id === dogId);
-            if (dog) {
-                const idx = dog.supplementTypes.indexOf(suppType);
-                if (idx === -1) {
-                    dog.supplementTypes.push(suppType);
-                } else {
-                    dog.supplementTypes.splice(idx, 1);
-                }
-            }
-        }
-
-        // Toggle prescription
-        function togglePrescription(dogId) {
-            const dog = dogs.find(d => d.id === dogId);
-            if (dog) {
-                dog.prescription = !dog.prescription;
-                if (!dog.prescription) {
-                    dog.prescriptionComment = ''; // Clear comment when toggled off
-                }
-                renderAllPens();
-            }
-        }
-
-        // Update prescription comment
-        function updatePrescriptionComment(dogId, comment) {
-            const dog = dogs.find(d => d.id === dogId);
-            if (dog) {
-                dog.prescriptionComment = comment;
-            }
-        }
-
-        // Clear all
-        function clearAll() {
-            if (confirm('Clear all dogs and reset?')) {
-                dogs = [];
-                for (const penId of Object.keys(pens)) {
-                    pens[penId] = [];
-                }
-                renderAllPens();
-                renderStagingArea();
-            }
-        }
-
-        // Get status label
-        function getStatusLabel(status) {
-            const labels = {
-                'all': 'All ✓',
-                'three-quarter': '¾',
-                'half': '½',
-                'quarter': '¼',
-                'none': 'None ⚠️'
-            };
-            return labels[status] || status;
+                `;
+            }).join('');
+            
+            // Setup drag for pen cards
+            penDogIds.forEach(dogId => {
+                const el = document.getElementById(dogId);
+                if (el) setupDragForElement(el, penId);
+            });
         }
 
         // Get status color
@@ -1821,166 +1194,393 @@
             return colors[status] || 'var(--status-all)';
         }
 
-        // Show preview
-        function showPreview() {
-            const mealType = document.getElementById('mealType');
-            const mealLabel = mealType.options[mealType.selectedIndex].text;
-            const mealValue = mealType.value;
+        // Get status label for preview
+        function getStatusLabel(status) {
+            const labels = {
+                'all': 'All',
+                'three-quarter': '¾',
+                'half': '½',
+                'quarter': '¼',
+                'none': 'None'
+            };
+            return labels[status] || status;
+        }
 
-            let hasAnyDogs = false;
-            let previewHTML = `<div class="preview-meal-title">${mealLabel}</div>`;
+        function getDogPen(dogId) {
+            for (const [penId, dogIds] of Object.entries(pens)) {
+                if (dogIds.includes(dogId)) return penId;
+            }
+            return null;
+        }
 
-            for (const [penId, penDogs] of Object.entries(pens)) {
-                if (penDogs.length === 0) continue;
-                hasAnyDogs = true;
+        function updateDogStatus(dogId, status) {
+            const dog = dogs.find(d => d.id === dogId);
+            if (dog) {
+                dog.status = status;
+                const penId = getDogPen(dogId);
+                if (penId) renderPen(penId);
+            }
+        }
 
-                const penLabel = penId.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase());
-                previewHTML += `<div class="preview-pen">
-                    <div class="preview-pen-title">${penLabel}</div>`;
+        function toggleSupplements(dogId) {
+            const dog = dogs.find(d => d.id === dogId);
+            if (!dog) return;
+            
+            dog.supplements = !dog.supplements;
+            if (!dog.supplements) {
+                dog.supplementTypes = [];
+            }
+            
+            const penId = getDogPen(dogId);
+            if (penId) renderPen(penId);
+        }
 
-                for (const dogId of penDogs) {
-                    const dog = dogs.find(d => d.id === dogId);
-                    if (!dog) continue;
+        function toggleSupplementType(dogId, suppId) {
+            const dog = dogs.find(d => d.id === dogId);
+            if (!dog) return;
+            
+            if (dog.supplementTypes.includes(suppId)) {
+                dog.supplementTypes = dog.supplementTypes.filter(s => s !== suppId);
+            } else {
+                dog.supplementTypes.push(suppId);
+            }
+        }
 
-                    const displayName = dog.matchedName || (dog.possibleMatches.length === 1 ? dog.possibleMatches[0] : dog.inputName);
+        function togglePrescription(dogId) {
+            const dog = dogs.find(d => d.id === dogId);
+            if (!dog) return;
+            
+            dog.prescription = !dog.prescription;
+            if (!dog.prescription) {
+                dog.prescriptionMedicine = '';
+            }
+            
+            const penId = getDogPen(dogId);
+            if (penId) renderPen(penId);
+        }
 
-                    // Build extras display
-                    const extras = [];
-                    if (dog.prescription) extras.push('+P');
-                    if (dog.supplements) extras.push('+S');
+        function updatePrescriptionMedicine(dogId, value) {
+            const dog = dogs.find(d => d.id === dogId);
+            if (dog) dog.prescriptionMedicine = value;
+        }
 
-                    // Build supplement details
-                    let suppDetails = '';
-                    if (dog.supplements && dog.supplementTypes.length > 0) {
-                        const suppLabels = dog.supplementTypes.map(st => {
-                            const supp = SUPPLEMENT_TYPES.find(s => s.id === st);
-                            return supp ? supp.label : st;
-                        });
-                        suppDetails = `<div class="preview-dog-supplements">Supplements: ${suppLabels.join(', ')}</div>`;
-                    }
+        function removeDogFromPen(dogId, penId) {
+            pens[penId] = pens[penId].filter(id => id !== dogId);
+            renderPen(penId);
+            renderStagingArea();
+        }
 
-                    // Build prescription details
-                    let prescDetails = '';
-                    if (dog.prescription && dog.prescriptionComment) {
-                        prescDetails = `<div class="preview-dog-supplements" style="border-left-color: var(--accent-primary);">Medicine: ${dog.prescriptionComment}</div>`;
-                    }
+        // ============================================
+        // DRAG AND DROP (Pointer Events)
+        // ============================================
+        
+        function setupDragZones() {
+            // Staging area as drop zone
+            const stagingArea = document.getElementById('stagingArea');
+            setupDropZone(stagingArea, null);
+            
+            // Bin zone
+            const binZone = document.getElementById('binZone');
+            setupDropZone(binZone, 'bin');
+            
+            // Pens as drop zones
+            for (let i = 1; i <= 10; i++) {
+                const pen = document.getElementById(`pen-${i}`);
+                setupDropZone(pen, `pen-${i}`);
+            }
+        }
 
-                    previewHTML += `
-                        <div class="preview-dog">
-                            <span class="preview-dog-name">${displayName}</span>
-                            <span class="preview-dog-status" style="background: ${getStatusColor(dog.status)}; color: white;">
-                                ${getStatusLabel(dog.status)}
-                            </span>
-                            ${extras.length > 0 ? `<span class="preview-dog-extras">${extras.join(' ')}</span>` : ''}
-                            ${suppDetails}
-                            ${prescDetails}
-                        </div>
-                    `;
+        function setupDragForElement(el, fromPen) {
+            let startX, startY, clone;
+            
+            const onPointerDown = (e) => {
+                if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT' || 
+                    e.target.tagName === 'BUTTON' || e.target.closest('.match-dropdown')) {
+                    return;
                 }
+                
+                e.preventDefault();
+                draggedDogId = el.dataset.dogId;
+                draggedFromPen = fromPen;
+                
+                startX = e.clientX;
+                startY = e.clientY;
+                
+                clone = el.cloneNode(true);
+                clone.style.position = 'fixed';
+                clone.style.width = el.offsetWidth + 'px';
+                clone.style.zIndex = '1000';
+                clone.style.pointerEvents = 'none';
+                clone.style.opacity = '0.9';
+                clone.style.left = e.clientX - el.offsetWidth / 2 + 'px';
+                clone.style.top = e.clientY - 20 + 'px';
+                document.body.appendChild(clone);
+                
+                el.classList.add('dragging');
+                
+                document.addEventListener('pointermove', onPointerMove);
+                document.addEventListener('pointerup', onPointerUp);
+            };
+            
+            const onPointerMove = (e) => {
+                if (!clone) return;
+                clone.style.left = e.clientX - clone.offsetWidth / 2 + 'px';
+                clone.style.top = e.clientY - 20 + 'px';
+                
+                // Highlight drop zones
+                document.querySelectorAll('.pen, .staging-area, .bin-zone').forEach(zone => {
+                    const rect = zone.getBoundingClientRect();
+                    if (e.clientX >= rect.left && e.clientX <= rect.right &&
+                        e.clientY >= rect.top && e.clientY <= rect.bottom) {
+                        zone.classList.add('drag-over');
+                    } else {
+                        zone.classList.remove('drag-over');
+                    }
+                });
+            };
+            
+            const onPointerUp = (e) => {
+                document.removeEventListener('pointermove', onPointerMove);
+                document.removeEventListener('pointerup', onPointerUp);
+                
+                if (clone) {
+                    clone.remove();
+                    clone = null;
+                }
+                
+                el.classList.remove('dragging');
+                
+                // Find drop target
+                const dropTarget = document.elementFromPoint(e.clientX, e.clientY);
+                handleDrop(dropTarget);
+                
+                document.querySelectorAll('.drag-over').forEach(z => z.classList.remove('drag-over'));
+                
+                draggedDogId = null;
+                draggedFromPen = null;
+            };
+            
+            el.addEventListener('pointerdown', onPointerDown);
+        }
 
-                previewHTML += '</div>';
+        function setupDropZone(el, targetId) {
+            // Drop zones are handled via elementFromPoint in pointer up
+        }
+
+        function handleDrop(dropTarget) {
+            if (!draggedDogId || !dropTarget) return;
+            
+            // Find the actual drop zone
+            const pen = dropTarget.closest('.pen');
+            const staging = dropTarget.closest('.staging-area');
+            const bin = dropTarget.closest('.bin-zone');
+            
+            // Remove from current location
+            if (draggedFromPen) {
+                pens[draggedFromPen] = pens[draggedFromPen].filter(id => id !== draggedDogId);
             }
-
-            if (!hasAnyDogs) {
-                previewHTML += '<div class="empty-message">No dogs assigned to pens yet!</div>';
+            
+            if (bin) {
+                // Delete dog
+                dogs = dogs.filter(d => d.id !== draggedDogId);
+            } else if (pen) {
+                const penId = pen.dataset.pen;
+                
+                // Check pen capacity
+                if (pens[penId].length >= MAX_DOGS_PER_PEN) {
+                    alert(`Pen ${penId.replace('pen-', '')} is full (max ${MAX_DOGS_PER_PEN} dogs)`);
+                    // Return to original location
+                    if (draggedFromPen) {
+                        pens[draggedFromPen].push(draggedDogId);
+                    }
+                } else if (!pens[penId].includes(draggedDogId)) {
+                    pens[penId].push(draggedDogId);
+                }
             }
-
-            // Check for unmatched dogs in staging
-            const unmatchedInStaging = dogs.filter(d => {
-                const inPen = getDogPen(d.id);
-                const isMatched = d.matchedName || d.possibleMatches.length === 1;
-                return !inPen && !isMatched;
-            });
-
-            if (unmatchedInStaging.length > 0) {
-                previewHTML = `<div style="background: var(--status-quarter); color: white; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem;">
-                    ⚠️ ${unmatchedInStaging.length} dog(s) in staging area need name matching
-                </div>` + previewHTML;
+            // If dropped on staging or elsewhere, dog stays in staging (handled by filter)
+            
+            // Re-render
+            renderStagingArea();
+            for (let i = 1; i <= 10; i++) {
+                renderPen(`pen-${i}`);
             }
+        }
 
-            document.getElementById('previewContent').innerHTML = previewHTML;
+        // ============================================
+        // PREVIEW & SUBMIT
+        // ============================================
+        
+        function showPreview() {
+            const previewContent = document.getElementById('previewContent');
+            const mealType = document.getElementById('mealType').value;
+            
+            let html = `<p><strong>Meal:</strong> ${mealType}</p><hr style="border-color: var(--bg-pen); margin: 15px 0;">`;
+            let totalDogs = 0;
+            
+            for (let i = 1; i <= 10; i++) {
+                const penId = `pen-${i}`;
+                const penDogs = pens[penId];
+                
+                if (penDogs.length === 0) continue;
+                
+                html += `<div class="preview-pen">`;
+                html += `<div class="preview-pen-header">📍 Pen ${i}</div>`;
+                
+                penDogs.forEach(dogId => {
+                    const dog = dogs.find(d => d.id === dogId);
+                    if (!dog) return;
+                    
+                    totalDogs++;
+                    const name = dog.matchedName || dog.possibleMatches[0] || dog.inputName;
+                    let extras = [];
+                    if (dog.supplements) extras.push('+S');
+                    if (dog.prescription) extras.push('+P');
+                    
+                    html += `<div class="preview-dog">
+                        ${escapeHtml(name)} — ${getStatusLabel(dog.status)}
+                        ${extras.length ? `<span class="extras">${extras.join(' ')}</span>` : ''}
+                    </div>`;
+                });
+                
+                html += `</div>`;
+            }
+            
+            if (totalDogs === 0) {
+                html = '<div class="empty-message">No dogs assigned to pens yet!</div>';
+            } else {
+                html = `<p><strong>Total:</strong> ${totalDogs} dogs</p>` + html;
+            }
+            
+            previewContent.innerHTML = html;
             document.getElementById('previewModal').classList.add('active');
         }
 
-        // Close preview
         function closePreview() {
             document.getElementById('previewModal').classList.remove('active');
         }
 
-        // Submit report
-        function submitReport() {
-            const mealType = document.getElementById('mealType').value;
-            const today = new Date();
-
-            // Collect all dog data from pens
-            const reportData = {
-                mealType: mealType,
-                date: {
-                    day: today.getDate(),
-                    month: today.getMonth() + 1,
-                    year: today.getFullYear()
-                },
-                dogs: []
-            };
-
-            for (const [penId, penDogs] of Object.entries(pens)) {
+        async function submitReport() {
+            closePreview();
+            
+            // Validate all dogs are matched
+            const unmatchedDogs = [];
+            const dogsToSubmit = [];
+            
+            for (let i = 1; i <= 10; i++) {
+                const penId = `pen-${i}`;
+                const penDogs = pens[penId];
+                
                 for (const dogId of penDogs) {
                     const dog = dogs.find(d => d.id === dogId);
                     if (!dog) continue;
-
-                    // Get the matched name
-                    const finalName = dog.matchedName || (dog.possibleMatches.length === 1 ? dog.possibleMatches[0] : null);
-                    if (!finalName) continue;
-
-                    // Build medicine/supplements array for JotForm field 7
+                    
+                    const finalName = dog.matchedName || dog.possibleMatches[0] || dog.inputName;
+                    
+                    // Check if name exists in master list (skip check if using fallback list)
+                    const inMasterList = dogNameList.some(name => 
+                        name.toLowerCase() === finalName.toLowerCase()
+                    );
+                    
+                    if (!inMasterList && dogNameList.length > 0) {
+                        unmatchedDogs.push(finalName);
+                        continue;
+                    }
+                    
+                    // Build medicine/supplements array
                     const medicineSupplements = [];
                     if (dog.prescription) {
                         medicineSupplements.push('Prescription Medicine');
                     }
-                    dog.supplementTypes.forEach(st => {
-                        const supp = SUPPLEMENT_TYPES.find(s => s.id === st);
+                    dog.supplementTypes.forEach(suppId => {
+                        const supp = SUPPLEMENT_TYPES.find(s => s.id === suppId);
                         if (supp) medicineSupplements.push(supp.jotformValue);
                     });
-
-                    reportData.dogs.push({
+                    
+                    dogsToSubmit.push({
                         name: finalName,
                         pen: penId,
-                        foodConsumed: FEEDING_STATUS_MAP[dog.status],
+                        foodConsumed: FEEDING_STATUS_MAP[dog.status] || dog.status,
                         hasMedicineOrSupplement: (dog.prescription || dog.supplements) ? 'Yes' : 'No',
                         medicineSupplements: medicineSupplements,
-                        additionalComments: dog.prescription && dog.prescriptionComment ? `Prescription: ${dog.prescriptionComment}` : ''
+                        supplementTypes: dog.supplementTypes.map(id => {
+                            const s = SUPPLEMENT_TYPES.find(x => x.id === id);
+                            return s ? s.jotformValue : id;
+                        }),
+                        prescriptionMedicine: dog.prescriptionMedicine
                     });
                 }
             }
-
-            if (reportData.dogs.length === 0) {
+            
+            if (unmatchedDogs.length > 0) {
+                alert(`⚠️ These dogs are not in the master list:\n\n${unmatchedDogs.join('\n')}\n\nPlease match them first.`);
+                return;
+            }
+            
+            if (dogsToSubmit.length === 0) {
                 alert('No dogs to submit! Please assign dogs to pens first.');
                 return;
             }
-
-            // For now, log the data structure
-            console.log('=== JOTFORM SUBMISSION DATA ===');
-            console.log('Form ID: 240143730611039');
-            console.log('Field mappings:');
-            console.log('  Field 3 (date):', reportData.date);
-            console.log('  Field 9 (meal time):', reportData.mealType);
-            console.log('');
-            reportData.dogs.forEach((dog, i) => {
-                console.log(`Dog ${i + 1}: ${dog.name}`);
-                console.log('  Field 13 (name):', dog.name);
-                console.log('  Field 6 (food consumed):', dog.foodConsumed);
-                console.log('  Field 10 (has medicine/supp):', dog.hasMedicineOrSupplement);
-                console.log('  Field 7 (medicine/supps):', dog.medicineSupplements);
-                console.log('  Field 21 (additional comments):', dog.additionalComments || '(none)');
-                console.log('');
+            
+            // Get today's date
+            const today = new Date();
+            const reportDate = {
+                day: today.getDate().toString(),
+                month: (today.getMonth() + 1).toString(),
+                year: today.getFullYear().toString()
+            };
+            
+            const mealType = document.getElementById('mealType').value;
+            
+            // Submit to backend
+            const result = await submitToBackend({
+                mealType: mealType,
+                date: reportDate,
+                dogs: dogsToSubmit
             });
             
-            closePreview();
-            alert(`✅ Report ready for ${reportData.dogs.length} dogs!\n\nMeal: ${mealType}\nDate: ${reportData.date.day}/${reportData.date.month}/${reportData.date.year}\n\n(Check browser console for full data structure)\n\nBackend integration coming next!`);
+            if (result.success) {
+                alert(`✅ Success!\n\n${result.dogsProcessed} dogs submitted.\n\nCheck Telegram for review links.\n\nReply /send to submit to JotForm.`);
+                
+                // Clear the form
+                clearAll();
+            } else {
+                alert(`❌ Error: ${result.error}\n\nPlease try again.`);
+            }
         }
 
-        // Initialize on load
-        initPens();
+        function clearAll() {
+            dogs = [];
+            for (let i = 1; i <= 10; i++) {
+                pens[`pen-${i}`] = [];
+                renderPen(`pen-${i}`);
+            }
+            renderStagingArea();
+        }
+
+        // ============================================
+        // UTILITIES
+        // ============================================
+        
+        function updateStatus(message, type) {
+            const el = document.getElementById('connectionStatus');
+            el.textContent = message;
+            el.className = 'status ' + (type || '');
+        }
+
+        function showLoading(text) {
+            document.getElementById('loadingText').textContent = text || 'Loading...';
+            document.getElementById('loadingOverlay').classList.add('active');
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.remove('active');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
     </script>
 </body>
 </html>
