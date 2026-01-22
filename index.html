@@ -23,6 +23,7 @@
             --status-none: #e74c3c;
             --shadow: 0 4px 15px rgba(0,0,0,0.3);
             --radius: 12px;
+            --sync-active: #00acee;
         }
 
         * {
@@ -72,10 +73,18 @@
             padding: 8px;
             border-radius: 8px;
             background: var(--bg-secondary);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
         }
 
         .status-bar.connected {
             color: var(--status-all);
+        }
+
+        .status-bar.syncing {
+            color: var(--sync-active);
         }
 
         .status-bar.offline {
@@ -84,6 +93,35 @@
 
         .status-bar.error {
             color: var(--status-none);
+        }
+
+        /* Sync indicator */
+        .sync-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--status-all);
+            animation: pulse 2s infinite;
+        }
+
+        .sync-indicator.syncing {
+            background: var(--sync-active);
+            animation: spin 1s linear infinite;
+        }
+
+        .sync-indicator.offline {
+            background: var(--accent-secondary);
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         /* Desktop Layout - Sidebar + Main */
@@ -171,12 +209,18 @@
             transform: translateY(0);
         }
 
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
         .btn-primary {
             background: var(--accent-primary);
             color: white;
         }
 
-        .btn-primary:hover {
+        .btn-primary:hover:not(:disabled) {
             background: #d63850;
         }
 
@@ -185,7 +229,7 @@
             color: var(--text-primary);
         }
 
-        .btn-secondary:hover {
+        .btn-secondary:hover:not(:disabled) {
             background: #1a4a7a;
         }
 
@@ -194,7 +238,7 @@
             color: white;
         }
 
-        .btn-success:hover {
+        .btn-success:hover:not(:disabled) {
             background: #27ae60;
         }
 
@@ -600,62 +644,19 @@
             color: var(--text-secondary);
         }
 
-        /* Controls Section */
-        .controls-section {
-            background: var(--bg-secondary);
-            border-radius: var(--radius);
-            padding: 18px;
-            box-shadow: var(--shadow);
-        }
-
-        .controls-row {
+        /* Action Bar */
+        .action-bar {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            gap: 12px;
             flex-wrap: wrap;
-            gap: 15px;
         }
 
-        .meal-selector {
-            display: flex;
-            align-items: center;
-            gap: 10px;
+        .action-bar .btn {
+            flex: 1;
+            min-width: 120px;
         }
 
-        .meal-selector label {
-            font-size: 0.85rem;
-            font-weight: 700;
-            color: var(--text-secondary);
-        }
-
-        .meal-selector select {
-            padding: 12px 15px;
-            border: 2px solid var(--bg-pen);
-            border-radius: 8px;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            font-family: inherit;
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-
-        .action-buttons {
-            display: flex;
-            gap: 10px;
-        }
-
-        /* Scroll hint indicator */
-        .scroll-hint {
-            display: none;
-            text-align: center;
-            color: var(--text-secondary);
-            font-size: 0.75rem;
-            padding: 5px;
-            margin-bottom: 5px;
-        }
-
-        /* Modal */
+        /* Preview Modal */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -663,10 +664,10 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0,0,0,0.85);
-            z-index: 200;
-            align-items: center;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
             justify-content: center;
+            align-items: center;
             padding: 20px;
         }
 
@@ -677,27 +678,24 @@
         .modal {
             background: var(--bg-secondary);
             border-radius: var(--radius);
-            max-width: 600px;
+            max-width: 500px;
             width: 100%;
-            max-height: 85vh;
-            overflow-y: auto;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            max-height: 80vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
 
         .modal-header {
-            padding: 20px 25px;
+            padding: 20px;
             border-bottom: 1px solid var(--bg-pen);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            position: sticky;
-            top: 0;
-            background: var(--bg-secondary);
-            z-index: 10;
         }
 
         .modal-header h2 {
-            font-size: 1.3rem;
+            font-size: 1.2rem;
             color: var(--accent-primary);
         }
 
@@ -705,290 +703,239 @@
             background: none;
             border: none;
             color: var(--text-secondary);
-            font-size: 2rem;
+            font-size: 1.5rem;
             cursor: pointer;
-            transition: color 0.2s ease;
-            line-height: 1;
-        }
-
-        .modal-close:hover {
-            color: var(--accent-primary);
+            padding: 5px;
         }
 
         .modal-body {
-            padding: 25px;
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
         }
 
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid var(--bg-pen);
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        /* Preview Styles */
         .preview-meal-title {
             font-size: 1.1rem;
             font-weight: 700;
             color: var(--accent-secondary);
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid var(--bg-pen);
+            margin-bottom: 15px;
+            text-align: center;
         }
 
         .preview-pen {
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
 
         .preview-pen-title {
-            font-size: 0.95rem;
+            font-size: 0.9rem;
             font-weight: 700;
             color: var(--text-secondary);
-            margin-bottom: 10px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            margin-bottom: 8px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid var(--bg-pen);
         }
 
         .preview-dog {
             display: flex;
             align-items: center;
-            gap: 12px;
-            padding: 12px 15px;
+            gap: 10px;
+            padding: 8px 10px;
             background: var(--bg-primary);
-            border-radius: 8px;
-            margin-bottom: 8px;
-            font-size: 0.95rem;
-            flex-wrap: wrap;
+            border-radius: 6px;
+            margin-bottom: 5px;
         }
 
         .preview-dog-name {
             flex: 1;
-            font-weight: 700;
-            min-width: 80px;
+            font-weight: 600;
         }
 
         .preview-dog-status {
-            padding: 4px 12px;
-            border-radius: 6px;
-            font-size: 0.85rem;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
             font-weight: 700;
         }
 
         .preview-dog-extras {
+            font-size: 0.75rem;
             color: var(--accent-secondary);
             font-weight: 700;
-            font-size: 0.85rem;
         }
 
-        .modal-footer {
-            padding: 20px 25px;
-            border-top: 1px solid var(--bg-pen);
+        /* Toast notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 2000;
             display: flex;
-            gap: 12px;
-            justify-content: flex-end;
-            position: sticky;
-            bottom: 0;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
             background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 12px 16px;
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideIn 0.3s ease;
+            max-width: 300px;
         }
 
-        .modal-footer .btn {
-            min-width: 120px;
+        .toast.success {
+            border-left: 4px solid var(--status-all);
         }
 
-        /* ========== TABLET RESPONSIVE (≤1024px) ========== */
-        @media (max-width: 1024px) {
+        .toast.error {
+            border-left: 4px solid var(--status-none);
+        }
+
+        .toast.info {
+            border-left: 4px solid var(--sync-active);
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* MOBILE STYLES */
+        @media (max-width: 900px) {
             .layout {
                 grid-template-columns: 1fr;
-                gap: 15px;
             }
 
             .sidebar {
-                position: relative;
-                top: auto;
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 15px;
+                position: static;
+                order: 1;
             }
 
-            .entry-section {
-                grid-column: 1 / -1;
-            }
-
-            .staging-area {
-                max-height: 120px;
-                min-height: 80px;
-            }
-
-            .bin-section {
-                display: flex;
-                align-items: stretch;
-            }
-
-            .bin {
-                height: 100%;
-                min-height: 80px;
-            }
-
-            .scroll-hint {
-                display: block;
+            .main-content {
+                order: 2;
             }
 
             .pen-row {
-                grid-template-columns: repeat(5, minmax(140px, 1fr));
-                min-width: max-content;
-            }
-
-            .pen {
-                min-height: 200px;
-                min-width: 140px;
-            }
-        }
-
-        /* ========== MOBILE RESPONSIVE (≤768px) ========== */
-        @media (max-width: 768px) {
-            .container {
-                padding: 15px;
+                grid-template-columns: repeat(2, 1fr);
             }
 
             h1 {
                 font-size: 1.4rem;
             }
+        }
 
-            .sidebar {
-                grid-template-columns: 1fr;
-            }
-
-            .entry-section, .staging-section, .bin-section {
-                padding: 15px;
-            }
-
-            .entry-row input {
-                padding: 10px 12px;
-                font-size: 14px;
-            }
-
-            .btn {
-                padding: 10px 14px;
-                font-size: 12px;
-            }
-
-            .pens-section {
-                padding: 15px;
+        @media (max-width: 500px) {
+            .container {
+                padding: 10px;
             }
 
             .pen-row {
-                grid-template-columns: repeat(5, minmax(120px, 1fr));
-                gap: 8px;
-                min-width: max-content;
+                grid-template-columns: 1fr;
             }
 
             .pen {
                 min-height: 180px;
-                min-width: 120px;
-                padding: 10px;
             }
 
-            .pen-header {
-                font-size: 0.75rem;
-            }
-
-            .pen-dog {
-                padding: 8px;
-            }
-
-            .pen-dog-name {
-                font-size: 0.75rem;
-            }
-
-            .pen-dog-controls select {
-                font-size: 0.65rem;
-                padding: 4px 6px;
-                min-width: 45px;
-            }
-
-            .toggle-btn {
-                font-size: 0.6rem;
-                padding: 4px 6px;
-            }
-
-            .controls-row {
+            .action-bar {
                 flex-direction: column;
-                align-items: stretch;
             }
 
-            .meal-selector {
-                justify-content: center;
+            .action-bar .btn {
+                width: 100%;
             }
 
-            .action-buttons {
-                justify-content: center;
+            .modal {
+                max-height: 90vh;
             }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🐕 Feeding Report</h1>
-        <div class="status-bar" id="statusBar">Connecting...</div>
+        <h1>🍽️ Feeding Report</h1>
+        
+        <div class="status-bar connected" id="statusBar">
+            <div class="sync-indicator" id="syncIndicator"></div>
+            <span id="statusText">Connecting...</span>
+        </div>
 
         <div class="layout">
-            <!-- Sidebar (Left on desktop, Top on mobile) -->
+            <!-- Sidebar -->
             <div class="sidebar">
-                <!-- Dog Entry Section -->
+                <!-- Add Dog -->
                 <div class="entry-section">
-                    <div class="section-title">Add Dogs</div>
+                    <div class="section-title">➕ Add Dog</div>
                     <div class="entry-row">
-                        <input type="text" id="dogNameInput" placeholder="Enter dog name (e.g. Luna G)..." autocomplete="off">
-                        <button class="btn btn-primary" onclick="addDog()">Add</button>
+                        <input type="text" id="dogNameInput" placeholder="Type dog name..." autocomplete="off">
+                        <button class="btn btn-primary" onclick="addDog()" id="addDogBtn">Add</button>
                     </div>
+                </div>
+
+                <!-- Meal Type -->
+                <div class="entry-section">
+                    <div class="section-title">🕐 Meal Type</div>
+                    <select id="mealType" style="width: 100%; padding: 12px; border-radius: 8px; border: 2px solid var(--bg-pen); background: var(--bg-primary); color: var(--text-primary); font-family: inherit; font-size: 15px;" onchange="updateMealType()">
+                        <option value="Breakfast">Breakfast</option>
+                        <option value="Lunch" selected>Lunch</option>
+                        <option value="Dinner">Dinner</option>
+                    </select>
                 </div>
 
                 <!-- Staging Area -->
                 <div class="staging-section">
                     <div class="staging-header">
-                        <span class="section-title">Dogs to Assign</span>
+                        <span class="section-title">🐕 Dogs to Assign</span>
                         <span class="count-badge" id="stagingCount">0</span>
                     </div>
                     <div class="staging-area" id="stagingArea">
-                        <div class="empty-message" id="stagingEmpty">Add dogs above, then drag to pens</div>
+                        <div class="empty-message">Type a dog name above to get started</div>
                     </div>
                 </div>
 
-                <!-- Bin -->
+                <!-- Delete Bin -->
                 <div class="bin-section">
                     <div class="bin" id="deleteBin">
                         <span class="bin-icon">🗑️</span>
-                        <span>Drop to Delete</span>
+                        <span>Drop here to delete</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Main Content (Right on desktop, Bottom on mobile) -->
+            <!-- Main Content -->
             <div class="main-content">
-                <!-- Pens Grid -->
+                <!-- Pens -->
                 <div class="pens-section">
-                    <div class="scroll-hint">← Swipe to see all pens →</div>
-                    
                     <div class="pen-row-label">Top Pens</div>
-                    <div class="pen-row" id="topPens">
-                        <!-- Generated by JS -->
-                    </div>
-                    
+                    <div class="pen-row" id="topPens"></div>
+
                     <div class="pen-row-label">Bottom Pens</div>
-                    <div class="pen-row" id="bottomPens">
-                        <!-- Generated by JS -->
-                    </div>
+                    <div class="pen-row" id="bottomPens"></div>
                 </div>
 
-                <!-- Controls -->
-                <div class="controls-section">
-                    <div class="controls-row">
-                        <div class="meal-selector">
-                            <label>Meal Type:</label>
-                            <select id="mealType">
-                                <option value="Morning Meal">🌅 Breakfast</option>
-                                <option value="Lunch Meal">☀️ Lunch</option>
-                                <option value="Evening Meal">🌙 Dinner</option>
-                            </select>
-                        </div>
-                        <div class="action-buttons">
-                            <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
-                            <button class="btn btn-primary" onclick="showPreview()">Preview</button>
-                            <button class="btn btn-success" onclick="submitReport()">Submit</button>
-                        </div>
-                    </div>
+                <!-- Actions -->
+                <div class="action-bar">
+                    <button class="btn btn-secondary" onclick="showPreview()">📋 Preview</button>
+                    <button class="btn btn-success" onclick="submitReport()">✅ Submit</button>
+                    <button class="btn btn-secondary" onclick="clearAll()">🗑️ Clear All</button>
                 </div>
             </div>
         </div>
@@ -1006,10 +953,13 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closePreview()">Back</button>
-                <button class="btn btn-success" onclick="submitReport()">Submit</button>
+                <button class="btn btn-success" onclick="confirmSubmit()">Submit</button>
             </div>
         </div>
     </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
 
     <script>
         // ============================================
@@ -1017,6 +967,10 @@
         // ============================================
         
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwP74AXOe1cZmHKTxi9KbMhZJU48EHRFI7NQ6Og65_FcTVB1sMQuqgkPKIkr7Fm7e40mw/exec';
+        
+        // Sync configuration
+        const SYNC_INTERVAL = 3000; // Poll every 3 seconds
+        const SYNC_DEBOUNCE = 500; // Debounce local changes
 
         // JotForm dog names list (fallback if API fails)
         const JOTFORM_DOG_NAMES = [
@@ -1044,14 +998,21 @@
         // STATE
         // ============================================
         
-        let dogNameList = JOTFORM_DOG_NAMES; // Start with fallback
-        let masterDogList = []; // Full data from API
+        let dogNameList = JOTFORM_DOG_NAMES;
+        let masterDogList = [];
         let dogs = [];
         let pens = {};
         let draggedElement = null;
         let draggedDogId = null;
         let draggedFromPen = null;
         let isOnline = false;
+        let currentMealType = 'Lunch';
+        
+        // Sync state
+        let lastSyncVersion = 0;
+        let syncInterval = null;
+        let pendingUpdates = [];
+        let isSyncing = false;
 
         // ============================================
         // INITIALIZATION
@@ -1060,10 +1021,22 @@
         document.addEventListener('DOMContentLoaded', () => {
             initPens();
             setupEventListeners();
-            loadDogList();
+            initialLoad();
         });
 
-        // Initialize pens
+        async function initialLoad() {
+            updateStatus('Connecting...', 'syncing');
+            
+            // Load dog list first
+            await loadDogList();
+            
+            // Then load session state (existing dogs from Google Sheets)
+            await loadSessionState();
+            
+            // Start sync polling
+            startSyncPolling();
+        }
+
         function initPens() {
             const topPensContainer = document.getElementById('topPens');
             const bottomPensContainer = document.getElementById('bottomPens');
@@ -1076,18 +1049,15 @@
                 bottomPensContainer.innerHTML += createPenHTML(`bottom-${i}`, `Bottom ${i}`);
             }
 
-            // Add drop listeners to pens
             document.querySelectorAll('.pen').forEach(pen => {
                 pen.addEventListener('pointerenter', handlePenEnter);
                 pen.addEventListener('pointerleave', handlePenLeave);
             });
 
-            // Add drop listener to bin
             const bin = document.getElementById('deleteBin');
             bin.addEventListener('pointerenter', handleBinEnter);
             bin.addEventListener('pointerleave', handleBinLeave);
 
-            // Add drop listener to staging area
             const staging = document.getElementById('stagingArea');
             staging.addEventListener('pointerenter', handleStagingEnter);
             staging.addEventListener('pointerleave', handleStagingLeave);
@@ -1109,14 +1079,107 @@
         }
 
         // ============================================
-        // API CALLS
+        // SYNC FUNCTIONS (NEW)
+        // ============================================
+
+        function startSyncPolling() {
+            if (syncInterval) clearInterval(syncInterval);
+            syncInterval = setInterval(pollForUpdates, SYNC_INTERVAL);
+        }
+
+        function stopSyncPolling() {
+            if (syncInterval) {
+                clearInterval(syncInterval);
+                syncInterval = null;
+            }
+        }
+
+        async function pollForUpdates() {
+            if (isSyncing || !isOnline) return;
+            
+            try {
+                const response = await fetch(APPS_SCRIPT_URL + '?action=getSession', {
+                    method: 'GET',
+                    redirect: 'follow'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success && result.version > lastSyncVersion) {
+                    // New data available - update local state
+                    applyRemoteState(result);
+                    lastSyncVersion = result.version;
+                }
+            } catch (error) {
+                console.error('Sync poll error:', error);
+            }
+        }
+
+        function applyRemoteState(sessionData) {
+            // Update meal type
+            if (sessionData.mealType) {
+                currentMealType = sessionData.mealType;
+                document.getElementById('mealType').value = currentMealType;
+            }
+            
+            // Rebuild dogs array
+            dogs = sessionData.dogs.map(d => ({
+                id: d.id,
+                inputName: d.inputName,
+                matchedName: d.matchedName,
+                possibleMatches: d.possibleMatches || [],
+                status: d.status || 'all',
+                prescription: d.prescription || false,
+                prescriptionComment: d.prescriptionComment || '',
+                supplements: d.supplements || false,
+                supplementTypes: d.supplementTypes || []
+            }));
+            
+            // Rebuild pens
+            for (const penId of Object.keys(pens)) {
+                pens[penId] = [];
+            }
+            
+            sessionData.dogs.forEach(d => {
+                if (d.penId && pens[d.penId]) {
+                    pens[d.penId].push(d.id);
+                }
+            });
+            
+            // Re-render everything
+            renderAllPens();
+            renderStagingArea();
+            
+            updateStatus(`✓ Synced (${dogs.length} dogs)`, 'connected');
+        }
+
+        async function loadSessionState() {
+            try {
+                const response = await fetch(APPS_SCRIPT_URL + '?action=getSession', {
+                    method: 'GET',
+                    redirect: 'follow'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    applyRemoteState(result);
+                    lastSyncVersion = result.version;
+                    isOnline = true;
+                    updateStatus(`✓ Connected (${result.count} dogs)`, 'connected');
+                }
+            } catch (error) {
+                console.error('Load session error:', error);
+                updateStatus('⚠ Offline mode', 'offline');
+            }
+        }
+
+        // ============================================
+        // API CALLS (UPDATED FOR SYNC)
         // ============================================
 
         async function loadDogList() {
-            updateStatus('Connecting...', '');
-            
             try {
-                // Use URL params approach for better CORS compatibility
                 const url = APPS_SCRIPT_URL + '?action=getDogList';
                 const response = await fetch(url, {
                     method: 'GET',
@@ -1129,14 +1192,142 @@
                     masterDogList = result.dogs;
                     dogNameList = result.dogs.map(d => d.name);
                     isOnline = true;
-                    updateStatus(`✓ Connected (${result.count} dogs)`, 'connected');
-                } else {
-                    throw new Error(result.error || 'Failed to load dogs');
                 }
             } catch (error) {
                 console.error('API Error:', error);
                 isOnline = false;
-                updateStatus(`⚠ Offline mode (${dogNameList.length} dogs)`, 'offline');
+            }
+        }
+
+        async function syncAddDog(dog) {
+            if (!isOnline) return;
+            
+            try {
+                const response = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    redirect: 'follow',
+                    body: JSON.stringify({
+                        action: 'addDog',
+                        dog: {
+                            id: dog.id,
+                            inputName: dog.inputName,
+                            matchedName: dog.matchedName,
+                            possibleMatches: dog.possibleMatches,
+                            status: dog.status,
+                            prescription: dog.prescription,
+                            prescriptionComment: dog.prescriptionComment,
+                            supplements: dog.supplements,
+                            supplementTypes: dog.supplementTypes,
+                            penId: getDogPen(dog.id) || '',
+                            mealType: currentMealType
+                        }
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    lastSyncVersion = result.version;
+                }
+                return result;
+            } catch (error) {
+                console.error('Sync add error:', error);
+                return { success: false, error: error.toString() };
+            }
+        }
+
+        async function syncUpdateDog(dogId, updates) {
+            if (!isOnline) return;
+            
+            try {
+                const response = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    redirect: 'follow',
+                    body: JSON.stringify({
+                        action: 'updateDog',
+                        dogId: dogId,
+                        updates: updates
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    lastSyncVersion = result.version;
+                }
+                return result;
+            } catch (error) {
+                console.error('Sync update error:', error);
+                return { success: false, error: error.toString() };
+            }
+        }
+
+        async function syncDeleteDog(dogId) {
+            if (!isOnline) return;
+            
+            try {
+                const response = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    redirect: 'follow',
+                    body: JSON.stringify({
+                        action: 'deleteDog',
+                        dogId: dogId
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    lastSyncVersion = result.version;
+                }
+                return result;
+            } catch (error) {
+                console.error('Sync delete error:', error);
+                return { success: false, error: error.toString() };
+            }
+        }
+
+        async function syncMealType(mealType) {
+            if (!isOnline) return;
+            
+            try {
+                const response = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    redirect: 'follow',
+                    body: JSON.stringify({
+                        action: 'setMealType',
+                        mealType: mealType
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    lastSyncVersion = result.version;
+                }
+                return result;
+            } catch (error) {
+                console.error('Sync meal type error:', error);
+                return { success: false, error: error.toString() };
+            }
+        }
+
+        async function syncClearSession() {
+            if (!isOnline) return;
+            
+            try {
+                const response = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    redirect: 'follow',
+                    body: JSON.stringify({
+                        action: 'clearSession'
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    lastSyncVersion = result.version;
+                }
+                return result;
+            } catch (error) {
+                console.error('Sync clear error:', error);
+                return { success: false, error: error.toString() };
             }
         }
 
@@ -1146,7 +1337,6 @@
             }
             
             try {
-                // POST with text/plain to avoid CORS preflight
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     redirect: 'follow',
@@ -1164,8 +1354,12 @@
 
         function updateStatus(message, type) {
             const el = document.getElementById('statusBar');
-            el.textContent = message;
+            const textEl = document.getElementById('statusText');
+            const indicatorEl = document.getElementById('syncIndicator');
+            
+            textEl.textContent = message;
             el.className = 'status-bar ' + (type || '');
+            indicatorEl.className = 'sync-indicator ' + (type || '');
         }
 
         // ============================================
@@ -1240,50 +1434,75 @@
         }
 
         // ============================================
-        // DOG MANAGEMENT
+        // DOG MANAGEMENT (UPDATED FOR SYNC)
         // ============================================
 
-        function addDog() {
+        async function addDog() {
             const input = document.getElementById('dogNameInput');
             const name = input.value.trim();
             
-            if (name) {
-                const matches = matchDogName(name);
-                
-                const dog = {
-                    id: Date.now() + Math.random(),
-                    inputName: name,
-                    matchedName: matches.length === 1 ? matches[0] : null,
-                    possibleMatches: matches,
-                    status: 'all',
-                    prescription: false,
-                    prescriptionComment: '',
-                    supplements: false,
-                    supplementTypes: []
-                };
-                
-                dogs.push(dog);
-                renderStagingArea();
-                input.value = '';
-                input.focus();
+            if (!name) return;
+            
+            const matches = matchDogName(name);
+            
+            const dog = {
+                id: Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+                inputName: name,
+                matchedName: matches.length === 1 ? matches[0] : null,
+                possibleMatches: matches,
+                status: 'all',
+                prescription: false,
+                prescriptionComment: '',
+                supplements: false,
+                supplementTypes: []
+            };
+            
+            // Add locally first for instant feedback
+            dogs.push(dog);
+            renderStagingArea();
+            input.value = '';
+            input.focus();
+            
+            // Then sync to backend
+            updateStatus('Syncing...', 'syncing');
+            const result = await syncAddDog(dog);
+            
+            if (result && result.success) {
+                showToast('Dog added', 'success');
+                updateStatus(`✓ Synced (${dogs.length} dogs)`, 'connected');
+            } else {
+                showToast('Sync failed - changes may not appear on TV', 'error');
             }
         }
 
-        function selectStagingMatch(dogId, matchedName) {
+        async function selectStagingMatch(dogId, matchedName) {
             const dog = dogs.find(d => d.id === dogId);
             if (dog && matchedName) {
                 dog.matchedName = matchedName;
                 renderStagingArea();
+                
+                // Sync to backend
+                await syncUpdateDog(dogId, { matchedName: matchedName });
             }
         }
 
-        function deleteDog(dogId) {
+        async function deleteDog(dogId) {
+            // Remove locally first
             for (const penId of Object.keys(pens)) {
                 pens[penId] = pens[penId].filter(id => id !== dogId);
             }
             dogs = dogs.filter(d => d.id !== dogId);
             renderStagingArea();
             renderAllPens();
+            
+            // Sync to backend
+            updateStatus('Syncing...', 'syncing');
+            const result = await syncDeleteDog(dogId);
+            
+            if (result && result.success) {
+                showToast('Dog removed', 'success');
+                updateStatus(`✓ Synced (${dogs.length} dogs)`, 'connected');
+            }
         }
 
         function getDogPen(dogId) {
@@ -1293,64 +1512,143 @@
             return null;
         }
 
+        async function updateMealType() {
+            const mealType = document.getElementById('mealType').value;
+            currentMealType = mealType;
+            
+            // Sync to backend
+            await syncMealType(mealType);
+        }
+
         // ============================================
         // RENDERING
         // ============================================
 
         function renderStagingArea() {
             const staging = document.getElementById('stagingArea');
-            const countBadge = document.getElementById('stagingCount');
-
-            const unassignedDogs = dogs.filter(d => !getDogPen(d.id));
-            countBadge.textContent = unassignedDogs.length;
+            const dogsInPens = [];
+            for (const penDogs of Object.values(pens)) {
+                dogsInPens.push(...penDogs);
+            }
+            
+            const unassignedDogs = dogs.filter(d => !dogsInPens.includes(d.id));
+            
+            document.getElementById('stagingCount').textContent = unassignedDogs.length;
 
             if (unassignedDogs.length === 0) {
-                staging.innerHTML = '<div class="empty-message" id="stagingEmpty">Add dogs above, then drag to pens</div>';
+                staging.innerHTML = '<div class="empty-message">Type a dog name above to get started</div>';
                 return;
             }
 
             staging.innerHTML = unassignedDogs.map(dog => {
-                const displayName = dog.matchedName || dog.inputName;
-                const isMatched = dog.matchedName || dog.possibleMatches.length === 1;
-                
-                if (isMatched) {
-                    const finalName = dog.matchedName || dog.possibleMatches[0];
+                if (dog.matchedName || dog.possibleMatches.length === 1) {
+                    const displayName = dog.matchedName || dog.possibleMatches[0];
                     return `
-                        <div class="dog-card" data-dog-id="${dog.id}"
-                             onpointerdown="startDrag(event, ${dog.id})">
-                            ${finalName}
+                        <div class="dog-card" 
+                             data-dog-id="${dog.id}"
+                             onpointerdown="startDrag(event, '${dog.id}')"
+                             style="border-left-color: var(--status-${dog.status});">
+                            ${displayName}
                         </div>
                     `;
-                } else {
-                    const fuzzyMatches = dog.possibleMatches.length > 0 
-                        ? dog.possibleMatches 
-                        : fuzzyMatchDogName(dog.inputName);
-                    
-                    if (fuzzyMatches.length === 0) {
+                } else if (dog.possibleMatches.length === 0) {
+                    const fuzzyMatches = fuzzyMatchDogName(dog.inputName);
+                    if (fuzzyMatches.length > 0) {
                         return `
-                            <div class="dog-card-unmatched" data-dog-id="${dog.id}">
+                            <div class="dog-card-unmatched">
                                 <div class="unmatched-header">
-                                    <span class="unmatched-name">⚠️ "${dog.inputName}"</span>
-                                    <button class="unmatched-remove" onclick="deleteDog(${dog.id})">×</button>
+                                    <span class="unmatched-name">⚠️ ${dog.inputName}</span>
+                                    <button class="unmatched-remove" onclick="deleteDog('${dog.id}')">×</button>
                                 </div>
-                                <div class="unmatched-error">No matching dogs found</div>
+                                <select class="unmatched-select" onchange="selectStagingMatch('${dog.id}', this.value)">
+                                    <option value="">Select match...</option>
+                                    ${fuzzyMatches.map(m => `<option value="${m}">${m}</option>`).join('')}
+                                </select>
+                            </div>
+                        `;
+                    } else {
+                        return `
+                            <div class="dog-card-unmatched">
+                                <div class="unmatched-header">
+                                    <span class="unmatched-name">❌ ${dog.inputName}</span>
+                                    <button class="unmatched-remove" onclick="deleteDog('${dog.id}')">×</button>
+                                </div>
+                                <div class="unmatched-error">No match found</div>
                             </div>
                         `;
                     }
-                    
+                } else {
                     return `
-                        <div class="dog-card-unmatched" data-dog-id="${dog.id}">
+                        <div class="dog-card-unmatched">
                             <div class="unmatched-header">
-                                <span class="unmatched-name">⚠️ "${dog.inputName}"</span>
-                                <button class="unmatched-remove" onclick="deleteDog(${dog.id})">×</button>
+                                <span class="unmatched-name">⚠️ ${dog.inputName}</span>
+                                <button class="unmatched-remove" onclick="deleteDog('${dog.id}')">×</button>
                             </div>
-                            <select class="unmatched-select" onchange="selectStagingMatch(${dog.id}, this.value)">
-                                <option value="">Select correct dog...</option>
-                                ${fuzzyMatches.map(m => `<option value="${m}">${m}</option>`).join('')}
+                            <select class="unmatched-select" onchange="selectStagingMatch('${dog.id}', this.value)">
+                                <option value="">Select match...</option>
+                                ${dog.possibleMatches.map(m => `<option value="${m}">${m}</option>`).join('')}
                             </select>
                         </div>
                     `;
                 }
+            }).join('');
+        }
+
+        function renderPen(penId) {
+            const container = document.getElementById(`pen-${penId}`);
+            const penDogs = pens[penId];
+
+            if (penDogs.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            container.innerHTML = penDogs.map(dogId => {
+                const dog = dogs.find(d => d.id === dogId);
+                if (!dog) return '';
+
+                const displayName = dog.matchedName || (dog.possibleMatches.length === 1 ? dog.possibleMatches[0] : dog.inputName);
+                
+                return `
+                    <div class="pen-dog status-${dog.status}" data-dog-id="${dog.id}">
+                        <div class="pen-dog-header">
+                            <span class="pen-dog-name" 
+                                  onpointerdown="startDrag(event, '${dog.id}', '${penId}')">
+                                ${displayName}
+                            </span>
+                            <button class="pen-dog-remove" onclick="deleteDog('${dog.id}')">×</button>
+                        </div>
+                        <div class="pen-dog-controls">
+                            <select onchange="updateDogStatus('${dog.id}', this.value)">
+                                <option value="all" ${dog.status === 'all' ? 'selected' : ''}>All</option>
+                                <option value="three-quarter" ${dog.status === 'three-quarter' ? 'selected' : ''}>¾</option>
+                                <option value="half" ${dog.status === 'half' ? 'selected' : ''}>½</option>
+                                <option value="quarter" ${dog.status === 'quarter' ? 'selected' : ''}>¼</option>
+                                <option value="none" ${dog.status === 'none' ? 'selected' : ''}>None</option>
+                            </select>
+                            <button class="toggle-btn ${dog.prescription ? 'active' : ''}" onclick="togglePrescription('${dog.id}')">+P</button>
+                            <button class="toggle-btn ${dog.supplements ? 'active' : ''}" onclick="toggleSupplements('${dog.id}')">+S</button>
+                        </div>
+                        <div class="prescription-panel ${dog.prescription ? 'active' : ''}" id="prescription-${dog.id}">
+                            <input type="text" class="prescription-input" 
+                                   placeholder="Medicine name..."
+                                   value="${dog.prescriptionComment || ''}"
+                                   onchange="updatePrescriptionComment('${dog.id}', this.value)">
+                        </div>
+                        <div class="supplement-panel ${dog.supplements ? 'active' : ''}" id="supplements-${dog.id}">
+                            <div class="supplement-checkboxes">
+                                ${SUPPLEMENT_TYPES.map(st => `
+                                    <label class="supplement-checkbox">
+                                        <input type="checkbox" 
+                                               ${dog.supplementTypes.includes(st.id) ? 'checked' : ''}
+                                               onchange="toggleSupplementType('${dog.id}', '${st.id}', this.checked)">
+                                        ${st.label}
+                                    </label>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
             }).join('');
         }
 
@@ -1360,181 +1658,114 @@
             }
         }
 
-        function renderPen(penId) {
-            const penDogsContainer = document.getElementById(`pen-${penId}`);
-            const penDogIds = pens[penId];
-
-            if (penDogIds.length === 0) {
-                penDogsContainer.innerHTML = '';
-                return;
-            }
-
-            penDogsContainer.innerHTML = penDogIds.map(dogId => {
-                const dog = dogs.find(d => d.id === dogId);
-                if (!dog) return '';
-
-                const displayName = dog.matchedName || dog.possibleMatches[0] || dog.inputName;
-
-                return `
-                    <div class="pen-dog status-${dog.status}" data-dog-id="${dog.id}">
-                        <div class="pen-dog-header">
-                            <span class="pen-dog-name" onpointerdown="startDrag(event, ${dog.id})">${displayName}</span>
-                            <button class="pen-dog-remove" onclick="removeDogFromPen(${dog.id}, '${penId}')">×</button>
-                        </div>
-                        <div class="pen-dog-controls">
-                            <select onchange="updateDogStatus(${dog.id}, this.value)">
-                                <option value="all" ${dog.status === 'all' ? 'selected' : ''}>All</option>
-                                <option value="three-quarter" ${dog.status === 'three-quarter' ? 'selected' : ''}>¾</option>
-                                <option value="half" ${dog.status === 'half' ? 'selected' : ''}>½</option>
-                                <option value="quarter" ${dog.status === 'quarter' ? 'selected' : ''}>¼</option>
-                                <option value="none" ${dog.status === 'none' ? 'selected' : ''}>None</option>
-                            </select>
-                            <button class="toggle-btn ${dog.supplements ? 'active' : ''}" onclick="toggleSupplements(${dog.id})">+S</button>
-                            <button class="toggle-btn ${dog.prescription ? 'active' : ''}" onclick="togglePrescription(${dog.id})">+P</button>
-                        </div>
-                        <div class="supplement-panel ${dog.supplements ? 'active' : ''}" id="supp-${dog.id}">
-                            <div class="supplement-checkboxes">
-                                ${SUPPLEMENT_TYPES.map(supp => `
-                                    <label class="supplement-checkbox">
-                                        <input type="checkbox" 
-                                            ${dog.supplementTypes.includes(supp.id) ? 'checked' : ''} 
-                                            onchange="toggleSupplementType(${dog.id}, '${supp.id}')">
-                                        ${supp.label}
-                                    </label>
-                                `).join('')}
-                            </div>
-                        </div>
-                        <div class="prescription-panel ${dog.prescription ? 'active' : ''}" id="presc-${dog.id}">
-                            <input type="text" class="prescription-input"
-                                placeholder="Medicine name..." 
-                                value="${dog.prescriptionComment || ''}"
-                                onchange="updatePrescriptionComment(${dog.id}, this.value)">
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
-
         // ============================================
-        // DOG ACTIONS
+        // DOG STATUS UPDATES (WITH SYNC)
         // ============================================
 
-        function updateDogStatus(dogId, status) {
+        async function updateDogStatus(dogId, status) {
             const dog = dogs.find(d => d.id === dogId);
             if (dog) {
                 dog.status = status;
-                renderAllPens();
+                renderPen(getDogPen(dogId));
+                await syncUpdateDog(dogId, { status: status });
             }
         }
 
-        function toggleSupplements(dogId) {
-            const dog = dogs.find(d => d.id === dogId);
-            if (dog) {
-                dog.supplements = !dog.supplements;
-                if (!dog.supplements) {
-                    dog.supplementTypes = [];
-                }
-                renderAllPens();
-            }
-        }
-
-        function toggleSupplementType(dogId, suppType) {
-            const dog = dogs.find(d => d.id === dogId);
-            if (dog) {
-                const idx = dog.supplementTypes.indexOf(suppType);
-                if (idx === -1) {
-                    dog.supplementTypes.push(suppType);
-                } else {
-                    dog.supplementTypes.splice(idx, 1);
-                }
-            }
-        }
-
-        function togglePrescription(dogId) {
+        async function togglePrescription(dogId) {
             const dog = dogs.find(d => d.id === dogId);
             if (dog) {
                 dog.prescription = !dog.prescription;
                 if (!dog.prescription) {
                     dog.prescriptionComment = '';
                 }
-                renderAllPens();
+                renderPen(getDogPen(dogId));
+                await syncUpdateDog(dogId, { 
+                    prescription: dog.prescription,
+                    prescriptionComment: dog.prescriptionComment
+                });
             }
         }
 
-        function updatePrescriptionComment(dogId, comment) {
+        async function updatePrescriptionComment(dogId, comment) {
             const dog = dogs.find(d => d.id === dogId);
             if (dog) {
                 dog.prescriptionComment = comment;
+                await syncUpdateDog(dogId, { prescriptionComment: comment });
             }
         }
 
-        function removeDogFromPen(dogId, penId) {
-            pens[penId] = pens[penId].filter(id => id !== dogId);
-            renderPen(penId);
-            renderStagingArea();
+        async function toggleSupplements(dogId) {
+            const dog = dogs.find(d => d.id === dogId);
+            if (dog) {
+                dog.supplements = !dog.supplements;
+                if (!dog.supplements) {
+                    dog.supplementTypes = [];
+                }
+                renderPen(getDogPen(dogId));
+                await syncUpdateDog(dogId, { 
+                    supplements: dog.supplements,
+                    supplementTypes: dog.supplementTypes
+                });
+            }
+        }
+
+        async function toggleSupplementType(dogId, typeId, checked) {
+            const dog = dogs.find(d => d.id === dogId);
+            if (dog) {
+                if (checked && !dog.supplementTypes.includes(typeId)) {
+                    dog.supplementTypes.push(typeId);
+                } else if (!checked) {
+                    dog.supplementTypes = dog.supplementTypes.filter(t => t !== typeId);
+                }
+                await syncUpdateDog(dogId, { supplementTypes: dog.supplementTypes });
+            }
         }
 
         // ============================================
         // DRAG AND DROP
         // ============================================
 
-        function startDrag(e, dogId) {
+        function startDrag(e, dogId, fromPen = null) {
             e.preventDefault();
             
-            const target = e.target.closest('.dog-card, .pen-dog-name');
-            if (!target) return;
-
             draggedDogId = dogId;
-            draggedFromPen = getDogPen(dogId);
+            draggedFromPen = fromPen;
             
-            const dog = dogs.find(d => d.id === dogId);
-            draggedElement = document.createElement('div');
-            draggedElement.className = 'dog-card dragging';
-            draggedElement.textContent = dog.matchedName || dog.inputName;
-            draggedElement.style.position = 'fixed';
-            draggedElement.style.pointerEvents = 'none';
-            draggedElement.style.zIndex = '1000';
-            document.body.appendChild(draggedElement);
-
-            moveAt(e.clientX, e.clientY);
-
-            document.addEventListener('pointermove', onPointerMove);
-            document.addEventListener('pointerup', onPointerUp);
-        }
-
-        function moveAt(x, y) {
-            if (draggedElement) {
-                draggedElement.style.left = (x - 40) + 'px';
-                draggedElement.style.top = (y - 15) + 'px';
+            const target = e.target.closest('.dog-card, .pen-dog-name');
+            if (target) {
+                const parent = target.closest('.dog-card, .pen-dog');
+                if (parent) parent.classList.add('dragging');
             }
+            
+            document.addEventListener('pointermove', handleDrag);
+            document.addEventListener('pointerup', endDrag);
         }
 
-        function onPointerMove(e) {
-            moveAt(e.clientX, e.clientY);
+        function handleDrag(e) {
+            // Visual feedback handled by CSS
         }
 
-        function onPointerUp(e) {
-            document.removeEventListener('pointermove', onPointerMove);
-            document.removeEventListener('pointerup', onPointerUp);
-
-            if (draggedElement) {
-                draggedElement.remove();
-                draggedElement = null;
-            }
-
+        async function endDrag(e) {
+            document.removeEventListener('pointermove', handleDrag);
+            document.removeEventListener('pointerup', endDrag);
+            
+            document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+            
+            if (!draggedDogId) return;
+            
             const elemBelow = document.elementFromPoint(e.clientX, e.clientY);
             
             if (elemBelow) {
-                if (elemBelow.closest('#deleteBin') || elemBelow.closest('.bin-section')) {
-                    deleteDog(draggedDogId);
+                if (elemBelow.closest('#deleteBin') || elemBelow.closest('.bin')) {
+                    await deleteDog(draggedDogId);
                 }
                 else if (elemBelow.closest('.pen')) {
                     const pen = elemBelow.closest('.pen');
                     const penId = pen.dataset.penId;
-                    dropDogInPen(draggedDogId, penId);
+                    await dropDogInPen(draggedDogId, penId);
                 }
                 else if (elemBelow.closest('#stagingArea') || elemBelow.closest('.staging-section')) {
-                    moveDogToStaging(draggedDogId);
+                    await moveDogToStaging(draggedDogId);
                 }
             }
 
@@ -1575,9 +1806,9 @@
             document.getElementById('stagingArea').classList.remove('drag-over');
         }
 
-        function dropDogInPen(dogId, penId) {
+        async function dropDogInPen(dogId, penId) {
             if (pens[penId].length >= 5) {
-                alert('This pen is full (max 5 dogs)');
+                showToast('Pen is full (max 5 dogs)', 'error');
                 return;
             }
 
@@ -1592,14 +1823,20 @@
 
             renderPen(penId);
             renderStagingArea();
+            
+            // Sync pen assignment
+            await syncUpdateDog(dogId, { penId: penId });
         }
 
-        function moveDogToStaging(dogId) {
+        async function moveDogToStaging(dogId) {
             if (draggedFromPen) {
                 pens[draggedFromPen] = pens[draggedFromPen].filter(id => id !== dogId);
                 renderPen(draggedFromPen);
             }
             renderStagingArea();
+            
+            // Sync - clear pen assignment
+            await syncUpdateDog(dogId, { penId: '' });
         }
 
         // ============================================
@@ -1679,98 +1916,119 @@
             document.getElementById('previewModal').classList.remove('active');
         }
 
+        async function confirmSubmit() {
+            await submitReport();
+        }
+
         async function submitReport() {
             const mealType = document.getElementById('mealType').value;
             const today = new Date();
 
-            const reportData = {
-                mealType: mealType,
-                date: {
-                    day: today.getDate(),
-                    month: today.getMonth() + 1,
-                    year: today.getFullYear()
-                },
-                dogs: []
-            };
-
+            // Check for unmatched dogs
             let hasUnmatchedDogs = false;
-
             for (const [penId, penDogs] of Object.entries(pens)) {
                 for (const dogId of penDogs) {
                     const dog = dogs.find(d => d.id === dogId);
                     if (!dog) continue;
-
-                    const finalName = dog.matchedName || (dog.possibleMatches.length === 1 ? dog.possibleMatches[0] : null);
                     
+                    const finalName = dog.matchedName || (dog.possibleMatches.length === 1 ? dog.possibleMatches[0] : null);
                     if (!finalName) {
                         hasUnmatchedDogs = true;
-                        continue;
                     }
-
-                    const medicineSupplements = [];
-                    if (dog.prescription) {
-                        medicineSupplements.push('Prescription Medicine');
-                    }
-                    dog.supplementTypes.forEach(st => {
-                        const supp = SUPPLEMENT_TYPES.find(s => s.id === st);
-                        if (supp) medicineSupplements.push(supp.jotformValue);
-                    });
-
-                    reportData.dogs.push({
-                        name: finalName,
-                        pen: penId,
-                        foodConsumed: FEEDING_STATUS_MAP[dog.status],
-                        hasMedicineOrSupplement: (dog.prescription || dog.supplements) ? 'Yes' : 'No',
-                        medicineSupplements: medicineSupplements,
-                        supplementTypes: dog.supplementTypes.map(id => {
-                            const s = SUPPLEMENT_TYPES.find(x => x.id === id);
-                            return s ? s.jotformValue : id;
-                        }),
-                        prescriptionMedicine: dog.prescriptionComment || ''
-                    });
                 }
             }
 
             if (hasUnmatchedDogs) {
-                alert('⚠️ Please match all dog names before submitting.\n\nLook for dogs with ⚠️ and select the correct match from the dropdown.');
+                showToast('Please match all dog names before submitting', 'error');
                 return;
             }
 
-            if (reportData.dogs.length === 0) {
-                alert('No dogs to submit! Please assign dogs to pens first.');
+            // Count dogs in pens
+            let dogCount = 0;
+            for (const penDogs of Object.values(pens)) {
+                dogCount += penDogs.length;
+            }
+
+            if (dogCount === 0) {
+                showToast('No dogs to submit! Assign dogs to pens first.', 'error');
                 return;
             }
 
             closePreview();
 
             if (!isOnline) {
-                // Offline mode - just log data
-                console.log('=== FEEDING REPORT DATA ===');
-                console.log(JSON.stringify(reportData, null, 2));
-                alert(`✅ Report ready for ${reportData.dogs.length} dogs!\n\nMeal: ${mealType}\nDate: ${reportData.date.day}/${reportData.date.month}/${reportData.date.year}\n\n⚠️ OFFLINE MODE - Data logged to console.\n\nPlease connect to backend to submit to Telegram.`);
+                showToast('Offline mode - cannot submit', 'error');
                 return;
             }
 
-            // Online mode - submit to backend
-            const result = await submitToBackend(reportData);
+            // Submit to backend
+            updateStatus('Submitting...', 'syncing');
+            
+            const result = await submitToBackend({
+                mealType: mealType,
+                date: {
+                    day: today.getDate(),
+                    month: today.getMonth() + 1,
+                    year: today.getFullYear()
+                }
+            });
 
             if (result.success) {
-                alert(`✅ Success!\n\n${result.dogsProcessed} dogs submitted.\n\nCheck Telegram for review links.\n\nReply /send to submit to JotForm.`);
-                clearAll();
-            } else {
-                alert(`❌ Error: ${result.error}\n\nPlease try again.`);
-            }
-        }
-
-        function clearAll() {
-            if (confirm('Clear all dogs and reset?')) {
+                showToast(`✅ ${result.dogsProcessed} dogs submitted! Check Telegram.`, 'success');
+                
+                // Clear local state (backend already cleared)
                 dogs = [];
                 for (const penId of Object.keys(pens)) {
                     pens[penId] = [];
                 }
                 renderAllPens();
                 renderStagingArea();
+                
+                updateStatus('✓ Report submitted', 'connected');
+            } else {
+                showToast(`❌ Error: ${result.error}`, 'error');
+                updateStatus('✓ Connected', 'connected');
             }
+        }
+
+        async function clearAll() {
+            if (!confirm('Clear all dogs and reset?\n\nThis will clear data on ALL devices.')) {
+                return;
+            }
+            
+            // Clear locally
+            dogs = [];
+            for (const penId of Object.keys(pens)) {
+                pens[penId] = [];
+            }
+            renderAllPens();
+            renderStagingArea();
+            
+            // Clear on backend
+            updateStatus('Clearing...', 'syncing');
+            const result = await syncClearSession();
+            
+            if (result && result.success) {
+                showToast('Session cleared', 'success');
+                updateStatus('✓ Cleared', 'connected');
+            }
+        }
+
+        // ============================================
+        // TOAST NOTIFICATIONS
+        // ============================================
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.remove();
+            }, 4000);
         }
     </script>
 </body>
