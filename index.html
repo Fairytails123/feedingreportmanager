@@ -46,7 +46,6 @@
             width: 100%;
         }
 
-        /* Main Container */
         .container {
             max-width: 1400px;
             margin: 0 auto;
@@ -79,52 +78,33 @@
             gap: 10px;
         }
 
-        .status-bar.connected {
-            color: var(--status-all);
-        }
+        .status-bar.connected { color: var(--status-all); }
+        .status-bar.syncing { color: var(--sync-active); }
+        .status-bar.offline { color: var(--accent-secondary); }
+        .status-bar.error { color: var(--status-none); }
+        .status-bar.paused { color: var(--accent-secondary); }
 
-        .status-bar.syncing {
-            color: var(--sync-active);
-        }
-
-        .status-bar.offline {
-            color: var(--accent-secondary);
-        }
-
-        .status-bar.error {
-            color: var(--status-none);
-        }
-
-        /* Sync indicator */
         .sync-indicator {
             width: 10px;
             height: 10px;
             border-radius: 50%;
             background: var(--status-all);
-            animation: pulse 2s infinite;
         }
 
         .sync-indicator.syncing {
             background: var(--sync-active);
-            animation: spin 1s linear infinite;
+            animation: pulse 1s infinite;
         }
 
-        .sync-indicator.offline {
+        .sync-indicator.paused {
             background: var(--accent-secondary);
-            animation: none;
         }
 
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
         }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        /* Desktop Layout - Sidebar + Main */
         .layout {
             display: grid;
             grid-template-columns: 280px 1fr;
@@ -132,7 +112,6 @@
             align-items: start;
         }
 
-        /* Sidebar (Left) */
         .sidebar {
             position: sticky;
             top: 20px;
@@ -141,7 +120,6 @@
             gap: 15px;
         }
 
-        /* Dog Entry Section */
         .entry-section {
             background: var(--bg-secondary);
             border-radius: var(--radius);
@@ -182,9 +160,7 @@
             border-color: var(--accent-primary);
         }
 
-        .entry-row input::placeholder {
-            color: var(--text-secondary);
-        }
+        .entry-row input::placeholder { color: var(--text-secondary); }
 
         .btn {
             padding: 12px 18px;
@@ -205,9 +181,7 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
 
-        .btn:active {
-            transform: translateY(0);
-        }
+        .btn:active { transform: translateY(0); }
 
         .btn:disabled {
             opacity: 0.5;
@@ -215,34 +189,13 @@
             transform: none !important;
         }
 
-        .btn-primary {
-            background: var(--accent-primary);
-            color: white;
-        }
+        .btn-primary { background: var(--accent-primary); color: white; }
+        .btn-primary:hover:not(:disabled) { background: #d63850; }
+        .btn-secondary { background: var(--bg-pen); color: var(--text-primary); }
+        .btn-secondary:hover:not(:disabled) { background: #1a4a7a; }
+        .btn-success { background: var(--status-all); color: white; }
+        .btn-success:hover:not(:disabled) { background: #27ae60; }
 
-        .btn-primary:hover:not(:disabled) {
-            background: #d63850;
-        }
-
-        .btn-secondary {
-            background: var(--bg-pen);
-            color: var(--text-primary);
-        }
-
-        .btn-secondary:hover:not(:disabled) {
-            background: #1a4a7a;
-        }
-
-        .btn-success {
-            background: var(--status-all);
-            color: white;
-        }
-
-        .btn-success:hover:not(:disabled) {
-            background: #27ae60;
-        }
-
-        /* Staging Area */
         .staging-section {
             background: var(--bg-secondary);
             border-radius: var(--radius);
@@ -278,7 +231,6 @@
             background: rgba(233, 69, 96, 0.1);
         }
 
-        /* Bin */
         .bin-section {
             background: var(--bg-secondary);
             border-radius: var(--radius);
@@ -307,11 +259,8 @@
             transform: scale(1.02);
         }
 
-        .bin-icon {
-            font-size: 1.5rem;
-        }
+        .bin-icon { font-size: 1.5rem; }
 
-        /* Dog Cards in Staging */
         .dog-card {
             background: var(--bg-pen);
             border-radius: 10px;
@@ -325,14 +274,8 @@
             font-weight: 600;
         }
 
-        .dog-card:active {
-            cursor: grabbing;
-        }
-
-        .dog-card.dragging {
-            opacity: 0.5;
-            transform: scale(1.05);
-        }
+        .dog-card:active { cursor: grabbing; }
+        .dog-card.dragging { opacity: 0.5; transform: scale(1.05); }
 
         .dog-card-unmatched {
             background: var(--bg-pen);
@@ -388,7 +331,6 @@
             padding: 5px;
         }
 
-        /* Count badge */
         .count-badge {
             background: var(--accent-primary);
             color: white;
@@ -398,7 +340,6 @@
             font-weight: 700;
         }
 
-        /* Empty state */
         .empty-message {
             color: var(--text-secondary);
             font-size: 0.85rem;
@@ -408,7 +349,6 @@
             width: 100%;
         }
 
-        /* Main Content (Right) */
         .main-content {
             display: flex;
             flex-direction: column;
@@ -416,7 +356,6 @@
             min-width: 0;
         }
 
-        /* Pens Grid */
         .pens-section {
             background: var(--bg-secondary);
             border-radius: var(--radius);
@@ -435,9 +374,7 @@
             margin: 0 0 12px 5px;
         }
 
-        .pen-row-label:not(:first-child) {
-            margin-top: 20px;
-        }
+        .pen-row-label:not(:first-child) { margin-top: 20px; }
 
         .pen-row {
             display: grid;
@@ -457,9 +394,7 @@
             transition: all 0.2s ease;
         }
 
-        .pen:hover {
-            border-color: rgba(233, 69, 96, 0.3);
-        }
+        .pen:hover { border-color: rgba(233, 69, 96, 0.3); }
 
         .pen.drag-over {
             border-color: var(--accent-primary);
@@ -484,7 +419,6 @@
             overflow: visible;
         }
 
-        /* Dog in Pen */
         .pen-dog {
             background: var(--bg-secondary);
             border-radius: 10px;
@@ -493,10 +427,7 @@
             transition: all 0.2s ease;
         }
 
-        .pen-dog:hover {
-            background: rgba(22, 33, 62, 0.8);
-        }
-
+        .pen-dog:hover { background: rgba(22, 33, 62, 0.8); }
         .pen-dog.status-all { border-left-color: var(--status-all); }
         .pen-dog.status-three-quarter { border-left-color: var(--status-three-quarter); }
         .pen-dog.status-half { border-left-color: var(--status-half); }
@@ -536,10 +467,7 @@
             transition: all 0.2s ease;
         }
 
-        .pen-dog-remove:hover {
-            background: #c0392b;
-            transform: scale(1.1);
-        }
+        .pen-dog-remove:hover { background: #c0392b; transform: scale(1.1); }
 
         .pen-dog-controls {
             display: flex;
@@ -573,17 +501,9 @@
             transition: all 0.2s ease;
         }
 
-        .toggle-btn:hover {
-            border-color: var(--accent-secondary);
-        }
+        .toggle-btn:hover { border-color: var(--accent-secondary); }
+        .toggle-btn.active { background: var(--accent-secondary); border-color: var(--accent-secondary); color: white; }
 
-        .toggle-btn.active {
-            background: var(--accent-secondary);
-            border-color: var(--accent-secondary);
-            color: white;
-        }
-
-        /* Supplement Checkboxes */
         .supplement-panel {
             display: none;
             margin-top: 8px;
@@ -591,9 +511,7 @@
             border-top: 1px dashed rgba(255,255,255,0.1);
         }
 
-        .supplement-panel.active {
-            display: block;
-        }
+        .supplement-panel.active { display: block; }
 
         .supplement-checkboxes {
             display: grid;
@@ -617,7 +535,6 @@
             accent-color: var(--accent-secondary);
         }
 
-        /* Prescription Panel */
         .prescription-panel {
             display: none;
             margin-top: 8px;
@@ -625,9 +542,7 @@
             border-top: 1px dashed rgba(255,255,255,0.1);
         }
 
-        .prescription-panel.active {
-            display: block;
-        }
+        .prescription-panel.active { display: block; }
 
         .prescription-input {
             width: 100%;
@@ -640,11 +555,8 @@
             font-size: 0.75rem;
         }
 
-        .prescription-input::placeholder {
-            color: var(--text-secondary);
-        }
+        .prescription-input::placeholder { color: var(--text-secondary); }
 
-        /* Action Bar */
         .action-bar {
             display: flex;
             gap: 12px;
@@ -656,7 +568,6 @@
             min-width: 120px;
         }
 
-        /* Preview Modal */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -671,9 +582,7 @@
             padding: 20px;
         }
 
-        .modal-overlay.active {
-            display: flex;
-        }
+        .modal-overlay.active { display: flex; }
 
         .modal {
             background: var(--bg-secondary);
@@ -694,10 +603,7 @@
             align-items: center;
         }
 
-        .modal-header h2 {
-            font-size: 1.2rem;
-            color: var(--accent-primary);
-        }
+        .modal-header h2 { font-size: 1.2rem; color: var(--accent-primary); }
 
         .modal-close {
             background: none;
@@ -722,7 +628,6 @@
             justify-content: flex-end;
         }
 
-        /* Preview Styles */
         .preview-meal-title {
             font-size: 1.1rem;
             font-weight: 700;
@@ -731,9 +636,7 @@
             text-align: center;
         }
 
-        .preview-pen {
-            margin-bottom: 15px;
-        }
+        .preview-pen { margin-bottom: 15px; }
 
         .preview-pen-title {
             font-size: 0.9rem;
@@ -754,10 +657,7 @@
             margin-bottom: 5px;
         }
 
-        .preview-dog-name {
-            flex: 1;
-            font-weight: 600;
-        }
+        .preview-dog-name { flex: 1; font-weight: 600; }
 
         .preview-dog-status {
             padding: 3px 8px;
@@ -772,7 +672,6 @@
             font-weight: 700;
         }
 
-        /* Toast notifications */
         .toast-container {
             position: fixed;
             bottom: 20px;
@@ -795,77 +694,30 @@
             max-width: 300px;
         }
 
-        .toast.success {
-            border-left: 4px solid var(--status-all);
-        }
-
-        .toast.error {
-            border-left: 4px solid var(--status-none);
-        }
-
-        .toast.info {
-            border-left: 4px solid var(--sync-active);
-        }
+        .toast.success { border-left: 4px solid var(--status-all); }
+        .toast.error { border-left: 4px solid var(--status-none); }
+        .toast.info { border-left: 4px solid var(--sync-active); }
 
         @keyframes slideIn {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
         }
 
-        /* MOBILE STYLES */
         @media (max-width: 900px) {
-            .layout {
-                grid-template-columns: 1fr;
-            }
-
-            .sidebar {
-                position: static;
-                order: 1;
-            }
-
-            .main-content {
-                order: 2;
-            }
-
-            .pen-row {
-                grid-template-columns: repeat(2, 1fr);
-            }
-
-            h1 {
-                font-size: 1.4rem;
-            }
+            .layout { grid-template-columns: 1fr; }
+            .sidebar { position: static; order: 1; }
+            .main-content { order: 2; }
+            .pen-row { grid-template-columns: repeat(2, 1fr); }
+            h1 { font-size: 1.4rem; }
         }
 
         @media (max-width: 500px) {
-            .container {
-                padding: 10px;
-            }
-
-            .pen-row {
-                grid-template-columns: 1fr;
-            }
-
-            .pen {
-                min-height: 180px;
-            }
-
-            .action-bar {
-                flex-direction: column;
-            }
-
-            .action-bar .btn {
-                width: 100%;
-            }
-
-            .modal {
-                max-height: 90vh;
-            }
+            .container { padding: 10px; }
+            .pen-row { grid-template-columns: 1fr; }
+            .pen { min-height: 180px; }
+            .action-bar { flex-direction: column; }
+            .action-bar .btn { width: 100%; }
+            .modal { max-height: 90vh; }
         }
     </style>
 </head>
@@ -879,9 +731,7 @@
         </div>
 
         <div class="layout">
-            <!-- Sidebar -->
             <div class="sidebar">
-                <!-- Add Dog -->
                 <div class="entry-section">
                     <div class="section-title">➕ Add Dog</div>
                     <div class="entry-row">
@@ -890,17 +740,16 @@
                     </div>
                 </div>
 
-                <!-- Meal Type -->
                 <div class="entry-section">
                     <div class="section-title">🕐 Meal Type</div>
+                    <!-- VALUES MATCH JOTFORM OPTIONS -->
                     <select id="mealType" style="width: 100%; padding: 12px; border-radius: 8px; border: 2px solid var(--bg-pen); background: var(--bg-primary); color: var(--text-primary); font-family: inherit; font-size: 15px;" onchange="updateMealType()">
-                        <option value="Breakfast">Breakfast</option>
+                        <option value="Morning Meal">Morning Meal (Breakfast)</option>
                         <option value="Lunch" selected>Lunch</option>
-                        <option value="Dinner">Dinner</option>
+                        <option value="Evening Meal">Evening Meal (Dinner)</option>
                     </select>
                 </div>
 
-                <!-- Staging Area -->
                 <div class="staging-section">
                     <div class="staging-header">
                         <span class="section-title">🐕 Dogs to Assign</span>
@@ -911,7 +760,6 @@
                     </div>
                 </div>
 
-                <!-- Delete Bin -->
                 <div class="bin-section">
                     <div class="bin" id="deleteBin">
                         <span class="bin-icon">🗑️</span>
@@ -920,18 +768,14 @@
                 </div>
             </div>
 
-            <!-- Main Content -->
             <div class="main-content">
-                <!-- Pens -->
                 <div class="pens-section">
                     <div class="pen-row-label">Top Pens</div>
                     <div class="pen-row" id="topPens"></div>
-
                     <div class="pen-row-label">Bottom Pens</div>
                     <div class="pen-row" id="bottomPens"></div>
                 </div>
 
-                <!-- Actions -->
                 <div class="action-bar">
                     <button class="btn btn-secondary" onclick="showPreview()">📋 Preview</button>
                     <button class="btn btn-success" onclick="submitReport()">✅ Submit</button>
@@ -941,16 +785,13 @@
         </div>
     </div>
 
-    <!-- Preview Modal -->
     <div class="modal-overlay" id="previewModal">
         <div class="modal">
             <div class="modal-header">
                 <h2>📋 Report Preview</h2>
                 <button class="modal-close" onclick="closePreview()">×</button>
             </div>
-            <div class="modal-body" id="previewContent">
-                <!-- Generated by JS -->
-            </div>
+            <div class="modal-body" id="previewContent"></div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closePreview()">Back</button>
                 <button class="btn btn-success" onclick="confirmSubmit()">Submit</button>
@@ -958,7 +799,6 @@
         </div>
     </div>
 
-    <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
 
     <script>
@@ -968,16 +808,15 @@
         
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwP74AXOe1cZmHKTxi9KbMhZJU48EHRFI7NQ6Og65_FcTVB1sMQuqgkPKIkr7Fm7e40mw/exec';
         
-        // Sync configuration
-        const SYNC_INTERVAL = 3000; // Poll every 3 seconds
-        const SYNC_DEBOUNCE = 500; // Debounce local changes
+        // Sync configuration - INCREASED INTERVALS TO PREVENT FLICKERING
+        const SYNC_INTERVAL = 5000;        // Poll every 5 seconds (was 3)
+        const SYNC_PAUSE_DURATION = 8000;  // Pause sync for 8 seconds after local change
+        const INITIAL_LOAD_DELAY = 2000;   // Wait 2 seconds before first sync after load
 
-        // JotForm dog names list (fallback if API fails)
         const JOTFORM_DOG_NAMES = [
             "Aldo","Alfie","April","Argo","Arlo","Banjo","Barney Homewood","Barney Leeming","Baron","Bay","Beano","Bella","Belle","Benson","Betsy","Birdy","Blue","Bluey","Bo","Bonnie Gallagher","Bonnie Lockwood","Bramble","Branko","Bruce","Bruno","Buddy Dann","Buddy Dargan","Buddy Selby","Casper Hamilton","Casper Kukreja","Che","Chester","Chloe","Clifford","Daisy Cremin","Daisy Parsons","Darcy Campbell","Darcy Dunn","Darwin","Delphine","Dexter","Dicee","Diego Gonsavles","Diego Wojcik","Dierdra","Digby","Dolly","Dottie","Dougie","Dudley","Dusty","Echo","Eddie","Effie","Enzo","Fenton","Ferox","Flaco","Fletcher","Florence","Freddie","Fredo","Frida Walsh","George Elliston","George Jackson","George Mohammed","Gina","Goldie","Haggis","Hattie Campbell","Hattie Duncan","Henry","Holly","Hugo","Incy","Ivy","Jack","Jeff","Jessie","Keti","Kip","Koji","Leo","Lily","Lola Bowles","Lola Fenloni","Lola Hall","Luke","Luna Crockford","Luna Grimshaw","Mac","Macy","Maggie","Margo","Marli","Marloe","Marlow","Martha","Max Tigwell","Max Wang","Merlin Crowley","Merlin Mayne","Miles","Miley","Millie Bowles","Millie Carter","Millie Cartwright","Millie Ellis","Milo McVey","Missy Evans","Mocha Gasper","Mocha Kolumbajew","Mochi","Moka","Mollie","Mos Wan","Moss Harris","Naira","Nala Sands","Nala Warnes","Narla Tester","Ned","Neo","Nevis","Nina","Obie","Oliver","Otis","Peggy Gibbons","Peggy Lucas","Pepper","Petch","Pippin","Pluto","Poppy Clark","Poppy Lancaster","Poppy Lass","Poppy Pike","Ralph Goddard","Raven","Reggie Daly","Reggie Foreman","Reggie Russel","Rex","Rita","River","Rocco","Roman","Roxy","Ruby Brooker","Ruby Favell","Ruby Jones","Rudy","Ruffles","Rufus","Rupy","Sam","Sebastian","Shadow Podkalicka","Shadow Wightman","Snoopy","Sonny","Sophie","Stanley James","Star","Storm","Tallulah","Tam","Tasha","Ted Lambie","Teddy Brown","Teddy Jamison","Terry","Tilly Mills","Tokyo","Warwick","Winnie Awele","Winnie Evans","Winnie Hall","Winnie Lancaster","Winnie Ryan","Woody Johns","Woody Warren","Zero","Ziggy"
         ];
 
-        // Supplement types (matching JotForm field 7)
         const SUPPLEMENT_TYPES = [
             { id: 'calming', label: 'Calming', jotformValue: 'Calming Tablets' },
             { id: 'hemp', label: 'Hemp', jotformValue: 'Hemp Oil' },
@@ -985,7 +824,6 @@
             { id: 'probiotics', label: 'Probiotics', jotformValue: 'FortiFlora Probiotics' }
         ];
 
-        // Feeding status mapping to JotForm values
         const FEEDING_STATUS_MAP = {
             'all': 'All',
             'three-quarter': '3/4',
@@ -1008,11 +846,13 @@
         let isOnline = false;
         let currentMealType = 'Lunch';
         
-        // Sync state
+        // SYNC STATE - IMPROVED
         let lastSyncVersion = 0;
         let syncInterval = null;
-        let pendingUpdates = [];
         let isSyncing = false;
+        let syncPausedUntil = 0;           // Timestamp when sync can resume
+        let pendingDogIds = new Set();      // Dogs being synced to server
+        let initialLoadComplete = false;    // Prevent polling until initial load done
 
         // ============================================
         // INITIALIZATION
@@ -1027,14 +867,14 @@
         async function initialLoad() {
             updateStatus('Connecting...', 'syncing');
             
-            // Load dog list first
             await loadDogList();
-            
-            // Then load session state (existing dogs from Google Sheets)
             await loadSessionState();
             
-            // Start sync polling
-            startSyncPolling();
+            // Mark initial load complete and start polling after delay
+            setTimeout(() => {
+                initialLoadComplete = true;
+                startSyncPolling();
+            }, INITIAL_LOAD_DELAY);
         }
 
         function initPens() {
@@ -1044,7 +884,6 @@
             for (let i = 1; i <= 5; i++) {
                 pens[`top-${i}`] = [];
                 pens[`bottom-${i}`] = [];
-
                 topPensContainer.innerHTML += createPenHTML(`top-${i}`, `Top ${i}`);
                 bottomPensContainer.innerHTML += createPenHTML(`bottom-${i}`, `Bottom ${i}`);
             }
@@ -1079,8 +918,17 @@
         }
 
         // ============================================
-        // SYNC FUNCTIONS (NEW)
+        // SYNC FUNCTIONS - IMPROVED TO PREVENT FLICKERING
         // ============================================
+
+        function pauseSync() {
+            syncPausedUntil = Date.now() + SYNC_PAUSE_DURATION;
+            updateStatus('⏸ Editing...', 'paused');
+        }
+
+        function isSyncPaused() {
+            return Date.now() < syncPausedUntil;
+        }
 
         function startSyncPolling() {
             if (syncInterval) clearInterval(syncInterval);
@@ -1095,7 +943,10 @@
         }
 
         async function pollForUpdates() {
-            if (isSyncing || !isOnline) return;
+            // Don't poll if: already syncing, paused, not online, initial load not done, or pending changes
+            if (isSyncing || isSyncPaused() || !isOnline || !initialLoadComplete || pendingDogIds.size > 0) {
+                return;
+            }
             
             try {
                 const response = await fetch(APPS_SCRIPT_URL + '?action=getSession', {
@@ -1106,23 +957,27 @@
                 const result = await response.json();
                 
                 if (result.success && result.version > lastSyncVersion) {
-                    // New data available - update local state
                     applyRemoteState(result);
                     lastSyncVersion = result.version;
                 }
+                
+                updateStatus(`✓ Synced (${dogs.length} dogs)`, 'connected');
             } catch (error) {
                 console.error('Sync poll error:', error);
             }
         }
 
         function applyRemoteState(sessionData) {
-            // Update meal type
+            // Don't apply if we have pending local changes
+            if (pendingDogIds.size > 0 || isSyncPaused()) {
+                return;
+            }
+            
             if (sessionData.mealType) {
                 currentMealType = sessionData.mealType;
                 document.getElementById('mealType').value = currentMealType;
             }
             
-            // Rebuild dogs array
             dogs = sessionData.dogs.map(d => ({
                 id: d.id,
                 inputName: d.inputName,
@@ -1135,7 +990,6 @@
                 supplementTypes: d.supplementTypes || []
             }));
             
-            // Rebuild pens
             for (const penId of Object.keys(pens)) {
                 pens[penId] = [];
             }
@@ -1146,11 +1000,8 @@
                 }
             });
             
-            // Re-render everything
             renderAllPens();
             renderStagingArea();
-            
-            updateStatus(`✓ Synced (${dogs.length} dogs)`, 'connected');
         }
 
         async function loadSessionState() {
@@ -1163,7 +1014,37 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    applyRemoteState(result);
+                    // Apply without restrictions during initial load
+                    if (result.mealType) {
+                        currentMealType = result.mealType;
+                        document.getElementById('mealType').value = currentMealType;
+                    }
+                    
+                    dogs = result.dogs.map(d => ({
+                        id: d.id,
+                        inputName: d.inputName,
+                        matchedName: d.matchedName,
+                        possibleMatches: d.possibleMatches || [],
+                        status: d.status || 'all',
+                        prescription: d.prescription || false,
+                        prescriptionComment: d.prescriptionComment || '',
+                        supplements: d.supplements || false,
+                        supplementTypes: d.supplementTypes || []
+                    }));
+                    
+                    for (const penId of Object.keys(pens)) {
+                        pens[penId] = [];
+                    }
+                    
+                    result.dogs.forEach(d => {
+                        if (d.penId && pens[d.penId]) {
+                            pens[d.penId].push(d.id);
+                        }
+                    });
+                    
+                    renderAllPens();
+                    renderStagingArea();
+                    
                     lastSyncVersion = result.version;
                     isOnline = true;
                     updateStatus(`✓ Connected (${result.count} dogs)`, 'connected');
@@ -1175,17 +1056,13 @@
         }
 
         // ============================================
-        // API CALLS (UPDATED FOR SYNC)
+        // API CALLS
         // ============================================
 
         async function loadDogList() {
             try {
                 const url = APPS_SCRIPT_URL + '?action=getDogList';
-                const response = await fetch(url, {
-                    method: 'GET',
-                    redirect: 'follow'
-                });
-                
+                const response = await fetch(url, { method: 'GET', redirect: 'follow' });
                 const result = await response.json();
                 
                 if (result.success) {
@@ -1200,7 +1077,9 @@
         }
 
         async function syncAddDog(dog) {
-            if (!isOnline) return;
+            if (!isOnline) return { success: false };
+            
+            pendingDogIds.add(dog.id);
             
             try {
                 const response = await fetch(APPS_SCRIPT_URL, {
@@ -1232,11 +1111,15 @@
             } catch (error) {
                 console.error('Sync add error:', error);
                 return { success: false, error: error.toString() };
+            } finally {
+                pendingDogIds.delete(dog.id);
             }
         }
 
         async function syncUpdateDog(dogId, updates) {
-            if (!isOnline) return;
+            if (!isOnline) return { success: false };
+            
+            pendingDogIds.add(dogId);
             
             try {
                 const response = await fetch(APPS_SCRIPT_URL, {
@@ -1257,20 +1140,19 @@
             } catch (error) {
                 console.error('Sync update error:', error);
                 return { success: false, error: error.toString() };
+            } finally {
+                pendingDogIds.delete(dogId);
             }
         }
 
         async function syncDeleteDog(dogId) {
-            if (!isOnline) return;
+            if (!isOnline) return { success: false };
             
             try {
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     redirect: 'follow',
-                    body: JSON.stringify({
-                        action: 'deleteDog',
-                        dogId: dogId
-                    })
+                    body: JSON.stringify({ action: 'deleteDog', dogId: dogId })
                 });
                 
                 const result = await response.json();
@@ -1285,16 +1167,15 @@
         }
 
         async function syncMealType(mealType) {
-            if (!isOnline) return;
+            if (!isOnline) return { success: false };
+            
+            pauseSync();
             
             try {
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     redirect: 'follow',
-                    body: JSON.stringify({
-                        action: 'setMealType',
-                        mealType: mealType
-                    })
+                    body: JSON.stringify({ action: 'setMealType', mealType: mealType })
                 });
                 
                 const result = await response.json();
@@ -1309,15 +1190,13 @@
         }
 
         async function syncClearSession() {
-            if (!isOnline) return;
+            if (!isOnline) return { success: false };
             
             try {
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     redirect: 'follow',
-                    body: JSON.stringify({
-                        action: 'clearSession'
-                    })
+                    body: JSON.stringify({ action: 'clearSession' })
                 });
                 
                 const result = await response.json();
@@ -1333,17 +1212,14 @@
 
         async function submitToBackend(reportData) {
             if (!isOnline) {
-                return { success: false, error: 'Not connected to backend. Please refresh and try again.' };
+                return { success: false, error: 'Not connected. Please refresh.' };
             }
             
             try {
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     redirect: 'follow',
-                    body: JSON.stringify({
-                        action: 'submitReport',
-                        ...reportData
-                    })
+                    body: JSON.stringify({ action: 'submitReport', ...reportData })
                 });
                 
                 return await response.json();
@@ -1371,23 +1247,15 @@
             const firstName = parts[0];
             const surnameInitial = parts.length > 1 ? parts.slice(1).join(' ').toUpperCase() : null;
 
-            const matches = dogNameList.filter(fullName => {
+            return dogNameList.filter(fullName => {
                 const nameParts = fullName.split(' ');
                 const jotFirstName = nameParts[0];
                 const jotSurname = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
 
-                if (jotFirstName.toLowerCase() !== firstName.toLowerCase()) {
-                    return false;
-                }
-
-                if (!surnameInitial) {
-                    return true;
-                }
-
+                if (jotFirstName.toLowerCase() !== firstName.toLowerCase()) return false;
+                if (!surnameInitial) return true;
                 return jotSurname.toUpperCase().startsWith(surnameInitial);
             });
-
-            return matches;
         }
 
         function fuzzyMatchDogName(inputName) {
@@ -1398,50 +1266,38 @@
             const scored = dogNameList.map(fullName => {
                 const nameParts = fullName.toLowerCase().split(' ');
                 const jotFirstName = nameParts[0];
-                
                 let score = 0;
                 
-                if (jotFirstName === firstName) {
-                    score += 100;
-                } else if (jotFirstName.startsWith(firstName)) {
-                    score += 80;
-                } else if (firstName.startsWith(jotFirstName)) {
-                    score += 60;
-                } else if (jotFirstName.substring(0, 2) === firstName.substring(0, 2)) {
-                    score += 40;
-                } else if (jotFirstName[0] === firstName[0]) {
-                    score += 20;
-                }
+                if (jotFirstName === firstName) score += 100;
+                else if (jotFirstName.startsWith(firstName)) score += 80;
+                else if (firstName.startsWith(jotFirstName)) score += 60;
+                else if (jotFirstName.substring(0, 2) === firstName.substring(0, 2)) score += 40;
+                else if (jotFirstName[0] === firstName[0]) score += 20;
                 
                 if (inputParts.length > 1 && nameParts.length > 1) {
                     const inputSurname = inputParts.slice(1).join(' ').toUpperCase();
                     const jotSurname = nameParts.slice(1).join(' ').toUpperCase();
-                    if (jotSurname.startsWith(inputSurname)) {
-                        score += 50;
-                    } else if (jotSurname[0] === inputSurname[0]) {
-                        score += 25;
-                    }
+                    if (jotSurname.startsWith(inputSurname)) score += 50;
+                    else if (jotSurname[0] === inputSurname[0]) score += 25;
                 }
                 
                 return { name: fullName, score };
             });
             
-            return scored
-                .filter(s => s.score > 0)
-                .sort((a, b) => b.score - a.score)
-                .slice(0, 15)
-                .map(s => s.name);
+            return scored.filter(s => s.score > 0).sort((a, b) => b.score - a.score).slice(0, 15).map(s => s.name);
         }
 
         // ============================================
-        // DOG MANAGEMENT (UPDATED FOR SYNC)
+        // DOG MANAGEMENT
         // ============================================
 
         async function addDog() {
             const input = document.getElementById('dogNameInput');
             const name = input.value.trim();
-            
             if (!name) return;
+            
+            // Pause sync to prevent flickering
+            pauseSync();
             
             const matches = matchDogName(name);
             
@@ -1457,37 +1313,37 @@
                 supplementTypes: []
             };
             
-            // Add locally first for instant feedback
+            // Add locally first
             dogs.push(dog);
             renderStagingArea();
             input.value = '';
             input.focus();
             
-            // Then sync to backend
-            updateStatus('Syncing...', 'syncing');
+            // Sync to backend
             const result = await syncAddDog(dog);
             
             if (result && result.success) {
                 showToast('Dog added', 'success');
-                updateStatus(`✓ Synced (${dogs.length} dogs)`, 'connected');
             } else {
-                showToast('Sync failed - changes may not appear on TV', 'error');
+                showToast('Saved locally - will sync shortly', 'info');
             }
+            
+            updateStatus(`✓ Synced (${dogs.length} dogs)`, 'connected');
         }
 
         async function selectStagingMatch(dogId, matchedName) {
             const dog = dogs.find(d => d.id === dogId);
             if (dog && matchedName) {
+                pauseSync();
                 dog.matchedName = matchedName;
                 renderStagingArea();
-                
-                // Sync to backend
                 await syncUpdateDog(dogId, { matchedName: matchedName });
             }
         }
 
         async function deleteDog(dogId) {
-            // Remove locally first
+            pauseSync();
+            
             for (const penId of Object.keys(pens)) {
                 pens[penId] = pens[penId].filter(id => id !== dogId);
             }
@@ -1495,8 +1351,6 @@
             renderStagingArea();
             renderAllPens();
             
-            // Sync to backend
-            updateStatus('Syncing...', 'syncing');
             const result = await syncDeleteDog(dogId);
             
             if (result && result.success) {
@@ -1515,9 +1369,8 @@
         async function updateMealType() {
             const mealType = document.getElementById('mealType').value;
             currentMealType = mealType;
-            
-            // Sync to backend
             await syncMealType(mealType);
+            showToast('Meal type updated', 'success');
         }
 
         // ============================================
@@ -1532,7 +1385,6 @@
             }
             
             const unassignedDogs = dogs.filter(d => !dogsInPens.includes(d.id));
-            
             document.getElementById('stagingCount').textContent = unassignedDogs.length;
 
             if (unassignedDogs.length === 0) {
@@ -1544,8 +1396,7 @@
                 if (dog.matchedName || dog.possibleMatches.length === 1) {
                     const displayName = dog.matchedName || dog.possibleMatches[0];
                     return `
-                        <div class="dog-card" 
-                             data-dog-id="${dog.id}"
+                        <div class="dog-card" data-dog-id="${dog.id}"
                              onpointerdown="startDrag(event, '${dog.id}')"
                              style="border-left-color: var(--status-${dog.status});">
                             ${displayName}
@@ -1612,8 +1463,7 @@
                 return `
                     <div class="pen-dog status-${dog.status}" data-dog-id="${dog.id}">
                         <div class="pen-dog-header">
-                            <span class="pen-dog-name" 
-                                  onpointerdown="startDrag(event, '${dog.id}', '${penId}')">
+                            <span class="pen-dog-name" onpointerdown="startDrag(event, '${dog.id}', '${penId}')">
                                 ${displayName}
                             </span>
                             <button class="pen-dog-remove" onclick="deleteDog('${dog.id}')">×</button>
@@ -1630,8 +1480,7 @@
                             <button class="toggle-btn ${dog.supplements ? 'active' : ''}" onclick="toggleSupplements('${dog.id}')">+S</button>
                         </div>
                         <div class="prescription-panel ${dog.prescription ? 'active' : ''}" id="prescription-${dog.id}">
-                            <input type="text" class="prescription-input" 
-                                   placeholder="Medicine name..."
+                            <input type="text" class="prescription-input" placeholder="Medicine name..."
                                    value="${dog.prescriptionComment || ''}"
                                    onchange="updatePrescriptionComment('${dog.id}', this.value)">
                         </div>
@@ -1639,8 +1488,7 @@
                             <div class="supplement-checkboxes">
                                 ${SUPPLEMENT_TYPES.map(st => `
                                     <label class="supplement-checkbox">
-                                        <input type="checkbox" 
-                                               ${dog.supplementTypes.includes(st.id) ? 'checked' : ''}
+                                        <input type="checkbox" ${dog.supplementTypes.includes(st.id) ? 'checked' : ''}
                                                onchange="toggleSupplementType('${dog.id}', '${st.id}', this.checked)">
                                         ${st.label}
                                     </label>
@@ -1659,12 +1507,13 @@
         }
 
         // ============================================
-        // DOG STATUS UPDATES (WITH SYNC)
+        // DOG STATUS UPDATES
         // ============================================
 
         async function updateDogStatus(dogId, status) {
             const dog = dogs.find(d => d.id === dogId);
             if (dog) {
+                pauseSync();
                 dog.status = status;
                 renderPen(getDogPen(dogId));
                 await syncUpdateDog(dogId, { status: status });
@@ -1674,21 +1523,18 @@
         async function togglePrescription(dogId) {
             const dog = dogs.find(d => d.id === dogId);
             if (dog) {
+                pauseSync();
                 dog.prescription = !dog.prescription;
-                if (!dog.prescription) {
-                    dog.prescriptionComment = '';
-                }
+                if (!dog.prescription) dog.prescriptionComment = '';
                 renderPen(getDogPen(dogId));
-                await syncUpdateDog(dogId, { 
-                    prescription: dog.prescription,
-                    prescriptionComment: dog.prescriptionComment
-                });
+                await syncUpdateDog(dogId, { prescription: dog.prescription, prescriptionComment: dog.prescriptionComment });
             }
         }
 
         async function updatePrescriptionComment(dogId, comment) {
             const dog = dogs.find(d => d.id === dogId);
             if (dog) {
+                pauseSync();
                 dog.prescriptionComment = comment;
                 await syncUpdateDog(dogId, { prescriptionComment: comment });
             }
@@ -1697,21 +1543,18 @@
         async function toggleSupplements(dogId) {
             const dog = dogs.find(d => d.id === dogId);
             if (dog) {
+                pauseSync();
                 dog.supplements = !dog.supplements;
-                if (!dog.supplements) {
-                    dog.supplementTypes = [];
-                }
+                if (!dog.supplements) dog.supplementTypes = [];
                 renderPen(getDogPen(dogId));
-                await syncUpdateDog(dogId, { 
-                    supplements: dog.supplements,
-                    supplementTypes: dog.supplementTypes
-                });
+                await syncUpdateDog(dogId, { supplements: dog.supplements, supplementTypes: dog.supplementTypes });
             }
         }
 
         async function toggleSupplementType(dogId, typeId, checked) {
             const dog = dogs.find(d => d.id === dogId);
             if (dog) {
+                pauseSync();
                 if (checked && !dog.supplementTypes.includes(typeId)) {
                     dog.supplementTypes.push(typeId);
                 } else if (!checked) {
@@ -1727,7 +1570,6 @@
 
         function startDrag(e, dogId, fromPen = null) {
             e.preventDefault();
-            
             draggedDogId = dogId;
             draggedFromPen = fromPen;
             
@@ -1741,14 +1583,11 @@
             document.addEventListener('pointerup', endDrag);
         }
 
-        function handleDrag(e) {
-            // Visual feedback handled by CSS
-        }
+        function handleDrag(e) {}
 
         async function endDrag(e) {
             document.removeEventListener('pointermove', handleDrag);
             document.removeEventListener('pointerup', endDrag);
-            
             document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
             
             if (!draggedDogId) return;
@@ -1758,59 +1597,35 @@
             if (elemBelow) {
                 if (elemBelow.closest('#deleteBin') || elemBelow.closest('.bin')) {
                     await deleteDog(draggedDogId);
-                }
-                else if (elemBelow.closest('.pen')) {
+                } else if (elemBelow.closest('.pen')) {
                     const pen = elemBelow.closest('.pen');
                     const penId = pen.dataset.penId;
                     await dropDogInPen(draggedDogId, penId);
-                }
-                else if (elemBelow.closest('#stagingArea') || elemBelow.closest('.staging-section')) {
+                } else if (elemBelow.closest('#stagingArea') || elemBelow.closest('.staging-section')) {
                     await moveDogToStaging(draggedDogId);
                 }
             }
 
             draggedDogId = null;
             draggedFromPen = null;
-
             document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
             document.getElementById('stagingArea').classList.remove('drag-over');
         }
 
-        function handlePenEnter(e) {
-            if (draggedDogId) {
-                e.currentTarget.classList.add('drag-over');
-            }
-        }
-
-        function handlePenLeave(e) {
-            e.currentTarget.classList.remove('drag-over');
-        }
-
-        function handleBinEnter(e) {
-            if (draggedDogId) {
-                document.getElementById('deleteBin').classList.add('drag-over');
-            }
-        }
-
-        function handleBinLeave(e) {
-            document.getElementById('deleteBin').classList.remove('drag-over');
-        }
-
-        function handleStagingEnter(e) {
-            if (draggedDogId) {
-                document.getElementById('stagingArea').classList.add('drag-over');
-            }
-        }
-
-        function handleStagingLeave(e) {
-            document.getElementById('stagingArea').classList.remove('drag-over');
-        }
+        function handlePenEnter(e) { if (draggedDogId) e.currentTarget.classList.add('drag-over'); }
+        function handlePenLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+        function handleBinEnter(e) { if (draggedDogId) document.getElementById('deleteBin').classList.add('drag-over'); }
+        function handleBinLeave(e) { document.getElementById('deleteBin').classList.remove('drag-over'); }
+        function handleStagingEnter(e) { if (draggedDogId) document.getElementById('stagingArea').classList.add('drag-over'); }
+        function handleStagingLeave(e) { document.getElementById('stagingArea').classList.remove('drag-over'); }
 
         async function dropDogInPen(dogId, penId) {
             if (pens[penId].length >= 5) {
                 showToast('Pen is full (max 5 dogs)', 'error');
                 return;
             }
+
+            pauseSync();
 
             if (draggedFromPen) {
                 pens[draggedFromPen] = pens[draggedFromPen].filter(id => id !== dogId);
@@ -1823,19 +1638,17 @@
 
             renderPen(penId);
             renderStagingArea();
-            
-            // Sync pen assignment
             await syncUpdateDog(dogId, { penId: penId });
         }
 
         async function moveDogToStaging(dogId) {
+            pauseSync();
+            
             if (draggedFromPen) {
                 pens[draggedFromPen] = pens[draggedFromPen].filter(id => id !== dogId);
                 renderPen(draggedFromPen);
             }
             renderStagingArea();
-            
-            // Sync - clear pen assignment
             await syncUpdateDog(dogId, { penId: '' });
         }
 
@@ -1844,25 +1657,11 @@
         // ============================================
 
         function getStatusLabel(status) {
-            const labels = {
-                'all': 'All ✓',
-                'three-quarter': '¾',
-                'half': '½',
-                'quarter': '¼',
-                'none': 'None ⚠️'
-            };
-            return labels[status] || status;
+            return { 'all': 'All ✓', 'three-quarter': '¾', 'half': '½', 'quarter': '¼', 'none': 'None ⚠️' }[status] || status;
         }
 
         function getStatusColor(status) {
-            const colors = {
-                'all': 'var(--status-all)',
-                'three-quarter': 'var(--status-three-quarter)',
-                'half': 'var(--status-half)',
-                'quarter': 'var(--status-quarter)',
-                'none': 'var(--status-none)'
-            };
-            return colors[status] || 'var(--status-all)';
+            return { 'all': 'var(--status-all)', 'three-quarter': 'var(--status-three-quarter)', 'half': 'var(--status-half)', 'quarter': 'var(--status-quarter)', 'none': 'var(--status-none)' }[status] || 'var(--status-all)';
         }
 
         function showPreview() {
@@ -1877,15 +1676,13 @@
                 hasAnyDogs = true;
 
                 const penLabel = penId.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase());
-                previewHTML += `<div class="preview-pen">
-                    <div class="preview-pen-title">${penLabel}</div>`;
+                previewHTML += `<div class="preview-pen"><div class="preview-pen-title">${penLabel}</div>`;
 
                 for (const dogId of penDogs) {
                     const dog = dogs.find(d => d.id === dogId);
                     if (!dog) continue;
 
                     const displayName = dog.matchedName || (dog.possibleMatches.length === 1 ? dog.possibleMatches[0] : dog.inputName);
-
                     const extras = [];
                     if (dog.prescription) extras.push('+P');
                     if (dog.supplements) extras.push('+S');
@@ -1900,7 +1697,6 @@
                         </div>
                     `;
                 }
-
                 previewHTML += '</div>';
             }
 
@@ -1912,29 +1708,20 @@
             document.getElementById('previewModal').classList.add('active');
         }
 
-        function closePreview() {
-            document.getElementById('previewModal').classList.remove('active');
-        }
-
-        async function confirmSubmit() {
-            await submitReport();
-        }
+        function closePreview() { document.getElementById('previewModal').classList.remove('active'); }
+        async function confirmSubmit() { await submitReport(); }
 
         async function submitReport() {
             const mealType = document.getElementById('mealType').value;
             const today = new Date();
 
-            // Check for unmatched dogs
             let hasUnmatchedDogs = false;
             for (const [penId, penDogs] of Object.entries(pens)) {
                 for (const dogId of penDogs) {
                     const dog = dogs.find(d => d.id === dogId);
                     if (!dog) continue;
-                    
                     const finalName = dog.matchedName || (dog.possibleMatches.length === 1 ? dog.possibleMatches[0] : null);
-                    if (!finalName) {
-                        hasUnmatchedDogs = true;
-                    }
+                    if (!finalName) hasUnmatchedDogs = true;
                 }
             }
 
@@ -1943,11 +1730,8 @@
                 return;
             }
 
-            // Count dogs in pens
             let dogCount = 0;
-            for (const penDogs of Object.values(pens)) {
-                dogCount += penDogs.length;
-            }
+            for (const penDogs of Object.values(pens)) dogCount += penDogs.length;
 
             if (dogCount === 0) {
                 showToast('No dogs to submit! Assign dogs to pens first.', 'error');
@@ -1961,29 +1745,19 @@
                 return;
             }
 
-            // Submit to backend
             updateStatus('Submitting...', 'syncing');
             
             const result = await submitToBackend({
                 mealType: mealType,
-                date: {
-                    day: today.getDate(),
-                    month: today.getMonth() + 1,
-                    year: today.getFullYear()
-                }
+                date: { day: today.getDate(), month: today.getMonth() + 1, year: today.getFullYear() }
             });
 
             if (result.success) {
                 showToast(`✅ ${result.dogsProcessed} dogs submitted! Check Telegram.`, 'success');
-                
-                // Clear local state (backend already cleared)
                 dogs = [];
-                for (const penId of Object.keys(pens)) {
-                    pens[penId] = [];
-                }
+                for (const penId of Object.keys(pens)) pens[penId] = [];
                 renderAllPens();
                 renderStagingArea();
-                
                 updateStatus('✓ Report submitted', 'connected');
             } else {
                 showToast(`❌ Error: ${result.error}`, 'error');
@@ -1992,19 +1766,13 @@
         }
 
         async function clearAll() {
-            if (!confirm('Clear all dogs and reset?\n\nThis will clear data on ALL devices.')) {
-                return;
-            }
+            if (!confirm('Clear all dogs and reset?\n\nThis will clear data on ALL devices.')) return;
             
-            // Clear locally
             dogs = [];
-            for (const penId of Object.keys(pens)) {
-                pens[penId] = [];
-            }
+            for (const penId of Object.keys(pens)) pens[penId] = [];
             renderAllPens();
             renderStagingArea();
             
-            // Clear on backend
             updateStatus('Clearing...', 'syncing');
             const result = await syncClearSession();
             
@@ -2023,12 +1791,8 @@
             const toast = document.createElement('div');
             toast.className = `toast ${type}`;
             toast.textContent = message;
-            
             container.appendChild(toast);
-            
-            setTimeout(() => {
-                toast.remove();
-            }, 4000);
+            setTimeout(() => toast.remove(), 4000);
         }
     </script>
 </body>
