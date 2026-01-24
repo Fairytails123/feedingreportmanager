@@ -44,12 +44,14 @@
             color: var(--text-primary);
             overflow-x: hidden;
             width: 100%;
+            /* Prevent pull-to-refresh on mobile */
+            overscroll-behavior: none;
         }
 
         .container {
             max-width: 1400px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 15px;
             min-height: 100vh;
             width: 100%;
             overflow-x: hidden;
@@ -57,9 +59,9 @@
 
         h1 {
             text-align: center;
-            font-size: 1.8rem;
+            font-size: 1.6rem;
             font-weight: 800;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             color: var(--accent-primary);
             text-transform: uppercase;
             letter-spacing: 2px;
@@ -67,15 +69,15 @@
 
         .status-bar {
             text-align: center;
-            font-size: 0.85rem;
-            margin-bottom: 20px;
-            padding: 8px;
+            font-size: 0.8rem;
+            margin-bottom: 15px;
+            padding: 6px 12px;
             border-radius: 8px;
             background: var(--bg-secondary);
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
 
         .status-bar.connected { color: var(--status-all); }
@@ -89,6 +91,7 @@
             height: 10px;
             border-radius: 50%;
             background: var(--status-all);
+            flex-shrink: 0;
         }
 
         .sync-indicator.syncing {
@@ -105,53 +108,57 @@
             50% { opacity: 0.5; transform: scale(1.2); }
         }
 
+        /* ============================================
+           LAYOUT - Desktop: Sidebar + Main
+           Mobile: Stacked vertically
+           ============================================ */
+
         .layout {
             display: grid;
             grid-template-columns: 280px 1fr;
-            gap: 25px;
+            gap: 20px;
             align-items: start;
         }
 
         .sidebar {
             position: sticky;
-            top: 20px;
+            top: 15px;
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 12px;
         }
 
         .entry-section {
             background: var(--bg-secondary);
             border-radius: var(--radius);
-            padding: 18px;
+            padding: 15px;
             box-shadow: var(--shadow);
         }
 
         .section-title {
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             font-weight: 700;
             color: var(--accent-secondary);
             text-transform: uppercase;
             letter-spacing: 1px;
-            margin-bottom: 12px;
+            margin-bottom: 10px;
         }
 
         .entry-row {
-            display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 10px;
+            display: flex;
+            gap: 8px;
         }
 
         .entry-row input {
-            padding: 12px 15px;
+            flex: 1;
+            padding: 14px 12px;
             border: 2px solid var(--bg-pen);
             border-radius: 8px;
-            font-size: 15px;
+            font-size: 16px; /* Prevents iOS zoom */
             font-family: inherit;
             background: var(--bg-primary);
             color: var(--text-primary);
             min-width: 0;
-            width: 100%;
             transition: border-color 0.2s ease;
         }
 
@@ -163,7 +170,7 @@
         .entry-row input::placeholder { color: var(--text-secondary); }
 
         .btn {
-            padding: 12px 18px;
+            padding: 14px 18px;
             border: none;
             border-radius: 8px;
             font-size: 14px;
@@ -174,6 +181,9 @@
             text-transform: uppercase;
             letter-spacing: 1px;
             white-space: nowrap;
+            /* Touch friendly */
+            min-height: 48px;
+            min-width: 48px;
         }
 
         .btn:hover {
@@ -196,51 +206,17 @@
         .btn-success { background: var(--status-all); color: white; }
         .btn-success:hover:not(:disabled) { background: #27ae60; }
 
-        .staging-section {
-            background: var(--bg-secondary);
-            border-radius: var(--radius);
-            padding: 18px;
-            box-shadow: var(--shadow);
-            flex: 1;
-        }
-
-        .staging-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-
-        .staging-area {
-            min-height: 120px;
-            max-height: 350px;
-            overflow-y: auto;
-            background: var(--bg-primary);
-            border: 2px dashed var(--bg-pen);
-            border-radius: 8px;
-            padding: 12px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            align-content: flex-start;
-            transition: border-color 0.2s ease, background 0.2s ease;
-        }
-
-        .staging-area.drag-over {
-            border-color: var(--accent-primary);
-            background: rgba(233, 69, 96, 0.1);
-        }
-
+        /* Delete Bin - Above Meal Type */
         .bin-section {
             background: var(--bg-secondary);
             border-radius: var(--radius);
-            padding: 15px;
+            padding: 12px;
             box-shadow: var(--shadow);
         }
 
         .bin {
             width: 100%;
-            height: 60px;
+            height: 55px;
             background: var(--bg-primary);
             border: 2px dashed var(--status-none);
             border-radius: 8px;
@@ -250,21 +226,75 @@
             gap: 10px;
             color: var(--status-none);
             font-weight: 600;
+            font-size: 0.9rem;
             transition: all 0.2s ease;
         }
 
         .bin.drag-over {
-            background: rgba(231, 76, 60, 0.2);
+            background: rgba(231, 76, 60, 0.3);
             border-color: var(--status-none);
             transform: scale(1.02);
+            box-shadow: 0 0 20px rgba(231, 76, 60, 0.5);
         }
 
-        .bin-icon { font-size: 1.5rem; }
+        .bin-icon { font-size: 1.3rem; }
+
+        /* Meal Type Selector */
+        .meal-select {
+            width: 100%;
+            padding: 14px 12px;
+            border-radius: 8px;
+            border: 2px solid var(--bg-pen);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 16px; /* Prevents iOS zoom */
+            min-height: 48px;
+        }
+
+        /* Staging Area */
+        .staging-section {
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            padding: 15px;
+            box-shadow: var(--shadow);
+            flex: 1;
+            min-height: 0;
+        }
+
+        .staging-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .staging-area {
+            min-height: 100px;
+            max-height: 280px;
+            overflow-y: auto;
+            background: var(--bg-primary);
+            border: 2px dashed var(--bg-pen);
+            border-radius: 8px;
+            padding: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-content: flex-start;
+            transition: border-color 0.2s ease, background 0.2s ease;
+            /* Smooth scrolling */
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .staging-area.drag-over {
+            border-color: var(--accent-primary);
+            background: rgba(233, 69, 96, 0.15);
+        }
 
         .dog-card {
             background: var(--bg-pen);
             border-radius: 10px;
-            padding: 10px 14px;
+            padding: 12px 16px;
             cursor: grab;
             user-select: none;
             touch-action: none;
@@ -272,18 +302,30 @@
             transition: all 0.2s ease;
             font-size: 0.9rem;
             font-weight: 600;
+            /* Touch friendly size */
+            min-height: 44px;
+            display: flex;
+            align-items: center;
         }
 
-        .dog-card:active { cursor: grabbing; }
-        .dog-card.dragging { opacity: 0.5; transform: scale(1.05); }
+        .dog-card:active { 
+            cursor: grabbing;
+            transform: scale(1.05);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+        }
+        
+        .dog-card.dragging { 
+            opacity: 0.5; 
+            transform: scale(1.08);
+        }
 
         .dog-card-unmatched {
             background: var(--bg-pen);
             border-radius: 10px;
             padding: 10px;
             border-left: 4px solid var(--accent-secondary);
-            min-width: 150px;
-            max-width: 180px;
+            min-width: 140px;
+            max-width: 170px;
         }
 
         .unmatched-header {
@@ -294,7 +336,7 @@
         }
 
         .unmatched-name {
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             font-weight: 600;
             color: var(--accent-secondary);
         }
@@ -303,25 +345,28 @@
             background: var(--status-none);
             border: none;
             color: white;
-            width: 20px;
-            height: 20px;
+            width: 28px;
+            height: 28px;
             border-radius: 50%;
             cursor: pointer;
-            font-size: 0.8rem;
+            font-size: 1rem;
             display: flex;
             align-items: center;
             justify-content: center;
+            /* Touch friendly */
+            min-width: 44px;
+            min-height: 44px;
         }
 
         .unmatched-select {
             width: 100%;
-            padding: 8px;
+            padding: 10px 8px;
             border: 1px solid var(--accent-secondary);
             border-radius: 6px;
             background: var(--bg-primary);
             color: var(--text-primary);
             font-family: inherit;
-            font-size: 0.8rem;
+            font-size: 16px; /* Prevents iOS zoom */
         }
 
         .unmatched-error {
@@ -334,7 +379,7 @@
         .count-badge {
             background: var(--accent-primary);
             color: white;
-            padding: 3px 10px;
+            padding: 4px 12px;
             border-radius: 12px;
             font-size: 0.8rem;
             font-weight: 700;
@@ -349,61 +394,106 @@
             width: 100%;
         }
 
+        /* ============================================
+           MAIN CONTENT - Pens Section
+           ============================================ */
+
         .main-content {
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 15px;
             min-width: 0;
         }
 
         .pens-section {
             background: var(--bg-secondary);
             border-radius: var(--radius);
-            padding: 20px;
+            padding: 15px;
             box-shadow: var(--shadow);
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
         }
 
         .pen-row-label {
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             font-weight: 700;
             color: var(--accent-secondary);
             text-transform: uppercase;
             letter-spacing: 1px;
-            margin: 0 0 12px 5px;
+            margin: 0 0 10px 5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
-        .pen-row-label:not(:first-child) { margin-top: 20px; }
+        .pen-row-label:not(:first-child) { margin-top: 15px; }
+
+        .swipe-hint {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+
+        /* HORIZONTAL PEN ROW - Swipeable */
+        .pen-row-scroll {
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            scroll-snap-type: x proximity;
+            scrollbar-width: thin;
+            scrollbar-color: var(--bg-pen) transparent;
+            padding-bottom: 8px;
+            margin: 0 -5px;
+            padding-left: 5px;
+            padding-right: 5px;
+        }
+
+        .pen-row-scroll::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .pen-row-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .pen-row-scroll::-webkit-scrollbar-thumb {
+            background: var(--bg-pen);
+            border-radius: 3px;
+        }
 
         .pen-row {
-            display: grid;
-            grid-template-columns: repeat(5, minmax(150px, 1fr));
+            display: flex;
             gap: 12px;
+            min-width: max-content;
         }
 
         .pen {
             background: var(--bg-pen);
             border-radius: var(--radius);
-            min-height: 220px;
-            padding: 12px;
+            width: 160px;
+            min-width: 160px;
+            min-height: 200px;
+            padding: 10px;
             display: flex;
             flex-direction: column;
             gap: 8px;
             border: 2px solid transparent;
             transition: all 0.2s ease;
+            scroll-snap-align: start;
+            flex-shrink: 0;
         }
 
         .pen:hover { border-color: rgba(233, 69, 96, 0.3); }
 
         .pen.drag-over {
             border-color: var(--accent-primary);
-            background: rgba(233, 69, 96, 0.15);
+            background: rgba(233, 69, 96, 0.2);
             transform: scale(1.02);
+            box-shadow: 0 0 20px rgba(233, 69, 96, 0.4);
         }
 
         .pen-header {
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             font-weight: 700;
             color: var(--text-secondary);
             text-align: center;
@@ -439,32 +529,40 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 8px;
+            gap: 8px;
         }
 
         .pen-dog-name {
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             font-weight: 700;
             color: var(--text-primary);
             cursor: grab;
             touch-action: none;
             flex: 1;
-            padding: 2px 0;
+            padding: 4px 0;
+            /* Touch target */
+            min-height: 28px;
+            display: flex;
+            align-items: center;
         }
 
         .pen-dog-remove {
-            width: 22px;
-            height: 22px;
+            width: 28px;
+            height: 28px;
             background: var(--status-none);
             border: none;
             border-radius: 50%;
             color: white;
-            font-size: 0.85rem;
+            font-size: 0.9rem;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
             transition: all 0.2s ease;
+            /* Touch friendly */
+            min-width: 36px;
+            min-height: 36px;
         }
 
         .pen-dog-remove:hover { background: #c0392b; transform: scale(1.1); }
@@ -472,24 +570,25 @@
         .pen-dog-controls {
             display: flex;
             flex-wrap: wrap;
-            gap: 6px;
+            gap: 5px;
             align-items: center;
         }
 
         .pen-dog-controls select {
-            padding: 6px 8px;
+            padding: 8px 6px;
             border: 1px solid var(--bg-pen);
             border-radius: 6px;
             background: var(--bg-primary);
             color: var(--text-primary);
             font-family: inherit;
-            font-size: 0.75rem;
+            font-size: 14px;
             cursor: pointer;
-            min-width: 55px;
+            min-width: 50px;
+            min-height: 36px;
         }
 
         .toggle-btn {
-            padding: 5px 8px;
+            padding: 8px 10px;
             border: 1px solid var(--bg-pen);
             border-radius: 6px;
             background: var(--bg-primary);
@@ -499,6 +598,9 @@
             font-weight: 700;
             cursor: pointer;
             transition: all 0.2s ease;
+            /* Touch friendly */
+            min-height: 36px;
+            min-width: 40px;
         }
 
         .toggle-btn:hover { border-color: var(--accent-secondary); }
@@ -516,21 +618,24 @@
         .supplement-checkboxes {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 4px;
+            gap: 6px;
         }
 
         .supplement-checkbox {
             display: flex;
             align-items: center;
-            gap: 4px;
+            gap: 6px;
             font-size: 0.65rem;
             color: var(--text-secondary);
             cursor: pointer;
+            padding: 4px;
+            /* Touch target */
+            min-height: 32px;
         }
 
         .supplement-checkbox input {
-            width: 14px;
-            height: 14px;
+            width: 18px;
+            height: 18px;
             cursor: pointer;
             accent-color: var(--accent-secondary);
         }
@@ -546,27 +651,33 @@
 
         .prescription-input {
             width: 100%;
-            padding: 6px 8px;
+            padding: 10px 8px;
             border: 1px solid var(--accent-primary);
             border-radius: 6px;
             background: var(--bg-primary);
             color: var(--text-primary);
             font-family: inherit;
-            font-size: 0.75rem;
+            font-size: 14px;
         }
 
         .prescription-input::placeholder { color: var(--text-secondary); }
 
+        /* Action Buttons */
         .action-bar {
             display: flex;
-            gap: 12px;
+            gap: 10px;
             flex-wrap: wrap;
         }
 
         .action-bar .btn {
             flex: 1;
-            min-width: 120px;
+            min-width: 100px;
+            padding: 16px 12px;
         }
+
+        /* ============================================
+           MODAL
+           ============================================ */
 
         .modal-overlay {
             display: none;
@@ -575,7 +686,7 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0,0,0,0.8);
+            background: rgba(0,0,0,0.85);
             z-index: 1000;
             justify-content: center;
             align-items: center;
@@ -596,28 +707,31 @@
         }
 
         .modal-header {
-            padding: 20px;
+            padding: 18px 20px;
             border-bottom: 1px solid var(--bg-pen);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
-        .modal-header h2 { font-size: 1.2rem; color: var(--accent-primary); }
+        .modal-header h2 { font-size: 1.1rem; color: var(--accent-primary); }
 
         .modal-close {
             background: none;
             border: none;
             color: var(--text-secondary);
-            font-size: 1.5rem;
+            font-size: 1.8rem;
             cursor: pointer;
-            padding: 5px;
+            padding: 5px 10px;
+            min-width: 44px;
+            min-height: 44px;
         }
 
         .modal-body {
             padding: 20px;
             overflow-y: auto;
             flex: 1;
+            -webkit-overflow-scrolling: touch;
         }
 
         .modal-footer {
@@ -651,16 +765,17 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            padding: 8px 10px;
+            padding: 10px;
             background: var(--bg-primary);
             border-radius: 6px;
-            margin-bottom: 5px;
+            margin-bottom: 6px;
+            flex-wrap: wrap;
         }
 
-        .preview-dog-name { flex: 1; font-weight: 600; }
+        .preview-dog-name { flex: 1; font-weight: 600; min-width: 100px; }
 
         .preview-dog-status {
-            padding: 3px 8px;
+            padding: 4px 10px;
             border-radius: 4px;
             font-size: 0.75rem;
             font-weight: 700;
@@ -672,6 +787,7 @@
             font-weight: 700;
         }
 
+        /* Toast Notifications */
         .toast-container {
             position: fixed;
             bottom: 20px;
@@ -685,13 +801,14 @@
         .toast {
             background: var(--bg-secondary);
             border-radius: 8px;
-            padding: 12px 16px;
+            padding: 14px 18px;
             box-shadow: var(--shadow);
             display: flex;
             align-items: center;
             gap: 10px;
             animation: slideIn 0.3s ease;
             max-width: 300px;
+            font-size: 0.9rem;
         }
 
         .toast.success { border-left: 4px solid var(--status-all); }
@@ -703,21 +820,109 @@
             to { transform: translateX(0); opacity: 1; }
         }
 
+        /* ============================================
+           MOBILE RESPONSIVE
+           ============================================ */
+
         @media (max-width: 900px) {
-            .layout { grid-template-columns: 1fr; }
-            .sidebar { position: static; order: 1; }
-            .main-content { order: 2; }
-            .pen-row { grid-template-columns: repeat(2, 1fr); }
-            h1 { font-size: 1.4rem; }
+            .layout { 
+                grid-template-columns: 1fr; 
+            }
+            
+            .sidebar { 
+                position: static; 
+                order: 1; 
+            }
+            
+            .main-content { 
+                order: 2; 
+            }
+            
+            h1 { font-size: 1.3rem; }
+            
+            .container { padding: 10px; }
+            
+            .pen {
+                width: 145px;
+                min-width: 145px;
+                min-height: 180px;
+            }
         }
 
         @media (max-width: 500px) {
-            .container { padding: 10px; }
-            .pen-row { grid-template-columns: 1fr; }
-            .pen { min-height: 180px; }
-            .action-bar { flex-direction: column; }
-            .action-bar .btn { width: 100%; }
+            .container { padding: 8px; }
+            
+            h1 { font-size: 1.2rem; letter-spacing: 1px; }
+            
+            .layout { gap: 12px; }
+            
+            .entry-section, .staging-section, .bin-section {
+                padding: 12px;
+            }
+            
+            .pens-section { padding: 12px; }
+            
+            .pen {
+                width: 135px;
+                min-width: 135px;
+                min-height: 170px;
+                padding: 8px;
+            }
+            
+            .pen-header { font-size: 0.75rem; }
+            
+            .pen-dog { padding: 8px; }
+            
+            .pen-dog-name { font-size: 0.75rem; }
+            
+            .pen-dog-controls select { 
+                padding: 6px 4px; 
+                font-size: 12px;
+                min-width: 45px;
+            }
+            
+            .toggle-btn {
+                padding: 6px 8px;
+                font-size: 0.65rem;
+            }
+            
+            .staging-area {
+                min-height: 80px;
+                max-height: 200px;
+            }
+            
+            .action-bar { 
+                flex-direction: column; 
+            }
+            
+            .action-bar .btn { 
+                width: 100%; 
+                padding: 18px 12px;
+                font-size: 15px;
+            }
+            
             .modal { max-height: 90vh; }
+            
+            .toast-container {
+                bottom: 10px;
+                right: 10px;
+                left: 10px;
+            }
+            
+            .toast {
+                max-width: 100%;
+            }
+        }
+
+        /* Landscape phone */
+        @media (max-height: 500px) and (orientation: landscape) {
+            .staging-area {
+                max-height: 120px;
+            }
+            
+            .pen {
+                min-height: 150px;
+            }
         }
     </style>
 </head>
@@ -732,6 +937,7 @@
 
         <div class="layout">
             <div class="sidebar">
+                <!-- Add Dog -->
                 <div class="entry-section">
                     <div class="section-title">➕ Add Dog</div>
                     <div class="entry-row">
@@ -740,16 +946,25 @@
                     </div>
                 </div>
 
+                <!-- Delete Bin - NOW ABOVE MEAL TYPE -->
+                <div class="bin-section">
+                    <div class="bin" id="deleteBin">
+                        <span class="bin-icon">🗑️</span>
+                        <span>Drop here to delete</span>
+                    </div>
+                </div>
+
+                <!-- Meal Type -->
                 <div class="entry-section">
                     <div class="section-title">🕐 Meal Type</div>
-                    <!-- VALUES MATCH JOTFORM OPTIONS -->
-                    <select id="mealType" style="width: 100%; padding: 12px; border-radius: 8px; border: 2px solid var(--bg-pen); background: var(--bg-primary); color: var(--text-primary); font-family: inherit; font-size: 15px;" onchange="updateMealType()">
+                    <select id="mealType" class="meal-select" onchange="updateMealType()">
                         <option value="Morning Meal">Morning Meal (Breakfast)</option>
                         <option value="Lunch" selected>Lunch</option>
                         <option value="Evening Meal">Evening Meal (Dinner)</option>
                     </select>
                 </div>
 
+                <!-- Staging Area -->
                 <div class="staging-section">
                     <div class="staging-header">
                         <span class="section-title">🐕 Dogs to Assign</span>
@@ -759,23 +974,29 @@
                         <div class="empty-message">Type a dog name above to get started</div>
                     </div>
                 </div>
-
-                <div class="bin-section">
-                    <div class="bin" id="deleteBin">
-                        <span class="bin-icon">🗑️</span>
-                        <span>Drop here to delete</span>
-                    </div>
-                </div>
             </div>
 
             <div class="main-content">
+                <!-- Pens Section - Horizontal Scrollable -->
                 <div class="pens-section">
-                    <div class="pen-row-label">Top Pens</div>
-                    <div class="pen-row" id="topPens"></div>
-                    <div class="pen-row-label">Bottom Pens</div>
-                    <div class="pen-row" id="bottomPens"></div>
+                    <div class="pen-row-label">
+                        Top Pens
+                        <span class="swipe-hint">← swipe →</span>
+                    </div>
+                    <div class="pen-row-scroll">
+                        <div class="pen-row" id="topPens"></div>
+                    </div>
+                    
+                    <div class="pen-row-label">
+                        Bottom Pens
+                        <span class="swipe-hint">← swipe →</span>
+                    </div>
+                    <div class="pen-row-scroll">
+                        <div class="pen-row" id="bottomPens"></div>
+                    </div>
                 </div>
 
+                <!-- Action Buttons -->
                 <div class="action-bar">
                     <button class="btn btn-secondary" onclick="showPreview()">📋 Preview</button>
                     <button class="btn btn-success" onclick="submitReport()">✅ Submit</button>
@@ -785,6 +1006,7 @@
         </div>
     </div>
 
+    <!-- Preview Modal -->
     <div class="modal-overlay" id="previewModal">
         <div class="modal">
             <div class="modal-header">
@@ -803,15 +1025,14 @@
 
     <script>
         // ============================================
-        // CONFIGURATION
+        // CONFIGURATION - NO CHANGES
         // ============================================
         
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwP74AXOe1cZmHKTxi9KbMhZJU48EHRFI7NQ6Og65_FcTVB1sMQuqgkPKIkr7Fm7e40mw/exec';
         
-        // Sync configuration - INCREASED INTERVALS TO PREVENT FLICKERING
-        const SYNC_INTERVAL = 5000;        // Poll every 5 seconds (was 3)
-        const SYNC_PAUSE_DURATION = 8000;  // Pause sync for 8 seconds after local change
-        const INITIAL_LOAD_DELAY = 2000;   // Wait 2 seconds before first sync after load
+        const SYNC_INTERVAL = 5000;
+        const SYNC_PAUSE_DURATION = 8000;
+        const INITIAL_LOAD_DELAY = 2000;
 
         const JOTFORM_DOG_NAMES = [
             "Aldo","Alfie","April","Argo","Arlo","Banjo","Barney Homewood","Barney Leeming","Baron","Bay","Beano","Bella","Belle","Benson","Betsy","Birdy","Blue","Bluey","Bo","Bonnie Gallagher","Bonnie Lockwood","Bramble","Branko","Bruce","Bruno","Buddy Dann","Buddy Dargan","Buddy Selby","Casper Hamilton","Casper Kukreja","Che","Chester","Chloe","Clifford","Daisy Cremin","Daisy Parsons","Darcy Campbell","Darcy Dunn","Darwin","Delphine","Dexter","Dicee","Diego Gonsavles","Diego Wojcik","Dierdra","Digby","Dolly","Dottie","Dougie","Dudley","Dusty","Echo","Eddie","Effie","Enzo","Fenton","Ferox","Flaco","Fletcher","Florence","Freddie","Fredo","Frida Walsh","George Elliston","George Jackson","George Mohammed","Gina","Goldie","Haggis","Hattie Campbell","Hattie Duncan","Henry","Holly","Hugo","Incy","Ivy","Jack","Jeff","Jessie","Keti","Kip","Koji","Leo","Lily","Lola Bowles","Lola Fenloni","Lola Hall","Luke","Luna Crockford","Luna Grimshaw","Mac","Macy","Maggie","Margo","Marli","Marloe","Marlow","Martha","Max Tigwell","Max Wang","Merlin Crowley","Merlin Mayne","Miles","Miley","Millie Bowles","Millie Carter","Millie Cartwright","Millie Ellis","Milo McVey","Missy Evans","Mocha Gasper","Mocha Kolumbajew","Mochi","Moka","Mollie","Mos Wan","Moss Harris","Naira","Nala Sands","Nala Warnes","Narla Tester","Ned","Neo","Nevis","Nina","Obie","Oliver","Otis","Peggy Gibbons","Peggy Lucas","Pepper","Petch","Pippin","Pluto","Poppy Clark","Poppy Lancaster","Poppy Lass","Poppy Pike","Ralph Goddard","Raven","Reggie Daly","Reggie Foreman","Reggie Russel","Rex","Rita","River","Rocco","Roman","Roxy","Ruby Brooker","Ruby Favell","Ruby Jones","Rudy","Ruffles","Rufus","Rupy","Sam","Sebastian","Shadow Podkalicka","Shadow Wightman","Snoopy","Sonny","Sophie","Stanley James","Star","Storm","Tallulah","Tam","Tasha","Ted Lambie","Teddy Brown","Teddy Jamison","Terry","Tilly Mills","Tokyo","Warwick","Winnie Awele","Winnie Evans","Winnie Hall","Winnie Lancaster","Winnie Ryan","Woody Johns","Woody Warren","Zero","Ziggy"
@@ -833,7 +1054,7 @@
         };
 
         // ============================================
-        // STATE
+        // STATE - NO CHANGES
         // ============================================
         
         let dogNameList = JOTFORM_DOG_NAMES;
@@ -846,13 +1067,12 @@
         let isOnline = false;
         let currentMealType = 'Lunch';
         
-        // SYNC STATE - IMPROVED
         let lastSyncVersion = 0;
         let syncInterval = null;
         let isSyncing = false;
-        let syncPausedUntil = 0;           // Timestamp when sync can resume
-        let pendingDogIds = new Set();      // Dogs being synced to server
-        let initialLoadComplete = false;    // Prevent polling until initial load done
+        let syncPausedUntil = 0;
+        let pendingDogIds = new Set();
+        let initialLoadComplete = false;
 
         // ============================================
         // INITIALIZATION
@@ -870,7 +1090,6 @@
             await loadDogList();
             await loadSessionState();
             
-            // Mark initial load complete and start polling after delay
             setTimeout(() => {
                 initialLoadComplete = true;
                 startSyncPolling();
@@ -918,7 +1137,7 @@
         }
 
         // ============================================
-        // SYNC FUNCTIONS - IMPROVED TO PREVENT FLICKERING
+        // SYNC FUNCTIONS - NO CHANGES
         // ============================================
 
         function pauseSync() {
@@ -943,7 +1162,6 @@
         }
 
         async function pollForUpdates() {
-            // Don't poll if: already syncing, paused, not online, initial load not done, or pending changes
             if (isSyncing || isSyncPaused() || !isOnline || !initialLoadComplete || pendingDogIds.size > 0) {
                 return;
             }
@@ -968,7 +1186,6 @@
         }
 
         function applyRemoteState(sessionData) {
-            // Don't apply if we have pending local changes
             if (pendingDogIds.size > 0 || isSyncPaused()) {
                 return;
             }
@@ -1014,7 +1231,6 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    // Apply without restrictions during initial load
                     if (result.mealType) {
                         currentMealType = result.mealType;
                         document.getElementById('mealType').value = currentMealType;
@@ -1056,7 +1272,7 @@
         }
 
         // ============================================
-        // API CALLS
+        // API CALLS - NO CHANGES
         // ============================================
 
         async function loadDogList() {
@@ -1239,7 +1455,7 @@
         }
 
         // ============================================
-        // NAME MATCHING
+        // NAME MATCHING - NO CHANGES
         // ============================================
 
         function matchDogName(inputName) {
@@ -1288,7 +1504,7 @@
         }
 
         // ============================================
-        // DOG MANAGEMENT
+        // DOG MANAGEMENT - NO CHANGES
         // ============================================
 
         async function addDog() {
@@ -1296,7 +1512,6 @@
             const name = input.value.trim();
             if (!name) return;
             
-            // Pause sync to prevent flickering
             pauseSync();
             
             const matches = matchDogName(name);
@@ -1313,13 +1528,11 @@
                 supplementTypes: []
             };
             
-            // Add locally first
             dogs.push(dog);
             renderStagingArea();
             input.value = '';
             input.focus();
             
-            // Sync to backend
             const result = await syncAddDog(dog);
             
             if (result && result.success) {
@@ -1374,7 +1587,7 @@
         }
 
         // ============================================
-        // RENDERING
+        // RENDERING - NO CHANGES
         // ============================================
 
         function renderStagingArea() {
@@ -1507,7 +1720,7 @@
         }
 
         // ============================================
-        // DOG STATUS UPDATES
+        // DOG STATUS UPDATES - NO CHANGES
         // ============================================
 
         async function updateDogStatus(dogId, status) {
@@ -1565,7 +1778,7 @@
         }
 
         // ============================================
-        // DRAG AND DROP
+        // DRAG AND DROP - NO CHANGES TO LOGIC
         // ============================================
 
         function startDrag(e, dogId, fromPen = null) {
@@ -1653,7 +1866,7 @@
         }
 
         // ============================================
-        // PREVIEW & SUBMIT
+        // PREVIEW & SUBMIT - NO CHANGES
         // ============================================
 
         function getStatusLabel(status) {
@@ -1783,7 +1996,7 @@
         }
 
         // ============================================
-        // TOAST NOTIFICATIONS
+        // TOAST NOTIFICATIONS - NO CHANGES
         // ============================================
 
         function showToast(message, type = 'info') {
