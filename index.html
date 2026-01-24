@@ -315,8 +315,65 @@
         }
         
         .dog-card.dragging { 
-            opacity: 0.5; 
-            transform: scale(1.08);
+            opacity: 0.4; 
+            transform: scale(0.95);
+        }
+
+        .pen-dog.dragging {
+            opacity: 0.4;
+            transform: scale(0.95);
+        }
+
+        /* Ghost element that follows finger during drag */
+        .drag-ghost {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            transform: translate(-50%, -50%) scale(1.05);
+            opacity: 0.95;
+            box-shadow: 0 12px 35px rgba(0,0,0,0.5);
+            border: 2px solid var(--accent-primary);
+            border-radius: 10px;
+            background: var(--bg-pen);
+            padding: 12px 16px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Visual indicator for all drop zones when dragging */
+        .pen.drop-ready {
+            border: 2px dashed var(--sync-active) !important;
+            background: rgba(0, 172, 238, 0.08);
+        }
+
+        .bin.drop-ready {
+            border: 2px dashed var(--status-none) !important;
+            background: rgba(231, 76, 60, 0.15);
+            animation: pulse-bin 1s infinite;
+        }
+
+        .staging-area.drop-ready {
+            border: 2px dashed var(--accent-secondary) !important;
+            background: rgba(243, 156, 18, 0.1);
+        }
+
+        @keyframes pulse-bin {
+            0%, 100% { box-shadow: 0 0 0 rgba(231, 76, 60, 0); }
+            50% { box-shadow: 0 0 15px rgba(231, 76, 60, 0.4); }
+        }
+
+        /* Enhanced drag-over states */
+        .pen.drag-over {
+            border-color: var(--status-all) !important;
+            border-style: solid !important;
+            background: rgba(46, 204, 113, 0.2);
+            transform: scale(1.03);
+            box-shadow: 0 0 25px rgba(46, 204, 113, 0.5);
         }
 
         .dog-card-unmatched {
@@ -1064,6 +1121,12 @@
         let draggedElement = null;
         let draggedDogId = null;
         let draggedFromPen = null;
+        let ghostElement = null;
+        let dragTimeout = null;
+        let touchStartPos = null;
+        let isDragging = false;
+        const LONG_PRESS_DURATION = 180; // ms to hold before drag starts
+        const SCROLL_THRESHOLD = 12; // px movement to cancel drag
         let isOnline = false;
         let currentMealType = 'Lunch';
         
@@ -1610,7 +1673,7 @@
                     const displayName = dog.matchedName || dog.possibleMatches[0];
                     return `
                         <div class="dog-card" data-dog-id="${dog.id}"
-                             onpointerdown="startDrag(event, '${dog.id}')"
+                             onpointerdown="handlePointerDown(event, '${dog.id}')"
                              style="border-left-color: var(--status-${dog.status});">
                             ${displayName}
                         </div>
@@ -1676,7 +1739,7 @@
                 return `
                     <div class="pen-dog status-${dog.status}" data-dog-id="${dog.id}">
                         <div class="pen-dog-header">
-                            <span class="pen-dog-name" onpointerdown="startDrag(event, '${dog.id}', '${penId}')">
+                            <span class="pen-dog-name" onpointerdown="handlePointerDown(event, '${dog.id}', '${penId}')">
                                 ${displayName}
                             </span>
                             <button class="pen-dog-remove" onclick="deleteDog('${dog.id}')">×</button>
@@ -1778,58 +1841,194 @@
         }
 
         // ============================================
-        // DRAG AND DROP - NO CHANGES TO LOGIC
+        // DRAG AND DROP - IMPROVED WITH LONG-PRESS, GHOST & HAPTICS
         // ============================================
+
+        function triggerHaptic(pattern = 'light') {
+            if (!navigator.vibrate) return;
+            switch (pattern) {
+                case 'light': navigator.vibrate(15); break;
+                case 'medium': navigator.vibrate(30); break;
+                case 'heavy': navigator.vibrate(50); break;
+                case 'success': navigator.vibrate([30, 50, 30]); break;
+                case 'delete': navigator.vibrate([50, 30, 80]); break;
+                case 'error': navigator.vibrate([100, 50, 100]); break;
+            }
+        }
+
+        function getDogDisplayName(dogId) {
+            const dog = dogs.find(d => d.id === dogId);
+            if (!dog) return 'Unknown';
+            return dog.matchedName || (dog.possibleMatches.length === 1 ? dog.possibleMatches[0] : dog.inputName);
+        }
+
+        function showDropZones() {
+            document.querySelectorAll('.pen').forEach(p => p.classList.add('drop-ready'));
+            document.getElementById('deleteBin').classList.add('drop-ready');
+            document.getElementById('stagingArea').classList.add('drop-ready');
+        }
+
+        function hideDropZones() {
+            document.querySelectorAll('.pen').forEach(p => p.classList.remove('drop-ready'));
+            document.getElementById('deleteBin').classList.remove('drop-ready');
+            document.getElementById('stagingArea').classList.remove('drop-ready');
+        }
+
+        function createGhostElement(dogId, x, y) {
+            const name = getDogDisplayName(dogId);
+            ghostElement = document.createElement('div');
+            ghostElement.className = 'drag-ghost';
+            ghostElement.textContent = name;
+            ghostElement.style.left = x + 'px';
+            ghostElement.style.top = y + 'px';
+            document.body.appendChild(ghostElement);
+        }
+
+        function removeGhostElement() {
+            if (ghostElement) {
+                ghostElement.remove();
+                ghostElement = null;
+            }
+        }
+
+        function handlePointerDown(e, dogId, fromPen = null) {
+            // Store initial touch position
+            touchStartPos = { x: e.clientX, y: e.clientY };
+            
+            // Set up long-press timeout
+            dragTimeout = setTimeout(() => {
+                startDrag(e, dogId, fromPen);
+            }, LONG_PRESS_DURATION);
+            
+            // Listen for movement (scrolling) or release
+            document.addEventListener('pointermove', checkForScroll);
+            document.addEventListener('pointerup', cancelDragSetup);
+            document.addEventListener('pointercancel', cancelDragSetup);
+        }
+
+        function checkForScroll(e) {
+            if (!touchStartPos) return;
+            const distance = Math.hypot(e.clientX - touchStartPos.x, e.clientY - touchStartPos.y);
+            if (distance > SCROLL_THRESHOLD) {
+                // User is scrolling, cancel drag setup
+                cancelDragSetup();
+            }
+        }
+
+        function cancelDragSetup() {
+            clearTimeout(dragTimeout);
+            dragTimeout = null;
+            touchStartPos = null;
+            document.removeEventListener('pointermove', checkForScroll);
+            document.removeEventListener('pointerup', cancelDragSetup);
+            document.removeEventListener('pointercancel', cancelDragSetup);
+        }
 
         function startDrag(e, dogId, fromPen = null) {
             e.preventDefault();
+            cancelDragSetup(); // Clean up the setup listeners
+            
+            isDragging = true;
             draggedDogId = dogId;
             draggedFromPen = fromPen;
             
+            // Haptic feedback - drag started
+            triggerHaptic('medium');
+            
+            // Mark source element as dragging
             const target = e.target.closest('.dog-card, .pen-dog-name');
             if (target) {
                 const parent = target.closest('.dog-card, .pen-dog');
                 if (parent) parent.classList.add('dragging');
             }
             
+            // Create ghost element at touch position
+            createGhostElement(dogId, e.clientX, e.clientY);
+            
+            // Show all drop zones
+            showDropZones();
+            
             document.addEventListener('pointermove', handleDrag);
             document.addEventListener('pointerup', endDrag);
+            document.addEventListener('pointercancel', endDrag);
         }
 
-        function handleDrag(e) {}
+        function handleDrag(e) {
+            if (ghostElement) {
+                ghostElement.style.left = e.clientX + 'px';
+                ghostElement.style.top = e.clientY + 'px';
+            }
+            
+            // Check what's under the ghost for visual feedback
+            if (ghostElement) {
+                ghostElement.style.display = 'none';
+                const elemBelow = document.elementFromPoint(e.clientX, e.clientY);
+                ghostElement.style.display = '';
+                
+                // Update hover states manually for better mobile feedback
+                document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+                
+                if (elemBelow) {
+                    const pen = elemBelow.closest('.pen');
+                    const bin = elemBelow.closest('#deleteBin') || elemBelow.closest('.bin');
+                    const staging = elemBelow.closest('#stagingArea') || elemBelow.closest('.staging-section');
+                    
+                    if (bin) {
+                        document.getElementById('deleteBin').classList.add('drag-over');
+                    } else if (pen) {
+                        pen.classList.add('drag-over');
+                    } else if (staging) {
+                        document.getElementById('stagingArea').classList.add('drag-over');
+                    }
+                }
+            }
+        }
 
         async function endDrag(e) {
             document.removeEventListener('pointermove', handleDrag);
             document.removeEventListener('pointerup', endDrag);
-            document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+            document.removeEventListener('pointercancel', endDrag);
             
-            if (!draggedDogId) return;
+            // Clean up visual states
+            document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            hideDropZones();
+            removeGhostElement();
+            
+            if (!draggedDogId || !isDragging) {
+                isDragging = false;
+                draggedDogId = null;
+                draggedFromPen = null;
+                return;
+            }
             
             const elemBelow = document.elementFromPoint(e.clientX, e.clientY);
             
             if (elemBelow) {
                 if (elemBelow.closest('#deleteBin') || elemBelow.closest('.bin')) {
+                    triggerHaptic('delete');
                     await deleteDog(draggedDogId);
                 } else if (elemBelow.closest('.pen')) {
                     const pen = elemBelow.closest('.pen');
                     const penId = pen.dataset.penId;
+                    triggerHaptic('success');
                     await dropDogInPen(draggedDogId, penId);
                 } else if (elemBelow.closest('#stagingArea') || elemBelow.closest('.staging-section')) {
+                    triggerHaptic('light');
                     await moveDogToStaging(draggedDogId);
                 }
             }
 
+            isDragging = false;
             draggedDogId = null;
             draggedFromPen = null;
-            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-            document.getElementById('stagingArea').classList.remove('drag-over');
         }
 
-        function handlePenEnter(e) { if (draggedDogId) e.currentTarget.classList.add('drag-over'); }
+        function handlePenEnter(e) { if (draggedDogId) { e.currentTarget.classList.add('drag-over'); triggerHaptic('light'); } }
         function handlePenLeave(e) { e.currentTarget.classList.remove('drag-over'); }
-        function handleBinEnter(e) { if (draggedDogId) document.getElementById('deleteBin').classList.add('drag-over'); }
+        function handleBinEnter(e) { if (draggedDogId) { document.getElementById('deleteBin').classList.add('drag-over'); triggerHaptic('light'); } }
         function handleBinLeave(e) { document.getElementById('deleteBin').classList.remove('drag-over'); }
-        function handleStagingEnter(e) { if (draggedDogId) document.getElementById('stagingArea').classList.add('drag-over'); }
+        function handleStagingEnter(e) { if (draggedDogId) { document.getElementById('stagingArea').classList.add('drag-over'); triggerHaptic('light'); } }
         function handleStagingLeave(e) { document.getElementById('stagingArea').classList.remove('drag-over'); }
 
         async function dropDogInPen(dogId, penId) {
