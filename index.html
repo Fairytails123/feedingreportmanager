@@ -46,6 +46,9 @@
             width: 100%;
             /* Prevent pull-to-refresh on mobile */
             overscroll-behavior: none;
+            /* ADDED: Allow vertical scrolling and improve momentum on mobile */
+            touch-action: pan-y;
+            -webkit-overflow-scrolling: touch;
         }
 
         .container {
@@ -55,6 +58,8 @@
             min-height: 100vh;
             width: 100%;
             overflow-x: hidden;
+            /* ADDED: Allow vertical touch scrolling */
+            touch-action: pan-y;
         }
 
         h1 {
@@ -118,6 +123,8 @@
             grid-template-columns: 280px 1fr;
             gap: 20px;
             align-items: start;
+            /* ADDED: Allow vertical touch scrolling */
+            touch-action: pan-y;
         }
 
         .sidebar {
@@ -126,6 +133,8 @@
             display: flex;
             flex-direction: column;
             gap: 12px;
+            /* ADDED: Allow vertical scrolling */
+            touch-action: pan-y;
         }
 
         .entry-section {
@@ -228,6 +237,8 @@
             font-weight: 600;
             font-size: 0.9rem;
             transition: all 0.2s ease;
+            /* ADDED: Allow vertical scrolling through this element */
+            touch-action: pan-y;
         }
 
         .bin.drag-over {
@@ -284,6 +295,8 @@
             transition: border-color 0.2s ease, background 0.2s ease;
             /* Smooth scrolling */
             -webkit-overflow-scrolling: touch;
+            /* ADDED: Allow vertical touch scrolling within this container */
+            touch-action: pan-y;
         }
 
         .staging-area.drag-over {
@@ -297,7 +310,9 @@
             padding: 12px 16px;
             cursor: grab;
             user-select: none;
-            touch-action: none;
+            /* MODIFIED: Changed from 'none' to 'pan-y' to allow vertical scrolling on Android */
+            /* Long-press drag detection in JavaScript handles the drag vs scroll distinction */
+            touch-action: pan-y;
             border-left: 4px solid var(--status-all);
             transition: all 0.2s ease;
             font-size: 0.9rem;
@@ -343,6 +358,8 @@
             max-width: 200px;
             overflow: hidden;
             text-overflow: ellipsis;
+            /* ADDED: Floating element should not interfere with touch */
+            touch-action: none;
         }
 
         /* Visual indicator for all drop zones when dragging */
@@ -460,6 +477,8 @@
             flex-direction: column;
             gap: 15px;
             min-width: 0;
+            /* ADDED: Allow vertical scrolling */
+            touch-action: pan-y;
         }
 
         .pens-section {
@@ -467,6 +486,8 @@
             border-radius: var(--radius);
             padding: 15px;
             box-shadow: var(--shadow);
+            /* ADDED: Allow vertical touch scrolling */
+            touch-action: pan-y;
         }
 
         .pen-row-label {
@@ -503,6 +524,8 @@
             margin: 0 -5px;
             padding-left: 5px;
             padding-right: 5px;
+            /* ADDED: Allow horizontal touch scrolling for pen rows */
+            touch-action: pan-x pan-y;
         }
 
         .pen-row-scroll::-webkit-scrollbar {
@@ -538,6 +561,8 @@
             transition: all 0.2s ease;
             scroll-snap-align: start;
             flex-shrink: 0;
+            /* ADDED: Allow vertical scrolling on touch devices */
+            touch-action: pan-y;
         }
 
         .pen:hover { border-color: rgba(233, 69, 96, 0.3); }
@@ -572,6 +597,8 @@
             padding: 10px;
             border-left: 5px solid var(--status-all);
             transition: all 0.2s ease;
+            /* ADDED: Allow vertical scrolling */
+            touch-action: pan-y;
         }
 
         .pen-dog:hover { background: rgba(22, 33, 62, 0.8); }
@@ -594,7 +621,8 @@
             font-weight: 700;
             color: var(--text-primary);
             cursor: grab;
-            touch-action: none;
+            /* MODIFIED: Changed from 'none' to 'pan-y' to allow vertical scrolling on Android */
+            touch-action: pan-y;
             flex: 1;
             padding: 4px 0;
             /* Touch target */
@@ -1606,6 +1634,28 @@
             document.getElementById('dogNameInput').addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') addDog();
             });
+            
+            // ADDED: Passive event delegation for drag handling
+            // This allows native touch scrolling while still detecting long-press for drag
+            document.addEventListener('pointerdown', handleDelegatedPointerDown, { passive: true });
+        }
+        
+        // ADDED: Delegated pointer handler - finds draggable elements
+        function handleDelegatedPointerDown(e) {
+            // Find the draggable element (dog-card or pen-dog-name)
+            const draggable = e.target.closest('[data-draggable="true"]');
+            if (!draggable) return;
+            
+            const dogId = draggable.dataset.dogId;
+            const penId = draggable.dataset.penId || null;
+            
+            if (!dogId) return;
+            
+            // Store the event coordinates for later use in startDrag
+            const coords = { x: e.clientX, y: e.clientY };
+            
+            // Call the existing handler with stored coordinates
+            handlePointerDown(coords, dogId, penId);
         }
 
         // ============================================
@@ -2084,9 +2134,9 @@
             staging.innerHTML = unassignedDogs.map(dog => {
                 if (dog.matchedName || dog.possibleMatches.length === 1) {
                     const displayName = dog.matchedName || dog.possibleMatches[0];
+                    // MODIFIED: Removed inline onpointerdown - using passive event delegation instead
                     return `
-                        <div class="dog-card" data-dog-id="${dog.id}"
-                             onpointerdown="handlePointerDown(event, '${dog.id}')"
+                        <div class="dog-card" data-dog-id="${dog.id}" data-draggable="true"
                              style="border-left-color: var(--status-${dog.status});">
                             ${displayName}
                         </div>
@@ -2158,7 +2208,7 @@
                 return `
                     <div class="pen-dog status-${dog.status}" data-dog-id="${dog.id}">
                         <div class="pen-dog-header">
-                            <span class="pen-dog-name" onpointerdown="handlePointerDown(event, '${dog.id}', '${penId}')">
+                            <span class="pen-dog-name" data-dog-id="${dog.id}" data-pen-id="${penId}" data-draggable="true">
                                 ${displayName}
                             </span>
                             ${tvIndicatorHtml}
@@ -2311,20 +2361,27 @@
             }
         }
 
-        function handlePointerDown(e, dogId, fromPen = null) {
+        // MODIFIED: Now accepts coords object {x, y} instead of event
+        function handlePointerDown(coords, dogId, fromPen = null) {
             // Store initial touch position
-            touchStartPos = { x: e.clientX, y: e.clientY };
+            touchStartPos = { x: coords.x, y: coords.y };
+            
+            // Store drag info for startDrag
+            pendingDragInfo = { dogId, fromPen, coords };
             
             // Set up long-press timeout
             dragTimeout = setTimeout(() => {
-                startDrag(e, dogId, fromPen);
+                startDrag(pendingDragInfo);
             }, LONG_PRESS_DURATION);
             
-            // Listen for movement (scrolling) or release
-            document.addEventListener('pointermove', checkForScroll);
+            // Listen for movement (scrolling) or release - PASSIVE so scroll isn't blocked
+            document.addEventListener('pointermove', checkForScroll, { passive: true });
             document.addEventListener('pointerup', cancelDragSetup);
             document.addEventListener('pointercancel', cancelDragSetup);
         }
+        
+        // ADDED: Store pending drag info
+        let pendingDragInfo = null;
 
         function checkForScroll(e) {
             if (!touchStartPos) return;
@@ -2339,31 +2396,36 @@
             clearTimeout(dragTimeout);
             dragTimeout = null;
             touchStartPos = null;
+            pendingDragInfo = null;  // ADDED: Clear pending drag info
             document.removeEventListener('pointermove', checkForScroll);
             document.removeEventListener('pointerup', cancelDragSetup);
             document.removeEventListener('pointercancel', cancelDragSetup);
         }
 
-        function startDrag(e, dogId, fromPen = null) {
-            e.preventDefault();
+        // MODIFIED: Now accepts dragInfo object with {dogId, fromPen, coords}
+        function startDrag(dragInfo) {
+            // MODIFIED: Use body style to prevent scroll during drag (not e.preventDefault)
+            document.body.style.overflow = 'hidden';
+            document.body.style.touchAction = 'none';
+            
             cancelDragSetup(); // Clean up the setup listeners
             
             isDragging = true;
-            draggedDogId = dogId;
-            draggedFromPen = fromPen;
+            draggedDogId = dragInfo.dogId;
+            draggedFromPen = dragInfo.fromPen;
             
             // Haptic feedback - drag started
             triggerHaptic('medium');
             
             // Mark source element as dragging
-            const target = e.target.closest('.dog-card, .pen-dog-name');
+            const target = document.querySelector(`[data-dog-id="${dragInfo.dogId}"][data-draggable="true"]`);
             if (target) {
                 const parent = target.closest('.dog-card, .pen-dog');
                 if (parent) parent.classList.add('dragging');
             }
             
-            // Create ghost element at touch position
-            createGhostElement(dogId, e.clientX, e.clientY);
+            // Create ghost element at stored touch position
+            createGhostElement(dragInfo.dogId, dragInfo.coords.x, dragInfo.coords.y);
             
             // Show all drop zones
             showDropZones();
@@ -2408,6 +2470,10 @@
             document.removeEventListener('pointermove', handleDrag);
             document.removeEventListener('pointerup', endDrag);
             document.removeEventListener('pointercancel', endDrag);
+            
+            // ADDED: Restore scroll capability
+            document.body.style.overflow = '';
+            document.body.style.touchAction = '';
             
             // Clean up visual states
             document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
