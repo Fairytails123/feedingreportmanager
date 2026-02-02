@@ -38,23 +38,24 @@
             overflow-x: hidden;
         }
 
+        /* ANDROID FIX: Allow native scrolling, no overscroll-behavior */
         body {
             font-family: 'Nunito', sans-serif;
             background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
             min-height: 100vh;
             color: var(--text-primary);
-            overflow-x: hidden;
             width: 100%;
-            overscroll-behavior: none;
-            /* ANDROID FIX: Allow vertical scrolling by default */
-            touch-action: pan-y;
+            overflow-y: auto;
+            overflow-x: hidden;
             -webkit-overflow-scrolling: touch;
         }
 
-        /* ANDROID FIX: Lock scrolling ONLY when drag is confirmed */
+        /* ANDROID FIX: Lock screen ONLY when drag is confirmed */
         body.is-dragging {
             overflow: hidden !important;
             touch-action: none !important;
+            position: fixed;
+            width: 100%;
         }
 
         .container {
@@ -64,7 +65,6 @@
             min-height: 100vh;
             width: 100%;
             overflow-x: hidden;
-            touch-action: pan-y;
         }
 
         /* Header with branding */
@@ -141,7 +141,6 @@
             display: flex;
             flex-direction: column;
             gap: 15px;
-            touch-action: pan-y;
         }
 
         /* Desktop: Sidebar + Main */
@@ -163,7 +162,6 @@
             display: flex;
             flex-direction: column;
             gap: 12px;
-            touch-action: pan-y;
         }
 
         .entry-section {
@@ -324,7 +322,6 @@
             align-content: flex-start;
             border: 2px solid transparent;
             transition: all 0.2s ease;
-            touch-action: pan-y;
         }
 
         .staging-area.drop-ready {
@@ -337,7 +334,7 @@
             background: rgba(0, 172, 238, 0.15);
         }
 
-        /* Dog Cards in Staging */
+        /* ANDROID FIX: Dog Cards - use manipulation for scroll/tap */
         .dog-card {
             background: var(--bg-pen);
             border-radius: 10px;
@@ -345,8 +342,7 @@
             cursor: grab;
             user-select: none;
             -webkit-user-select: none;
-            /* ANDROID FIX: Allow vertical scrolling until drag confirmed */
-            touch-action: pan-y;
+            touch-action: manipulation;
             border-left: 4px solid var(--status-all);
             transition: all 0.2s ease;
             font-size: 0.9rem;
@@ -443,7 +439,6 @@
             flex-direction: column;
             gap: 15px;
             min-width: 0;
-            touch-action: pan-y;
         }
 
         .pens-section {
@@ -451,7 +446,6 @@
             border-radius: var(--radius);
             padding: 15px;
             box-shadow: var(--shadow);
-            touch-action: pan-y;
         }
 
         .pen-row-label {
@@ -476,7 +470,7 @@
             letter-spacing: 0;
         }
 
-        /* HORIZONTAL PEN ROW - Swipeable */
+        /* ANDROID FIX: Horizontal scroll - pan-x only */
         .pen-row-scroll {
             overflow-x: auto;
             overflow-y: hidden;
@@ -488,8 +482,8 @@
             margin: 0 -5px;
             padding-left: 5px;
             padding-right: 5px;
-            /* ANDROID FIX: Allow both horizontal and vertical touch */
-            touch-action: pan-x pan-y;
+            touch-action: pan-x;
+            display: flex;
         }
 
         .pen-row-scroll::-webkit-scrollbar {
@@ -525,7 +519,6 @@
             transition: all 0.2s ease;
             scroll-snap-align: start;
             flex-shrink: 0;
-            touch-action: pan-y;
         }
 
         .pen:hover { border-color: rgba(233, 69, 96, 0.3); }
@@ -564,7 +557,6 @@
             padding: 10px;
             border-left: 5px solid var(--status-all);
             transition: all 0.2s ease;
-            touch-action: pan-y;
         }
 
         .pen-dog:hover { background: rgba(22, 33, 62, 0.8); }
@@ -587,13 +579,15 @@
             gap: 8px;
         }
 
+        /* ANDROID FIX: Dog name - use manipulation for scroll/tap */
         .pen-dog-name {
             font-size: 0.8rem;
             font-weight: 700;
             color: var(--text-primary);
             cursor: grab;
-            /* ANDROID FIX: Allow vertical scrolling until drag confirmed */
-            touch-action: pan-y;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
             flex: 1;
             padding: 4px 0;
             min-height: 28px;
@@ -725,7 +719,7 @@
             box-shadow: var(--shadow);
         }
 
-        /* Drag Ghost */
+        /* Drag Ghost - MUST block touch */
         .drag-ghost {
             position: fixed;
             padding: 12px 20px;
@@ -738,7 +732,6 @@
             z-index: 10000;
             box-shadow: 0 8px 25px rgba(0, 172, 238, 0.5);
             transform: translate(-50%, -50%);
-            /* Ghost element MUST block touch to prevent scroll */
             touch-action: none;
         }
 
@@ -1033,9 +1026,9 @@
         let isDragging = false;
         let pendingDragInfo = null;
         
-        // ANDROID FIX: Reduced thresholds for better scroll detection
-        const LONG_PRESS_DURATION = 180; // ms to hold before drag starts
-        const SCROLL_THRESHOLD = 5;      // REDUCED from 12 to 5 - faster scroll detection
+        // ANDROID FIX: Lower threshold for faster scroll detection
+        const LONG_PRESS_DURATION = 180;
+        const SCROLL_THRESHOLD = 3; // Reduced from 5 to 3
         
         let isOnline = false;
         let currentMealType = 'Lunch';
@@ -1046,6 +1039,9 @@
         let syncPausedUntil = 0;
         let pendingDogIds = new Set();
         let initialLoadComplete = false;
+        
+        // Store scroll position when locking body
+        let scrollPositionBeforeDrag = 0;
 
         // ============================================
         // INITIALIZATION
@@ -1080,7 +1076,6 @@
                 bottomPensContainer.innerHTML += createPenHTML(`bottom-${i}`, `Bottom ${i}`);
             }
 
-            // Set up drop zone listeners
             document.querySelectorAll('.pen').forEach(pen => {
                 pen.addEventListener('pointerenter', handlePenEnter);
                 pen.addEventListener('pointerleave', handlePenLeave);
@@ -1109,12 +1104,10 @@
                 if (e.key === 'Enter') addDog();
             });
             
-            // ANDROID FIX: Passive event delegation for drag handling
-            // This allows native touch scrolling while still detecting long-press for drag
+            // ANDROID FIX: Passive listener for drag detection
             document.addEventListener('pointerdown', handleDelegatedPointerDown, { passive: true });
         }
         
-        // Delegated pointer handler - finds draggable elements
         function handleDelegatedPointerDown(e) {
             const draggable = e.target.closest('[data-draggable="true"]');
             if (!draggable) return;
@@ -1776,38 +1769,35 @@
             }
         }
 
-        // ANDROID FIX: Accepts coords object {x, y} instead of event
+        // ANDROID FIX: Aggressive scroll detection
         function handlePointerDown(coords, dogId, fromPen = null) {
-            // Store initial touch position
+            // Store the exact starting point
             touchStartPos = { x: coords.x, y: coords.y };
-            
-            // Store drag info for startDrag
             pendingDragInfo = { dogId, fromPen, coords };
             
-            // Clear any existing timeout
             if (dragTimeout) clearTimeout(dragTimeout);
             
-            // Set up long-press timeout
+            // Set the long-press timer
             dragTimeout = setTimeout(() => {
                 if (pendingDragInfo) {
                     startDrag(pendingDragInfo);
                 }
             }, LONG_PRESS_DURATION);
             
-            // ANDROID FIX: Use { passive: true } to ensure browser scroll isn't blocked
+            // ANDROID FIX: Passive listener so we don't block system scroll
             document.addEventListener('pointermove', checkForScroll, { passive: true });
             document.addEventListener('pointerup', cancelDragSetup);
             document.addEventListener('pointercancel', cancelDragSetup);
         }
 
-        // ANDROID FIX: Lower threshold for faster scroll detection
+        // ANDROID FIX: 3px threshold for faster scroll detection
         function checkForScroll(e) {
             if (!touchStartPos) return;
             
             const dx = Math.abs(e.clientX - touchStartPos.x);
             const dy = Math.abs(e.clientY - touchStartPos.y);
             
-            // ANDROID FIX: Reduced to 5px - if user moves this much, it's a scroll
+            // If finger moves more than 3px before timer, it's a scroll
             if (dx > SCROLL_THRESHOLD || dy > SCROLL_THRESHOLD) {
                 cancelDragSetup();
             }
@@ -1823,19 +1813,21 @@
             document.removeEventListener('pointercancel', cancelDragSetup);
         }
 
-        // ANDROID FIX: Accepts dragInfo object with {dogId, fromPen, coords}
         function startDrag(dragInfo) {
-            // ANDROID FIX: Add class to body to lock scrolling ONLY after drag confirmed
+            // ANDROID FIX: Store scroll position and lock body
+            scrollPositionBeforeDrag = window.scrollY;
             document.body.classList.add('is-dragging');
+            document.body.style.top = `-${scrollPositionBeforeDrag}px`;
             
-            // Clean up the setup listeners
-            cancelDragSetup();
+            // Clean up temporary listeners
+            document.removeEventListener('pointermove', checkForScroll);
+            document.removeEventListener('pointerup', cancelDragSetup);
+            document.removeEventListener('pointercancel', cancelDragSetup);
             
             isDragging = true;
             draggedDogId = dragInfo.dogId;
             draggedFromPen = dragInfo.fromPen;
             
-            // Haptic feedback - drag started
             triggerHaptic('medium');
             
             // Mark source element as dragging
@@ -1845,12 +1837,11 @@
                 if (parent) parent.classList.add('dragging');
             }
             
-            // Create ghost element at stored touch position
+            // Create ghost element and show drop zones
             createGhostElement(dragInfo.dogId, dragInfo.coords.x, dragInfo.coords.y);
-            
-            // Show all drop zones
             showDropZones();
             
+            // Start drag movement listeners
             document.addEventListener('pointermove', handleDrag);
             document.addEventListener('pointerup', endDrag);
             document.addEventListener('pointercancel', endDrag);
@@ -1868,7 +1859,6 @@
                 const elemBelow = document.elementFromPoint(e.clientX, e.clientY);
                 ghostElement.style.display = '';
                 
-                // Update hover states
                 document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
                 
                 if (elemBelow) {
@@ -1892,8 +1882,10 @@
             document.removeEventListener('pointerup', endDrag);
             document.removeEventListener('pointercancel', endDrag);
             
-            // ANDROID FIX: Remove the body scroll lock
+            // ANDROID FIX: Unlock body and restore scroll position
             document.body.classList.remove('is-dragging');
+            document.body.style.top = '';
+            window.scrollTo(0, scrollPositionBeforeDrag);
             
             // Clean up visual states
             document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
