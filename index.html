@@ -38,7 +38,7 @@
             overflow-x: hidden;
         }
 
-        /* ANDROID FIX: Allow native scrolling, no overscroll-behavior */
+        /* ANDROID FIX: Allow default touch actions on body */
         body {
             font-family: 'Nunito', sans-serif;
             background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
@@ -48,6 +48,7 @@
             overflow-y: auto;
             overflow-x: hidden;
             -webkit-overflow-scrolling: touch;
+            touch-action: auto;
         }
 
         /* ANDROID FIX: Lock screen ONLY when drag is confirmed */
@@ -334,7 +335,7 @@
             background: rgba(0, 172, 238, 0.15);
         }
 
-        /* ANDROID FIX: Dog Cards - use manipulation for scroll/tap */
+        /* ANDROID FIX: Dog Cards - allow panning in both directions */
         .dog-card {
             background: var(--bg-pen);
             border-radius: 10px;
@@ -342,7 +343,7 @@
             cursor: grab;
             user-select: none;
             -webkit-user-select: none;
-            touch-action: manipulation;
+            touch-action: pan-x pan-y !important;
             border-left: 4px solid var(--status-all);
             transition: all 0.2s ease;
             font-size: 0.9rem;
@@ -470,7 +471,7 @@
             letter-spacing: 0;
         }
 
-        /* ANDROID FIX: Horizontal scroll - pan-x only */
+        /* ANDROID FIX: Horizontal scroll - allow BOTH x and y panning */
         .pen-row-scroll {
             overflow-x: auto;
             overflow-y: hidden;
@@ -482,7 +483,7 @@
             margin: 0 -5px;
             padding-left: 5px;
             padding-right: 5px;
-            touch-action: pan-x;
+            touch-action: pan-x pan-y !important;
             display: flex;
         }
 
@@ -579,13 +580,13 @@
             gap: 8px;
         }
 
-        /* ANDROID FIX: Dog name - use manipulation for scroll/tap */
+        /* ANDROID FIX: Dog name - allow panning in both directions */
         .pen-dog-name {
             font-size: 0.8rem;
             font-weight: 700;
             color: var(--text-primary);
             cursor: grab;
-            touch-action: manipulation;
+            touch-action: pan-x pan-y !important;
             user-select: none;
             -webkit-user-select: none;
             flex: 1;
