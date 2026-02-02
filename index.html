@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Feeding Report Manager</title>
+    <title>Feeding Report - Editor</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -14,6 +14,7 @@
             --bg-pen: #0f3460;
             --accent-primary: #e94560;
             --accent-secondary: #f39c12;
+            --fairy-tails-blue: #00acee;
             --text-primary: #ffffff;
             --text-secondary: #a0a0a0;
             --status-all: #2ecc71;
@@ -44,11 +45,16 @@
             color: var(--text-primary);
             overflow-x: hidden;
             width: 100%;
-            /* Prevent pull-to-refresh on mobile */
             overscroll-behavior: none;
-            /* ADDED: Allow vertical scrolling and improve momentum on mobile */
+            /* ANDROID FIX: Allow vertical scrolling by default */
             touch-action: pan-y;
             -webkit-overflow-scrolling: touch;
+        }
+
+        /* ANDROID FIX: Lock scrolling ONLY when drag is confirmed */
+        body.is-dragging {
+            overflow: hidden !important;
+            touch-action: none !important;
         }
 
         .container {
@@ -58,16 +64,30 @@
             min-height: 100vh;
             width: 100%;
             overflow-x: hidden;
-            /* ADDED: Allow vertical touch scrolling */
             touch-action: pan-y;
+        }
+
+        /* Header with branding */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .header-logo {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            object-fit: cover;
         }
 
         h1 {
             text-align: center;
-            font-size: 1.6rem;
+            font-size: 1.4rem;
             font-weight: 800;
-            margin-bottom: 8px;
-            color: var(--accent-primary);
+            color: var(--fairy-tails-blue);
             text-transform: uppercase;
             letter-spacing: 2px;
         }
@@ -114,26 +134,35 @@
         }
 
         /* ============================================
-           LAYOUT - Desktop: Sidebar + Main
-           Mobile: Stacked vertically
+           MOBILE-FIRST LAYOUT
            ============================================ */
 
         .layout {
-            display: grid;
-            grid-template-columns: 280px 1fr;
-            gap: 20px;
-            align-items: start;
-            /* ADDED: Allow vertical touch scrolling */
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
             touch-action: pan-y;
         }
 
+        /* Desktop: Sidebar + Main */
+        @media (min-width: 900px) {
+            .layout {
+                display: grid;
+                grid-template-columns: 280px 1fr;
+                gap: 20px;
+                align-items: start;
+            }
+
+            .sidebar {
+                position: sticky;
+                top: 15px;
+            }
+        }
+
         .sidebar {
-            position: sticky;
-            top: 15px;
             display: flex;
             flex-direction: column;
             gap: 12px;
-            /* ADDED: Allow vertical scrolling */
             touch-action: pan-y;
         }
 
@@ -154,16 +183,16 @@
         }
 
         .entry-row {
-            display: flex;
+            display: grid;
+            grid-template-columns: 1fr auto;
             gap: 8px;
         }
 
         .entry-row input {
-            flex: 1;
             padding: 14px 12px;
             border: 2px solid var(--bg-pen);
             border-radius: 8px;
-            font-size: 16px; /* Prevents iOS zoom */
+            font-size: 16px;
             font-family: inherit;
             background: var(--bg-primary);
             color: var(--text-primary);
@@ -190,7 +219,6 @@
             text-transform: uppercase;
             letter-spacing: 1px;
             white-space: nowrap;
-            /* Touch friendly */
             min-height: 48px;
             min-width: 48px;
         }
@@ -215,7 +243,7 @@
         .btn-success { background: var(--status-all); color: white; }
         .btn-success:hover:not(:disabled) { background: #27ae60; }
 
-        /* Delete Bin - Above Meal Type */
+        /* Delete Bin */
         .bin-section {
             background: var(--bg-secondary);
             border-radius: var(--radius);
@@ -233,34 +261,41 @@
             align-items: center;
             justify-content: center;
             gap: 10px;
-            color: var(--status-none);
-            font-weight: 600;
-            font-size: 0.9rem;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
             transition: all 0.2s ease;
-            /* ADDED: Allow vertical scrolling through this element */
-            touch-action: pan-y;
+        }
+
+        .bin.drop-ready {
+            border-color: var(--status-none);
+            background: rgba(231, 76, 60, 0.1);
         }
 
         .bin.drag-over {
-            background: rgba(231, 76, 60, 0.3);
             border-color: var(--status-none);
+            background: rgba(231, 76, 60, 0.3);
+            color: var(--status-none);
             transform: scale(1.02);
-            box-shadow: 0 0 20px rgba(231, 76, 60, 0.5);
         }
 
         .bin-icon { font-size: 1.3rem; }
 
-        /* Meal Type Selector */
+        /* Meal Select */
         .meal-select {
             width: 100%;
             padding: 14px 12px;
-            border-radius: 8px;
             border: 2px solid var(--bg-pen);
+            border-radius: 8px;
             background: var(--bg-primary);
             color: var(--text-primary);
             font-family: inherit;
-            font-size: 16px; /* Prevents iOS zoom */
-            min-height: 48px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .meal-select:focus {
+            outline: none;
+            border-color: var(--accent-secondary);
         }
 
         /* Staging Area */
@@ -269,8 +304,6 @@
             border-radius: var(--radius);
             padding: 15px;
             box-shadow: var(--shadow);
-            flex: 1;
-            min-height: 0;
         }
 
         .staging-header {
@@ -281,122 +314,56 @@
         }
 
         .staging-area {
-            min-height: 100px;
-            max-height: 280px;
-            overflow-y: auto;
+            min-height: 80px;
             background: var(--bg-primary);
-            border: 2px dashed var(--bg-pen);
             border-radius: 8px;
             padding: 10px;
             display: flex;
             flex-wrap: wrap;
             gap: 8px;
             align-content: flex-start;
-            transition: border-color 0.2s ease, background 0.2s ease;
-            /* Smooth scrolling */
-            -webkit-overflow-scrolling: touch;
-            /* ADDED: Allow vertical touch scrolling within this container */
+            border: 2px solid transparent;
+            transition: all 0.2s ease;
             touch-action: pan-y;
         }
 
-        .staging-area.drag-over {
-            border-color: var(--accent-primary);
-            background: rgba(233, 69, 96, 0.15);
+        .staging-area.drop-ready {
+            border-color: var(--fairy-tails-blue);
+            background: rgba(0, 172, 238, 0.05);
         }
 
+        .staging-area.drag-over {
+            border-color: var(--fairy-tails-blue);
+            background: rgba(0, 172, 238, 0.15);
+        }
+
+        /* Dog Cards in Staging */
         .dog-card {
             background: var(--bg-pen);
             border-radius: 10px;
             padding: 12px 16px;
             cursor: grab;
             user-select: none;
-            /* MODIFIED: Changed from 'none' to 'pan-y' to allow vertical scrolling on Android */
-            /* Long-press drag detection in JavaScript handles the drag vs scroll distinction */
+            -webkit-user-select: none;
+            /* ANDROID FIX: Allow vertical scrolling until drag confirmed */
             touch-action: pan-y;
             border-left: 4px solid var(--status-all);
             transition: all 0.2s ease;
             font-size: 0.9rem;
             font-weight: 600;
-            /* Touch friendly size */
             min-height: 44px;
             display: flex;
             align-items: center;
         }
 
-        .dog-card:active { 
-            cursor: grabbing;
-            transform: scale(1.05);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.4);
-        }
-        
-        .dog-card.dragging { 
-            opacity: 0.4; 
-            transform: scale(0.95);
-        }
+        .dog-card:hover { background: #1a4a7a; }
 
-        .pen-dog.dragging {
+        .dog-card.dragging {
             opacity: 0.4;
             transform: scale(0.95);
         }
 
-        /* Ghost element that follows finger during drag */
-        .drag-ghost {
-            position: fixed;
-            pointer-events: none;
-            z-index: 9999;
-            transform: translate(-50%, -50%) scale(1.05);
-            opacity: 0.95;
-            box-shadow: 0 12px 35px rgba(0,0,0,0.5);
-            border: 2px solid var(--accent-primary);
-            border-radius: 10px;
-            background: var(--bg-pen);
-            padding: 12px 16px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            color: var(--text-primary);
-            white-space: nowrap;
-            max-width: 200px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            /* ADDED: Floating element should not interfere with touch */
-            touch-action: none;
-        }
-
-        /* Visual indicator for all drop zones when dragging */
-        .pen.drop-ready {
-            border: 2px dashed var(--sync-active) !important;
-            background: rgba(0, 172, 238, 0.08);
-        }
-
-        .bin.drop-ready {
-            border: 2px dashed var(--status-none) !important;
-            background: rgba(231, 76, 60, 0.15);
-            animation: pulse-bin 1s infinite;
-        }
-
-        .staging-area.drop-ready {
-            border: 2px dashed var(--accent-secondary) !important;
-            background: rgba(243, 156, 18, 0.1);
-        }
-
-        @keyframes pulse-bin {
-            0%, 100% { box-shadow: 0 0 0 rgba(231, 76, 60, 0); }
-            50% { box-shadow: 0 0 15px rgba(231, 76, 60, 0.4); }
-        }
-
-        /* Enhanced drag-over states */
-        .pen.drag-over {
-            border-color: var(--status-all) !important;
-            border-style: solid !important;
-            background: rgba(46, 204, 113, 0.2);
-            transform: scale(1.03);
-            box-shadow: 0 0 25px rgba(46, 204, 113, 0.5);
-        }
-
-        .dog-card-unmatched {
-            background: var(--bg-pen);
-            border-radius: 10px;
-            padding: 10px;
+        .dog-card.unmatched {
             border-left: 4px solid var(--accent-secondary);
             min-width: 140px;
             max-width: 170px;
@@ -427,7 +394,6 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            /* Touch friendly */
             min-width: 44px;
             min-height: 44px;
         }
@@ -440,7 +406,7 @@
             background: var(--bg-primary);
             color: var(--text-primary);
             font-family: inherit;
-            font-size: 16px; /* Prevents iOS zoom */
+            font-size: 16px;
         }
 
         .unmatched-error {
@@ -469,7 +435,7 @@
         }
 
         /* ============================================
-           MAIN CONTENT - Pens Section
+           PENS SECTION
            ============================================ */
 
         .main-content {
@@ -477,7 +443,6 @@
             flex-direction: column;
             gap: 15px;
             min-width: 0;
-            /* ADDED: Allow vertical scrolling */
             touch-action: pan-y;
         }
 
@@ -486,7 +451,6 @@
             border-radius: var(--radius);
             padding: 15px;
             box-shadow: var(--shadow);
-            /* ADDED: Allow vertical touch scrolling */
             touch-action: pan-y;
         }
 
@@ -524,7 +488,7 @@
             margin: 0 -5px;
             padding-left: 5px;
             padding-right: 5px;
-            /* ADDED: Allow horizontal touch scrolling for pen rows */
+            /* ANDROID FIX: Allow both horizontal and vertical touch */
             touch-action: pan-x pan-y;
         }
 
@@ -561,17 +525,20 @@
             transition: all 0.2s ease;
             scroll-snap-align: start;
             flex-shrink: 0;
-            /* ADDED: Allow vertical scrolling on touch devices */
             touch-action: pan-y;
         }
 
         .pen:hover { border-color: rgba(233, 69, 96, 0.3); }
 
+        .pen.drop-ready {
+            border-color: rgba(0, 172, 238, 0.3);
+        }
+
         .pen.drag-over {
-            border-color: var(--accent-primary);
-            background: rgba(233, 69, 96, 0.2);
+            border-color: var(--fairy-tails-blue);
+            background: rgba(0, 172, 238, 0.2);
             transform: scale(1.02);
-            box-shadow: 0 0 20px rgba(233, 69, 96, 0.4);
+            box-shadow: 0 0 20px rgba(0, 172, 238, 0.4);
         }
 
         .pen-header {
@@ -597,7 +564,6 @@
             padding: 10px;
             border-left: 5px solid var(--status-all);
             transition: all 0.2s ease;
-            /* ADDED: Allow vertical scrolling */
             touch-action: pan-y;
         }
 
@@ -607,6 +573,11 @@
         .pen-dog.status-half { border-left-color: var(--status-half); }
         .pen-dog.status-quarter { border-left-color: var(--status-quarter); }
         .pen-dog.status-none { border-left-color: var(--status-none); }
+
+        .pen-dog.dragging {
+            opacity: 0.4;
+            transform: scale(0.95);
+        }
 
         .pen-dog-header {
             display: flex;
@@ -621,11 +592,10 @@
             font-weight: 700;
             color: var(--text-primary);
             cursor: grab;
-            /* MODIFIED: Changed from 'none' to 'pan-y' to allow vertical scrolling on Android */
+            /* ANDROID FIX: Allow vertical scrolling until drag confirmed */
             touch-action: pan-y;
             flex: 1;
             padding: 4px 0;
-            /* Touch target */
             min-height: 28px;
             display: flex;
             align-items: center;
@@ -645,7 +615,6 @@
             justify-content: center;
             flex-shrink: 0;
             transition: all 0.2s ease;
-            /* Touch friendly */
             min-width: 36px;
             min-height: 36px;
         }
@@ -683,47 +652,12 @@
             font-weight: 700;
             cursor: pointer;
             transition: all 0.2s ease;
-            /* Touch friendly */
             min-height: 36px;
             min-width: 40px;
         }
 
         .toggle-btn:hover { border-color: var(--accent-secondary); }
         .toggle-btn.active { background: var(--accent-secondary); border-color: var(--accent-secondary); color: white; }
-
-        .supplement-panel {
-            display: none;
-            margin-top: 8px;
-            padding-top: 8px;
-            border-top: 1px dashed rgba(255,255,255,0.1);
-        }
-
-        .supplement-panel.active { display: block; }
-
-        .supplement-checkboxes {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 6px;
-        }
-
-        .supplement-checkbox {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 0.65rem;
-            color: var(--text-secondary);
-            cursor: pointer;
-            padding: 4px;
-            /* Touch target */
-            min-height: 32px;
-        }
-
-        .supplement-checkbox input {
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
-            accent-color: var(--accent-secondary);
-        }
 
         .prescription-panel {
             display: none;
@@ -736,7 +670,7 @@
 
         .prescription-input {
             width: 100%;
-            padding: 10px 8px;
+            padding: 10px;
             border: 1px solid var(--accent-primary);
             border-radius: 6px;
             background: var(--bg-primary);
@@ -747,23 +681,68 @@
 
         .prescription-input::placeholder { color: var(--text-secondary); }
 
-        /* Action Buttons */
-        .action-bar {
+        .supplement-panel {
+            display: none;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px dashed rgba(255,255,255,0.1);
+        }
+
+        .supplement-panel.active { display: block; }
+
+        .supplement-checkboxes {
             display: flex;
-            gap: 10px;
             flex-wrap: wrap;
+            gap: 8px;
         }
 
-        .action-bar .btn {
-            flex: 1;
-            min-width: 100px;
-            padding: 16px 12px;
+        .supplement-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 4px 8px;
+            background: var(--bg-primary);
+            border-radius: 4px;
         }
 
-        /* ============================================
-           MODAL
-           ============================================ */
+        .supplement-checkbox input {
+            accent-color: var(--accent-secondary);
+            min-width: 18px;
+            min-height: 18px;
+        }
 
+        /* Action Bar */
+        .action-bar {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            padding: 15px;
+            box-shadow: var(--shadow);
+        }
+
+        /* Drag Ghost */
+        .drag-ghost {
+            position: fixed;
+            padding: 12px 20px;
+            background: var(--fairy-tails-blue);
+            color: white;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            pointer-events: none;
+            z-index: 10000;
+            box-shadow: 0 8px 25px rgba(0, 172, 238, 0.5);
+            transform: translate(-50%, -50%);
+            /* Ghost element MUST block touch to prevent scroll */
+            touch-action: none;
+        }
+
+        /* Modal */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -771,76 +750,98 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0,0,0,0.85);
-            z-index: 1000;
-            justify-content: center;
-            align-items: center;
+            background: rgba(0,0,0,0.8);
+            z-index: 5000;
             padding: 20px;
+            overflow-y: auto;
         }
 
-        .modal-overlay.active { display: flex; }
+        .modal-overlay.active { display: flex; align-items: center; justify-content: center; }
 
         .modal {
             background: var(--bg-secondary);
             border-radius: var(--radius);
-            max-width: 500px;
+            max-width: 600px;
             width: 100%;
-            max-height: 80vh;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
+            max-height: 90vh;
+            overflow-y: auto;
         }
 
         .modal-header {
-            padding: 18px 20px;
-            border-bottom: 1px solid var(--bg-pen);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid var(--bg-pen);
         }
 
-        .modal-header h2 { font-size: 1.1rem; color: var(--accent-primary); }
+        .modal-header h2 {
+            font-size: 1.2rem;
+            color: var(--accent-primary);
+        }
 
         .modal-close {
             background: none;
             border: none;
             color: var(--text-secondary);
-            font-size: 1.8rem;
+            font-size: 1.5rem;
             cursor: pointer;
-            padding: 5px 10px;
             min-width: 44px;
             min-height: 44px;
         }
 
         .modal-body {
             padding: 20px;
-            overflow-y: auto;
-            flex: 1;
-            -webkit-overflow-scrolling: touch;
+            font-size: 0.9rem;
+            line-height: 1.6;
         }
 
         .modal-footer {
-            padding: 15px 20px;
-            border-top: 1px solid var(--bg-pen);
             display: flex;
             gap: 10px;
             justify-content: flex-end;
+            padding: 20px;
+            border-top: 1px solid var(--bg-pen);
         }
 
-        .preview-meal-title {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: var(--accent-secondary);
+        /* Toast */
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            animation: slideUp 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .toast.success { background: var(--status-all); color: white; }
+        .toast.error { background: var(--status-none); color: white; }
+        .toast.info { background: var(--fairy-tails-blue); color: white; }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Preview Styling */
+        .preview-pen {
             margin-bottom: 15px;
-            text-align: center;
         }
-
-        .preview-pen { margin-bottom: 15px; }
 
         .preview-pen-title {
-            font-size: 0.9rem;
             font-weight: 700;
-            color: var(--text-secondary);
+            color: var(--accent-secondary);
             margin-bottom: 8px;
             padding-bottom: 5px;
             border-bottom: 1px solid var(--bg-pen);
@@ -848,563 +849,50 @@
 
         .preview-dog {
             display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 10px;
+            justify-content: space-between;
+            padding: 8px;
             background: var(--bg-primary);
             border-radius: 6px;
-            margin-bottom: 6px;
-            flex-wrap: wrap;
+            margin-bottom: 5px;
         }
 
-        .preview-dog-name { flex: 1; font-weight: 600; min-width: 100px; }
+        .preview-dog-name { font-weight: 600; }
+        .preview-dog-status { color: var(--text-secondary); font-size: 0.85rem; }
 
-        .preview-dog-status {
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 700;
-        }
-
-        .preview-dog-extras {
+        .preview-extras {
+            margin-top: 3px;
             font-size: 0.75rem;
             color: var(--accent-secondary);
-            font-weight: 700;
         }
 
-        /* Toast Notifications */
-        .toast-container {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 2000;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .toast {
-            background: var(--bg-secondary);
-            border-radius: 8px;
-            padding: 14px 18px;
-            box-shadow: var(--shadow);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            animation: slideIn 0.3s ease;
-            max-width: 300px;
-            font-size: 0.9rem;
-        }
-
-        .toast.success { border-left: 4px solid var(--status-all); }
-        .toast.error { border-left: 4px solid var(--status-none); }
-        .toast.info { border-left: 4px solid var(--sync-active); }
-
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-
-        /* ============================================
-           MOBILE RESPONSIVE
-           ============================================ */
-
-        @media (max-width: 900px) {
-            .layout { 
-                grid-template-columns: 1fr; 
-            }
-            
-            .sidebar { 
-                position: static; 
-                order: 1; 
-            }
-            
-            .main-content { 
-                order: 2; 
-            }
-            
-            h1 { font-size: 1.3rem; }
-            
+        /* Mobile Adjustments */
+        @media (max-width: 600px) {
             .container { padding: 10px; }
+            h1 { font-size: 1.2rem; }
+            .header-logo { width: 32px; height: 32px; }
             
             .pen {
-                width: 145px;
-                min-width: 145px;
+                width: 150px;
+                min-width: 150px;
                 min-height: 180px;
             }
-        }
-
-        @media (max-width: 500px) {
-            .container { padding: 8px; }
             
-            h1 { font-size: 1.2rem; letter-spacing: 1px; }
-            
-            .layout { gap: 12px; }
-            
-            .entry-section, .staging-section, .bin-section {
-                padding: 12px;
+            .action-bar {
+                grid-template-columns: 1fr 1fr;
             }
             
-            .pens-section { padding: 12px; }
-            
-            .pen {
-                width: 135px;
-                min-width: 135px;
-                min-height: 170px;
-                padding: 8px;
+            .action-bar .btn:last-child {
+                grid-column: span 2;
             }
-            
-            .pen-header { font-size: 0.75rem; }
-            
-            .pen-dog { padding: 8px; }
-            
-            .pen-dog-name { font-size: 0.75rem; }
-            
-            .pen-dog-controls select { 
-                padding: 6px 4px; 
-                font-size: 12px;
-                min-width: 45px;
-            }
-            
-            .toggle-btn {
-                padding: 6px 8px;
-                font-size: 0.65rem;
-            }
-            
-            .staging-area {
-                min-height: 80px;
-                max-height: 200px;
-            }
-            
-            .action-bar { 
-                flex-direction: column; 
-            }
-            
-            .action-bar .btn { 
-                width: 100%; 
-                padding: 18px 12px;
-                font-size: 15px;
-            }
-            
-            .modal { max-height: 90vh; }
-            
-            .toast-container {
-                bottom: 10px;
-                right: 10px;
-                left: 10px;
-            }
-            
-            .toast {
-                max-width: 100%;
-            }
-        }
-
-        /* Landscape phone */
-        @media (max-height: 500px) and (orientation: landscape) {
-            .staging-area {
-                max-height: 120px;
-            }
-            
-            .pen {
-                min-height: 150px;
-            }
-        }
-
-        /* ============================================
-           TV / WHITEBOARD MODE
-           ============================================ */
-
-        /* TV Mode Button - shown in normal mode */
-        .tv-mode-btn {
-            position: fixed;
-            top: 15px;
-            right: 15px;
-            z-index: 100;
-            background: var(--bg-pen);
-            border: 2px solid var(--sync-active);
-            color: var(--sync-active);
-            padding: 10px 16px;
-            border-radius: 8px;
-            font-family: inherit;
-            font-size: 0.85rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .tv-mode-btn:hover {
-            background: var(--sync-active);
-            color: white;
-            transform: scale(1.05);
-        }
-
-        /* Hide TV button in TV mode */
-        body.tv-mode .tv-mode-btn {
-            display: none;
-        }
-
-        /* Exit TV Mode Button - only shown in TV mode */
-        .exit-tv-btn {
-            display: none;
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            z-index: 100;
-            background: var(--accent-primary);
-            border: none;
-            color: white;
-            padding: 8px 14px;
-            border-radius: 6px;
-            font-family: inherit;
-            font-size: 0.75rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            opacity: 0.7;
-        }
-
-        .exit-tv-btn:hover {
-            background: #d63850;
-            opacity: 1;
-        }
-
-        body.tv-mode .exit-tv-btn {
-            display: block;
-        }
-
-        /* TV Mode refresh indicator */
-        .tv-refresh-indicator {
-            display: none;
-            position: fixed;
-            bottom: 10px;
-            left: 10px;
-            background: var(--bg-secondary);
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 0.7rem;
-            color: var(--text-secondary);
-            z-index: 100;
-            opacity: 0.7;
-        }
-
-        body.tv-mode .tv-refresh-indicator {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .tv-refresh-indicator .refresh-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: var(--status-all);
-            animation: pulse 2s infinite;
-        }
-
-        /* TV MODE - Hide all editing controls */
-        body.tv-mode .sidebar {
-            display: none !important;
-        }
-
-        body.tv-mode .action-bar {
-            display: none !important;
-        }
-
-        body.tv-mode .pen-dog-remove {
-            display: none !important;
-        }
-
-        body.tv-mode .pen-dog-controls {
-            display: none !important;
-        }
-
-        body.tv-mode .supplement-panel,
-        body.tv-mode .supplement-panel.active,
-        body.tv-mode .supplement-checkboxes,
-        body.tv-mode .supplement-checkbox {
-            display: none !important;
-        }
-
-        body.tv-mode .prescription-panel,
-        body.tv-mode .prescription-panel.active,
-        body.tv-mode .prescription-input {
-            display: none !important;
-        }
-
-        body.tv-mode .toast-container {
-            display: none !important;
-        }
-
-        /* TV MODE - Full viewport, no scroll */
-        body.tv-mode {
-            height: 100vh;
-            width: 100vw;
-            overflow: hidden;
-            margin: 0;
-            padding: 0;
-        }
-
-        body.tv-mode .container {
-            height: 100vh;
-            width: 100vw !important;
-            max-width: 100vw !important;
-            margin: 0 !important;
-            padding: 15px 25px;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            min-height: 0;
-            box-sizing: border-box;
-        }
-
-        body.tv-mode .layout {
-            grid-template-columns: 1fr;
-            flex: 1;
-            min-height: 0;
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-        }
-
-        body.tv-mode .main-content {
-            flex: 1;
-            min-height: 0;
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-        }
-
-        /* TV MODE - Compact header */
-        body.tv-mode h1 {
-            font-size: calc(1.2rem + 1vw);
-            margin-bottom: 8px;
-            flex-shrink: 0;
-        }
-
-        body.tv-mode .status-bar {
-            font-size: calc(0.65rem + 0.35vw);
-            padding: 6px 14px;
-            margin-bottom: 10px;
-            flex-shrink: 0;
-        }
-
-        body.tv-mode .sync-indicator {
-            width: 10px;
-            height: 10px;
-        }
-
-        /* TV Mode - Compact meal display */
-        .tv-meal-display {
-            display: none;
-            text-align: center;
-            font-size: calc(0.9rem + 0.6vw);
-            font-weight: 700;
-            color: var(--accent-secondary);
-            margin-bottom: 10px;
-            padding: 10px 15px;
-            background: var(--bg-secondary);
-            border-radius: 8px;
-            flex-shrink: 0;
-        }
-
-        body.tv-mode .tv-meal-display {
-            display: block;
-        }
-
-        /* TV MODE - Pens fill remaining space */
-        body.tv-mode .pens-section {
-            padding: 15px 20px;
-            flex: 1;
-            min-height: 0;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            width: 100%;
-            box-sizing: border-box;
-        }
-
-        body.tv-mode .pen-row-label {
-            font-size: calc(0.75rem + 0.5vw);
-            margin-bottom: 8px;
-            flex-shrink: 0;
-        }
-
-        body.tv-mode .pen-row-label:not(:first-child) {
-            margin-top: 10px;
-        }
-
-        body.tv-mode .swipe-hint {
-            display: none;
-        }
-
-        body.tv-mode .pen-row-scroll {
-            overflow: hidden;
-            flex: 1;
-            min-height: 0;
-            padding-bottom: 0;
-            margin: 0;
-            width: 100%;
-        }
-
-        body.tv-mode .pen-row {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: calc(10px + 0.5vw);
-            min-width: auto;
-            height: 100%;
-            width: 100%;
-        }
-
-        body.tv-mode .pen {
-            width: 100%;
-            min-width: 0;
-            min-height: 0;
-            height: 100%;
-            padding: calc(8px + 0.4vw);
-            scroll-snap-align: none;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            box-sizing: border-box;
-        }
-
-        body.tv-mode .pen-header {
-            font-size: calc(0.7rem + 0.4vw);
-            padding-bottom: 6px;
-            flex-shrink: 0;
-        }
-
-        body.tv-mode .pen-dogs {
-            gap: calc(5px + 0.25vw);
-            flex: 1;
-            overflow: hidden;
-        }
-
-        body.tv-mode .pen-dog {
-            padding: calc(6px + 0.3vw) calc(8px + 0.3vw);
-            border-left-width: 5px;
-            cursor: default;
-            flex-shrink: 0;
-        }
-
-        body.tv-mode .pen-dog-header {
-            margin-bottom: 0;
-        }
-
-        body.tv-mode .pen-dog-name {
-            font-size: calc(0.6rem + 0.3vw);
-            cursor: default;
-            touch-action: auto;
-            min-height: auto;
-            padding: 0;
-        }
-
-        /* TV Mode - Disable drag visual feedback */
-        body.tv-mode .pen:hover {
-            border-color: transparent;
-        }
-
-        body.tv-mode .pen-dog:hover {
-            background: var(--bg-secondary);
-        }
-
-        /* TV Mode - Dynamic scaling classes (applied via JS) */
-        body.tv-mode.tv-scale-xs .pen-dog-name { font-size: calc(0.55rem + 0.3vw); }
-        body.tv-mode.tv-scale-xs .pen-dog { padding: 4px 6px; }
-        body.tv-mode.tv-scale-xs .pen-dogs { gap: 3px; }
-        body.tv-mode.tv-scale-xs .pen-header { font-size: calc(0.6rem + 0.3vw); }
-
-        body.tv-mode.tv-scale-sm .pen-dog-name { font-size: calc(0.65rem + 0.35vw); }
-        body.tv-mode.tv-scale-sm .pen-dog { padding: 5px 8px; }
-        body.tv-mode.tv-scale-sm .pen-dogs { gap: 4px; }
-        body.tv-mode.tv-scale-sm .pen-header { font-size: calc(0.65rem + 0.35vw); }
-
-        body.tv-mode.tv-scale-md .pen-dog-name { font-size: calc(0.75rem + 0.4vw); }
-        body.tv-mode.tv-scale-md .pen-dog { padding: 6px 10px; }
-        body.tv-mode.tv-scale-md .pen-dogs { gap: 6px; }
-        body.tv-mode.tv-scale-md .pen-header { font-size: calc(0.7rem + 0.4vw); }
-
-        body.tv-mode.tv-scale-lg .pen-dog-name { font-size: calc(0.9rem + 0.5vw); }
-        body.tv-mode.tv-scale-lg .pen-dog { padding: 10px 14px; }
-        body.tv-mode.tv-scale-lg .pen-dogs { gap: 8px; }
-        body.tv-mode.tv-scale-lg .pen-header { font-size: calc(0.8rem + 0.45vw); }
-
-        body.tv-mode.tv-scale-xl .pen-dog-name { font-size: calc(1rem + 0.6vw); }
-        body.tv-mode.tv-scale-xl .pen-dog { padding: 14px 18px; }
-        body.tv-mode.tv-scale-xl .pen-dogs { gap: 10px; }
-        body.tv-mode.tv-scale-xl .pen-header { font-size: calc(0.9rem + 0.5vw); }
-
-        /* TV Mode Indicators - Hidden in normal mode */
-        .tv-indicators {
-            display: none;
-        }
-
-        .tv-indicator {
-            display: inline-block;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 0.65rem;
-            font-weight: 700;
-            margin-left: 4px;
-        }
-
-        .tv-indicator-p {
-            background: var(--accent-primary);
-            color: white;
-        }
-
-        .tv-indicator-s {
-            background: var(--accent-secondary);
-            color: white;
-        }
-
-        /* Show TV indicators in TV mode */
-        body.tv-mode .tv-indicators {
-            display: inline-flex;
-            gap: 4px;
-            margin-left: auto;
-        }
-
-        body.tv-mode .tv-indicator {
-            font-size: calc(0.5rem + 0.2vw);
-            padding: calc(2px + 0.1vw) calc(4px + 0.2vw);
-        }
-
-        /* Scale TV indicators with scale classes */
-        body.tv-mode.tv-scale-xs .tv-indicator { font-size: 0.45rem; padding: 1px 2px; }
-        body.tv-mode.tv-scale-sm .tv-indicator { font-size: 0.5rem; padding: 1px 3px; }
-        body.tv-mode.tv-scale-md .tv-indicator { font-size: 0.55rem; padding: 2px 4px; }
-        body.tv-mode.tv-scale-lg .tv-indicator { font-size: 0.65rem; padding: 2px 5px; }
-        body.tv-mode.tv-scale-xl .tv-indicator { font-size: 0.75rem; padding: 3px 6px; }
-
-        /* TV Mode - Ensure pen-dog-header displays inline for compact layout */
-        body.tv-mode .pen-dog-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 4px;
         }
     </style>
 </head>
 <body>
-    <!-- TV Mode Toggle Buttons -->
-    <button class="tv-mode-btn" id="tvModeBtn" onclick="enterTvMode()">📺 TV Mode</button>
-    <button class="exit-tv-btn" id="exitTvBtn" onclick="exitTvMode()">✕ Exit TV Mode</button>
-    
-    <!-- TV Mode Auto-refresh Indicator -->
-    <div class="tv-refresh-indicator" id="tvRefreshIndicator">
-        <div class="refresh-dot"></div>
-        <span>Auto-refreshing</span>
-    </div>
-
     <div class="container">
-        <h1>🍽️ Feeding Report</h1>
-        
-        <!-- TV Mode Meal Display - only visible in TV mode -->
-        <div class="tv-meal-display" id="tvMealDisplay">Lunch</div>
+        <div class="header">
+            <img src="https://i.ibb.co/whdBKp0L/Logo-1.jpg" alt="Fairy Tails" class="header-logo">
+            <h1>🍽️ Feeding Report</h1>
+        </div>
         
         <div class="status-bar connected" id="statusBar">
             <div class="sync-indicator" id="syncIndicator"></div>
@@ -1422,7 +910,7 @@
                     </div>
                 </div>
 
-                <!-- Delete Bin - NOW ABOVE MEAL TYPE -->
+                <!-- Delete Bin -->
                 <div class="bin-section">
                     <div class="bin" id="deleteBin">
                         <span class="bin-icon">🗑️</span>
@@ -1453,7 +941,7 @@
             </div>
 
             <div class="main-content">
-                <!-- Pens Section - Horizontal Scrollable -->
+                <!-- Pens Section -->
                 <div class="pens-section">
                     <div class="pen-row-label">
                         Top Pens
@@ -1501,7 +989,7 @@
 
     <script>
         // ============================================
-        // CONFIGURATION - NO CHANGES
+        // CONFIGURATION
         // ============================================
         
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwP74AXOe1cZmHKTxi9KbMhZJU48EHRFI7NQ6Og65_FcTVB1sMQuqgkPKIkr7Fm7e40mw/exec';
@@ -1530,22 +1018,25 @@
         };
 
         // ============================================
-        // STATE - NO CHANGES
+        // STATE
         // ============================================
         
         let dogNameList = JOTFORM_DOG_NAMES;
         let masterDogList = [];
         let dogs = [];
         let pens = {};
-        let draggedElement = null;
         let draggedDogId = null;
         let draggedFromPen = null;
         let ghostElement = null;
         let dragTimeout = null;
         let touchStartPos = null;
         let isDragging = false;
+        let pendingDragInfo = null;
+        
+        // ANDROID FIX: Reduced thresholds for better scroll detection
         const LONG_PRESS_DURATION = 180; // ms to hold before drag starts
-        const SCROLL_THRESHOLD = 12; // px movement to cancel drag
+        const SCROLL_THRESHOLD = 5;      // REDUCED from 12 to 5 - faster scroll detection
+        
         let isOnline = false;
         let currentMealType = 'Lunch';
         
@@ -1556,11 +1047,6 @@
         let pendingDogIds = new Set();
         let initialLoadComplete = false;
 
-        // TV Mode state
-        let isTvMode = false;
-        let tvRefreshInterval = null;
-        const TV_REFRESH_INTERVAL = 3000; // Faster refresh for TV display
-
         // ============================================
         // INITIALIZATION
         // ============================================
@@ -1569,17 +1055,7 @@
             initPens();
             setupEventListeners();
             initialLoad();
-            // Check for TV mode after DOM is ready
-            checkTvModeOnLoad();
         });
-
-        // Check URL for TV mode parameter
-        function checkTvModeOnLoad() {
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('mode') === 'tv') {
-                activateTvMode();
-            }
-        }
 
         async function initialLoad() {
             updateStatus('Connecting...', 'syncing');
@@ -1589,10 +1065,7 @@
             
             setTimeout(() => {
                 initialLoadComplete = true;
-                // Only start regular sync polling if not in TV mode
-                if (!isTvMode) {
-                    startSyncPolling();
-                }
+                startSyncPolling();
             }, INITIAL_LOAD_DELAY);
         }
 
@@ -1607,6 +1080,7 @@
                 bottomPensContainer.innerHTML += createPenHTML(`bottom-${i}`, `Bottom ${i}`);
             }
 
+            // Set up drop zone listeners
             document.querySelectorAll('.pen').forEach(pen => {
                 pen.addEventListener('pointerenter', handlePenEnter);
                 pen.addEventListener('pointerleave', handlePenLeave);
@@ -1635,14 +1109,13 @@
                 if (e.key === 'Enter') addDog();
             });
             
-            // ADDED: Passive event delegation for drag handling
+            // ANDROID FIX: Passive event delegation for drag handling
             // This allows native touch scrolling while still detecting long-press for drag
             document.addEventListener('pointerdown', handleDelegatedPointerDown, { passive: true });
         }
         
-        // ADDED: Delegated pointer handler - finds draggable elements
+        // Delegated pointer handler - finds draggable elements
         function handleDelegatedPointerDown(e) {
-            // Find the draggable element (dog-card or pen-dog-name)
             const draggable = e.target.closest('[data-draggable="true"]');
             if (!draggable) return;
             
@@ -1651,15 +1124,12 @@
             
             if (!dogId) return;
             
-            // Store the event coordinates for later use in startDrag
             const coords = { x: e.clientX, y: e.clientY };
-            
-            // Call the existing handler with stored coordinates
             handlePointerDown(coords, dogId, penId);
         }
 
         // ============================================
-        // SYNC FUNCTIONS - NO CHANGES
+        // SYNC FUNCTIONS
         // ============================================
 
         function pauseSync() {
@@ -1699,25 +1169,20 @@
                 if (result.success && result.version > lastSyncVersion) {
                     applyRemoteState(result);
                     lastSyncVersion = result.version;
+                    updateStatus(`✓ Synced (${dogs.length} dogs)`, 'connected');
                 }
-                
-                updateStatus(`✓ Synced (${dogs.length} dogs)`, 'connected');
             } catch (error) {
                 console.error('Sync poll error:', error);
             }
         }
 
-        function applyRemoteState(sessionData) {
-            if (pendingDogIds.size > 0 || isSyncPaused()) {
-                return;
-            }
-            
-            if (sessionData.mealType) {
-                currentMealType = sessionData.mealType;
+        function applyRemoteState(result) {
+            if (result.mealType) {
+                currentMealType = result.mealType;
                 document.getElementById('mealType').value = currentMealType;
             }
             
-            dogs = sessionData.dogs.map(d => ({
+            dogs = result.dogs.map(d => ({
                 id: d.id,
                 inputName: d.inputName,
                 matchedName: d.matchedName,
@@ -1733,7 +1198,7 @@
                 pens[penId] = [];
             }
             
-            sessionData.dogs.forEach(d => {
+            result.dogs.forEach(d => {
                 if (d.penId && pens[d.penId]) {
                     pens[d.penId].push(d.id);
                 }
@@ -1753,36 +1218,7 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    if (result.mealType) {
-                        currentMealType = result.mealType;
-                        document.getElementById('mealType').value = currentMealType;
-                    }
-                    
-                    dogs = result.dogs.map(d => ({
-                        id: d.id,
-                        inputName: d.inputName,
-                        matchedName: d.matchedName,
-                        possibleMatches: d.possibleMatches || [],
-                        status: d.status || 'all',
-                        prescription: d.prescription || false,
-                        prescriptionComment: d.prescriptionComment || '',
-                        supplements: d.supplements || false,
-                        supplementTypes: d.supplementTypes || []
-                    }));
-                    
-                    for (const penId of Object.keys(pens)) {
-                        pens[penId] = [];
-                    }
-                    
-                    result.dogs.forEach(d => {
-                        if (d.penId && pens[d.penId]) {
-                            pens[d.penId].push(d.id);
-                        }
-                    });
-                    
-                    renderAllPens();
-                    renderStagingArea();
-                    
+                    applyRemoteState(result);
                     lastSyncVersion = result.version;
                     isOnline = true;
                     updateStatus(`✓ Connected (${result.count} dogs)`, 'connected');
@@ -1794,7 +1230,7 @@
         }
 
         // ============================================
-        // API CALLS - NO CHANGES
+        // API CALLS
         // ============================================
 
         async function loadDogList() {
@@ -1977,7 +1413,7 @@
         }
 
         // ============================================
-        // NAME MATCHING - NO CHANGES
+        // NAME MATCHING
         // ============================================
 
         function matchDogName(inputName) {
@@ -2026,7 +1462,7 @@
         }
 
         // ============================================
-        // DOG MANAGEMENT - NO CHANGES
+        // DOG MANAGEMENT
         // ============================================
 
         async function addDog() {
@@ -2050,160 +1486,140 @@
                 supplementTypes: []
             };
             
+            if (matches.length === 0) {
+                dog.possibleMatches = fuzzyMatchDogName(name);
+            }
+            
             dogs.push(dog);
-            renderStagingArea();
             input.value = '';
-            input.focus();
             
-            const result = await syncAddDog(dog);
+            renderStagingArea();
+            showToast(dog.matchedName ? `Added ${dog.matchedName}` : `Added ${name} - select from dropdown`, 'success');
             
-            if (result && result.success) {
-                showToast('Dog added', 'success');
-            } else {
-                showToast('Saved locally - will sync shortly', 'info');
-            }
-            
-            updateStatus(`✓ Synced (${dogs.length} dogs)`, 'connected');
-        }
-
-        async function selectStagingMatch(dogId, matchedName) {
-            const dog = dogs.find(d => d.id === dogId);
-            if (dog && matchedName) {
-                pauseSync();
-                dog.matchedName = matchedName;
-                renderStagingArea();
-                await syncUpdateDog(dogId, { matchedName: matchedName });
-            }
+            await syncAddDog(dog);
         }
 
         async function deleteDog(dogId) {
             pauseSync();
             
+            dogs = dogs.filter(d => d.id !== dogId);
+            
             for (const penId of Object.keys(pens)) {
                 pens[penId] = pens[penId].filter(id => id !== dogId);
             }
-            dogs = dogs.filter(d => d.id !== dogId);
-            renderStagingArea();
+            
             renderAllPens();
+            renderStagingArea();
+            showToast('Dog removed', 'info');
             
-            const result = await syncDeleteDog(dogId);
-            
-            if (result && result.success) {
-                showToast('Dog removed', 'success');
-                updateStatus(`✓ Synced (${dogs.length} dogs)`, 'connected');
-            }
+            await syncDeleteDog(dogId);
         }
 
         function getDogPen(dogId) {
-            for (const [penId, penDogs] of Object.entries(pens)) {
-                if (penDogs.includes(dogId)) return penId;
+            for (const [penId, dogIds] of Object.entries(pens)) {
+                if (dogIds.includes(dogId)) return penId;
             }
             return null;
         }
 
-        async function updateMealType() {
-            const mealType = document.getElementById('mealType').value;
-            currentMealType = mealType;
-            await syncMealType(mealType);
-            showToast('Meal type updated', 'success');
-            // Update TV display if in TV mode
-            if (typeof updateTvMealDisplay === 'function') {
-                updateTvMealDisplay();
+        async function moveDogToPen(dogId, newPenId) {
+            pauseSync();
+            
+            for (const penId of Object.keys(pens)) {
+                pens[penId] = pens[penId].filter(id => id !== dogId);
             }
+            
+            if (newPenId && pens[newPenId]) {
+                pens[newPenId].push(dogId);
+            }
+            
+            renderAllPens();
+            renderStagingArea();
+            
+            await syncUpdateDog(dogId, { penId: newPenId || '' });
+        }
+
+        async function updateMealType() {
+            const select = document.getElementById('mealType');
+            currentMealType = select.value;
+            await syncMealType(currentMealType);
+            showToast(`Meal set to ${currentMealType}`, 'info');
+        }
+
+        async function resolveMatch(dogId, selectedName) {
+            pauseSync();
+            
+            const dog = dogs.find(d => d.id === dogId);
+            if (!dog) return;
+            
+            dog.matchedName = selectedName;
+            dog.possibleMatches = [selectedName];
+            
+            renderStagingArea();
+            renderAllPens();
+            
+            await syncUpdateDog(dogId, { matchedName: selectedName, possibleMatches: [selectedName] });
         }
 
         // ============================================
-        // RENDERING - NO CHANGES
+        // RENDERING
         // ============================================
 
         function renderStagingArea() {
-            const staging = document.getElementById('stagingArea');
-            const dogsInPens = [];
-            for (const penDogs of Object.values(pens)) {
-                dogsInPens.push(...penDogs);
-            }
+            const container = document.getElementById('stagingArea');
+            const assignedDogIds = Object.values(pens).flat();
+            const unassignedDogs = dogs.filter(d => !assignedDogIds.includes(d.id));
             
-            const unassignedDogs = dogs.filter(d => !dogsInPens.includes(d.id));
             document.getElementById('stagingCount').textContent = unassignedDogs.length;
-
+            
             if (unassignedDogs.length === 0) {
-                staging.innerHTML = '<div class="empty-message">Type a dog name above to get started</div>';
+                container.innerHTML = '<div class="empty-message">All dogs assigned to pens! 🎉</div>';
                 return;
             }
-
-            staging.innerHTML = unassignedDogs.map(dog => {
-                if (dog.matchedName || dog.possibleMatches.length === 1) {
-                    const displayName = dog.matchedName || dog.possibleMatches[0];
-                    // MODIFIED: Removed inline onpointerdown - using passive event delegation instead
+            
+            container.innerHTML = unassignedDogs.map(dog => {
+                if (!dog.matchedName && dog.possibleMatches.length !== 1) {
                     return `
-                        <div class="dog-card" data-dog-id="${dog.id}" data-draggable="true"
-                             style="border-left-color: var(--status-${dog.status});">
-                            ${displayName}
-                        </div>
-                    `;
-                } else if (dog.possibleMatches.length === 0) {
-                    const fuzzyMatches = fuzzyMatchDogName(dog.inputName);
-                    if (fuzzyMatches.length > 0) {
-                        return `
-                            <div class="dog-card-unmatched">
+                        <div class="dog-card unmatched" data-dog-id="${dog.id}">
+                            <div style="width: 100%;">
                                 <div class="unmatched-header">
-                                    <span class="unmatched-name">⚠️ ${dog.inputName}</span>
+                                    <span class="unmatched-name">"${dog.inputName}"</span>
                                     <button class="unmatched-remove" onclick="deleteDog('${dog.id}')">×</button>
                                 </div>
-                                <select class="unmatched-select" onchange="selectStagingMatch('${dog.id}', this.value)">
-                                    <option value="">Select match...</option>
-                                    ${fuzzyMatches.map(m => `<option value="${m}">${m}</option>`).join('')}
-                                </select>
+                                ${dog.possibleMatches.length > 0 ? `
+                                    <select class="unmatched-select" onchange="resolveMatch('${dog.id}', this.value)">
+                                        <option value="">Select match...</option>
+                                        ${dog.possibleMatches.map(m => `<option value="${m}">${m}</option>`).join('')}
+                                    </select>
+                                ` : '<div class="unmatched-error">No matches found</div>'}
                             </div>
-                        `;
-                    } else {
-                        return `
-                            <div class="dog-card-unmatched">
-                                <div class="unmatched-header">
-                                    <span class="unmatched-name">❌ ${dog.inputName}</span>
-                                    <button class="unmatched-remove" onclick="deleteDog('${dog.id}')">×</button>
-                                </div>
-                                <div class="unmatched-error">No match found</div>
-                            </div>
-                        `;
-                    }
-                } else {
-                    return `
-                        <div class="dog-card-unmatched">
-                            <div class="unmatched-header">
-                                <span class="unmatched-name">⚠️ ${dog.inputName}</span>
-                                <button class="unmatched-remove" onclick="deleteDog('${dog.id}')">×</button>
-                            </div>
-                            <select class="unmatched-select" onchange="selectStagingMatch('${dog.id}', this.value)">
-                                <option value="">Select match...</option>
-                                ${dog.possibleMatches.map(m => `<option value="${m}">${m}</option>`).join('')}
-                            </select>
                         </div>
                     `;
                 }
+                
+                const displayName = dog.matchedName || dog.possibleMatches[0];
+                return `
+                    <div class="dog-card" data-dog-id="${dog.id}" data-draggable="true">
+                        ${displayName}
+                    </div>
+                `;
             }).join('');
         }
 
         function renderPen(penId) {
             const container = document.getElementById(`pen-${penId}`);
-            const penDogs = pens[penId];
-
-            if (penDogs.length === 0) {
+            const dogIds = pens[penId];
+            
+            if (dogIds.length === 0) {
                 container.innerHTML = '';
                 return;
             }
-
-            container.innerHTML = penDogs.map(dogId => {
+            
+            container.innerHTML = dogIds.map(dogId => {
                 const dog = dogs.find(d => d.id === dogId);
                 if (!dog) return '';
-
-                const displayName = dog.matchedName || (dog.possibleMatches.length === 1 ? dog.possibleMatches[0] : dog.inputName);
                 
-                // TV mode indicators
-                const tvIndicators = [];
-                if (dog.prescription) tvIndicators.push('<span class="tv-indicator tv-indicator-p">+P</span>');
-                if (dog.supplements) tvIndicators.push('<span class="tv-indicator tv-indicator-s">+S</span>');
-                const tvIndicatorHtml = tvIndicators.length > 0 ? `<span class="tv-indicators">${tvIndicators.join('')}</span>` : '';
+                const displayName = dog.matchedName || (dog.possibleMatches.length === 1 ? dog.possibleMatches[0] : dog.inputName);
                 
                 return `
                     <div class="pen-dog status-${dog.status}" data-dog-id="${dog.id}">
@@ -2211,7 +1627,6 @@
                             <span class="pen-dog-name" data-dog-id="${dog.id}" data-pen-id="${penId}" data-draggable="true">
                                 ${displayName}
                             </span>
-                            ${tvIndicatorHtml}
                             <button class="pen-dog-remove" onclick="deleteDog('${dog.id}')">×</button>
                         </div>
                         <div class="pen-dog-controls">
@@ -2253,7 +1668,7 @@
         }
 
         // ============================================
-        // DOG STATUS UPDATES - NO CHANGES
+        // DOG STATUS UPDATES
         // ============================================
 
         async function updateDogStatus(dogId, status) {
@@ -2311,7 +1726,7 @@
         }
 
         // ============================================
-        // DRAG AND DROP - IMPROVED WITH LONG-PRESS, GHOST & HAPTICS
+        // DRAG AND DROP - ANDROID FIXED VERSION
         // ============================================
 
         function triggerHaptic(pattern = 'light') {
@@ -2361,7 +1776,7 @@
             }
         }
 
-        // MODIFIED: Now accepts coords object {x, y} instead of event
+        // ANDROID FIX: Accepts coords object {x, y} instead of event
         function handlePointerDown(coords, dogId, fromPen = null) {
             // Store initial touch position
             touchStartPos = { x: coords.x, y: coords.y };
@@ -2369,25 +1784,31 @@
             // Store drag info for startDrag
             pendingDragInfo = { dogId, fromPen, coords };
             
+            // Clear any existing timeout
+            if (dragTimeout) clearTimeout(dragTimeout);
+            
             // Set up long-press timeout
             dragTimeout = setTimeout(() => {
-                startDrag(pendingDragInfo);
+                if (pendingDragInfo) {
+                    startDrag(pendingDragInfo);
+                }
             }, LONG_PRESS_DURATION);
             
-            // Listen for movement (scrolling) or release - PASSIVE so scroll isn't blocked
+            // ANDROID FIX: Use { passive: true } to ensure browser scroll isn't blocked
             document.addEventListener('pointermove', checkForScroll, { passive: true });
             document.addEventListener('pointerup', cancelDragSetup);
             document.addEventListener('pointercancel', cancelDragSetup);
         }
-        
-        // ADDED: Store pending drag info
-        let pendingDragInfo = null;
 
+        // ANDROID FIX: Lower threshold for faster scroll detection
         function checkForScroll(e) {
             if (!touchStartPos) return;
-            const distance = Math.hypot(e.clientX - touchStartPos.x, e.clientY - touchStartPos.y);
-            if (distance > SCROLL_THRESHOLD) {
-                // User is scrolling, cancel drag setup
+            
+            const dx = Math.abs(e.clientX - touchStartPos.x);
+            const dy = Math.abs(e.clientY - touchStartPos.y);
+            
+            // ANDROID FIX: Reduced to 5px - if user moves this much, it's a scroll
+            if (dx > SCROLL_THRESHOLD || dy > SCROLL_THRESHOLD) {
                 cancelDragSetup();
             }
         }
@@ -2396,19 +1817,19 @@
             clearTimeout(dragTimeout);
             dragTimeout = null;
             touchStartPos = null;
-            pendingDragInfo = null;  // ADDED: Clear pending drag info
+            pendingDragInfo = null;
             document.removeEventListener('pointermove', checkForScroll);
             document.removeEventListener('pointerup', cancelDragSetup);
             document.removeEventListener('pointercancel', cancelDragSetup);
         }
 
-        // MODIFIED: Now accepts dragInfo object with {dogId, fromPen, coords}
+        // ANDROID FIX: Accepts dragInfo object with {dogId, fromPen, coords}
         function startDrag(dragInfo) {
-            // MODIFIED: Use body style to prevent scroll during drag (not e.preventDefault)
-            document.body.style.overflow = 'hidden';
-            document.body.style.touchAction = 'none';
+            // ANDROID FIX: Add class to body to lock scrolling ONLY after drag confirmed
+            document.body.classList.add('is-dragging');
             
-            cancelDragSetup(); // Clean up the setup listeners
+            // Clean up the setup listeners
+            cancelDragSetup();
             
             isDragging = true;
             draggedDogId = dragInfo.dogId;
@@ -2447,7 +1868,7 @@
                 const elemBelow = document.elementFromPoint(e.clientX, e.clientY);
                 ghostElement.style.display = '';
                 
-                // Update hover states manually for better mobile feedback
+                // Update hover states
                 document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
                 
                 if (elemBelow) {
@@ -2471,9 +1892,8 @@
             document.removeEventListener('pointerup', endDrag);
             document.removeEventListener('pointercancel', endDrag);
             
-            // ADDED: Restore scroll capability
-            document.body.style.overflow = '';
-            document.body.style.touchAction = '';
+            // ANDROID FIX: Remove the body scroll lock
+            document.body.classList.remove('is-dragging');
             
             // Clean up visual states
             document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
@@ -2498,168 +1918,163 @@
                     const pen = elemBelow.closest('.pen');
                     const penId = pen.dataset.penId;
                     triggerHaptic('success');
-                    await dropDogInPen(draggedDogId, penId);
+                    await moveDogToPen(draggedDogId, penId);
+                    showToast(`Moved to ${penId.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}`, 'success');
                 } else if (elemBelow.closest('#stagingArea') || elemBelow.closest('.staging-section')) {
-                    triggerHaptic('light');
-                    await moveDogToStaging(draggedDogId);
+                    if (draggedFromPen) {
+                        triggerHaptic('light');
+                        await moveDogToPen(draggedDogId, null);
+                        showToast('Returned to staging', 'info');
+                    }
                 }
             }
-
+            
             isDragging = false;
             draggedDogId = null;
             draggedFromPen = null;
         }
 
-        function handlePenEnter(e) { if (draggedDogId) { e.currentTarget.classList.add('drag-over'); triggerHaptic('light'); } }
-        function handlePenLeave(e) { e.currentTarget.classList.remove('drag-over'); }
-        function handleBinEnter(e) { if (draggedDogId) { document.getElementById('deleteBin').classList.add('drag-over'); triggerHaptic('light'); } }
-        function handleBinLeave(e) { document.getElementById('deleteBin').classList.remove('drag-over'); }
-        function handleStagingEnter(e) { if (draggedDogId) { document.getElementById('stagingArea').classList.add('drag-over'); triggerHaptic('light'); } }
-        function handleStagingLeave(e) { document.getElementById('stagingArea').classList.remove('drag-over'); }
-
-        async function dropDogInPen(dogId, penId) {
-            if (pens[penId].length >= 5) {
-                showToast('Pen is full (max 5 dogs)', 'error');
-                return;
-            }
-
-            pauseSync();
-
-            if (draggedFromPen) {
-                pens[draggedFromPen] = pens[draggedFromPen].filter(id => id !== dogId);
-                renderPen(draggedFromPen);
-            }
-
-            if (!pens[penId].includes(dogId)) {
-                pens[penId].push(dogId);
-            }
-
-            renderPen(penId);
-            renderStagingArea();
-            await syncUpdateDog(dogId, { penId: penId });
+        // Drop zone hover handlers
+        function handlePenEnter(e) {
+            if (isDragging) e.currentTarget.classList.add('drag-over');
         }
 
-        async function moveDogToStaging(dogId) {
-            pauseSync();
-            
-            if (draggedFromPen) {
-                pens[draggedFromPen] = pens[draggedFromPen].filter(id => id !== dogId);
-                renderPen(draggedFromPen);
+        function handlePenLeave(e) {
+            e.currentTarget.classList.remove('drag-over');
+        }
+
+        function handleBinEnter(e) {
+            if (isDragging) document.getElementById('deleteBin').classList.add('drag-over');
+        }
+
+        function handleBinLeave(e) {
+            document.getElementById('deleteBin').classList.remove('drag-over');
+        }
+
+        function handleStagingEnter(e) {
+            if (isDragging && draggedFromPen) {
+                document.getElementById('stagingArea').classList.add('drag-over');
             }
-            renderStagingArea();
-            await syncUpdateDog(dogId, { penId: '' });
+        }
+
+        function handleStagingLeave(e) {
+            document.getElementById('stagingArea').classList.remove('drag-over');
         }
 
         // ============================================
-        // PREVIEW & SUBMIT - NO CHANGES
+        // PREVIEW & SUBMIT
         // ============================================
-
-        function getStatusLabel(status) {
-            return { 'all': 'All ✓', 'three-quarter': '¾', 'half': '½', 'quarter': '¼', 'none': 'None ⚠️' }[status] || status;
-        }
-
-        function getStatusColor(status) {
-            return { 'all': 'var(--status-all)', 'three-quarter': 'var(--status-three-quarter)', 'half': 'var(--status-half)', 'quarter': 'var(--status-quarter)', 'none': 'var(--status-none)' }[status] || 'var(--status-all)';
-        }
 
         function showPreview() {
-            const mealType = document.getElementById('mealType');
-            const mealLabel = mealType.options[mealType.selectedIndex].text;
-
-            let hasAnyDogs = false;
-            let previewHTML = `<div class="preview-meal-title">${mealLabel}</div>`;
-
-            for (const [penId, penDogs] of Object.entries(pens)) {
-                if (penDogs.length === 0) continue;
-                hasAnyDogs = true;
-
+            const modal = document.getElementById('previewModal');
+            const content = document.getElementById('previewContent');
+            
+            const penOrder = ['top-1', 'top-2', 'top-3', 'top-4', 'top-5', 'bottom-1', 'bottom-2', 'bottom-3', 'bottom-4', 'bottom-5'];
+            let html = `<p><strong>Meal:</strong> ${currentMealType}</p><hr style="border-color: var(--bg-pen); margin: 15px 0;">`;
+            
+            let totalDogs = 0;
+            
+            penOrder.forEach(penId => {
+                const dogIds = pens[penId];
+                if (dogIds.length === 0) return;
+                
                 const penLabel = penId.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase());
-                previewHTML += `<div class="preview-pen"><div class="preview-pen-title">${penLabel}</div>`;
-
-                for (const dogId of penDogs) {
+                html += `<div class="preview-pen"><div class="preview-pen-title">📍 ${penLabel}</div>`;
+                
+                dogIds.forEach(dogId => {
                     const dog = dogs.find(d => d.id === dogId);
-                    if (!dog) continue;
-
+                    if (!dog) return;
+                    
                     const displayName = dog.matchedName || (dog.possibleMatches.length === 1 ? dog.possibleMatches[0] : dog.inputName);
-                    const extras = [];
-                    if (dog.prescription) extras.push('+P');
-                    if (dog.supplements) extras.push('+S');
-
-                    previewHTML += `
+                    const statusLabel = FEEDING_STATUS_MAP[dog.status] || dog.status;
+                    
+                    let extras = [];
+                    if (dog.prescription) extras.push(`💊 ${dog.prescriptionComment || 'Prescription'}`);
+                    if (dog.supplements && dog.supplementTypes.length > 0) {
+                        const suppLabels = dog.supplementTypes.map(t => {
+                            const st = SUPPLEMENT_TYPES.find(s => s.id === t);
+                            return st ? st.label : t;
+                        });
+                        extras.push(`🌿 ${suppLabels.join(', ')}`);
+                    }
+                    
+                    html += `
                         <div class="preview-dog">
-                            <span class="preview-dog-name">${displayName}</span>
-                            <span class="preview-dog-status" style="background: ${getStatusColor(dog.status)}; color: white;">
-                                ${getStatusLabel(dog.status)}
-                            </span>
-                            ${extras.length > 0 ? `<span class="preview-dog-extras">${extras.join(' ')}</span>` : ''}
+                            <div>
+                                <div class="preview-dog-name">${displayName}</div>
+                                ${extras.length > 0 ? `<div class="preview-extras">${extras.join(' • ')}</div>` : ''}
+                            </div>
+                            <div class="preview-dog-status">${statusLabel}</div>
                         </div>
                     `;
-                }
-                previewHTML += '</div>';
+                    totalDogs++;
+                });
+                
+                html += '</div>';
+            });
+            
+            if (totalDogs === 0) {
+                html += '<p style="text-align: center; color: var(--text-secondary);">No dogs assigned to pens yet.</p>';
+            } else {
+                html += `<hr style="border-color: var(--bg-pen); margin: 15px 0;"><p><strong>Total:</strong> ${totalDogs} dogs</p>`;
             }
-
-            if (!hasAnyDogs) {
-                previewHTML += '<div class="empty-message">No dogs assigned to pens yet!</div>';
-            }
-
-            document.getElementById('previewContent').innerHTML = previewHTML;
-            document.getElementById('previewModal').classList.add('active');
+            
+            content.innerHTML = html;
+            modal.classList.add('active');
         }
 
-        function closePreview() { document.getElementById('previewModal').classList.remove('active'); }
-        async function confirmSubmit() { await submitReport(); }
+        function closePreview() {
+            document.getElementById('previewModal').classList.remove('active');
+        }
 
         async function submitReport() {
-            const mealType = document.getElementById('mealType').value;
-            const today = new Date();
+            showPreview();
+        }
 
-            let hasUnmatchedDogs = false;
-            for (const [penId, penDogs] of Object.entries(pens)) {
-                for (const dogId of penDogs) {
-                    const dog = dogs.find(d => d.id === dogId);
-                    if (!dog) continue;
-                    const finalName = dog.matchedName || (dog.possibleMatches.length === 1 ? dog.possibleMatches[0] : null);
-                    if (!finalName) hasUnmatchedDogs = true;
-                }
-            }
-
-            if (hasUnmatchedDogs) {
-                showToast('Please match all dog names before submitting', 'error');
-                return;
-            }
-
-            let dogCount = 0;
-            for (const penDogs of Object.values(pens)) dogCount += penDogs.length;
-
-            if (dogCount === 0) {
-                showToast('No dogs to submit! Assign dogs to pens first.', 'error');
-                return;
-            }
-
+        async function confirmSubmit() {
             closePreview();
-
-            if (!isOnline) {
-                showToast('Offline mode - cannot submit', 'error');
+            
+            const assignedDogs = [];
+            for (const [penId, dogIds] of Object.entries(pens)) {
+                dogIds.forEach(dogId => {
+                    const dog = dogs.find(d => d.id === dogId);
+                    if (dog) {
+                        assignedDogs.push({
+                            id: dog.id,
+                            name: dog.matchedName || (dog.possibleMatches.length === 1 ? dog.possibleMatches[0] : dog.inputName),
+                            status: dog.status,
+                            prescription: dog.prescription,
+                            prescriptionComment: dog.prescriptionComment,
+                            supplements: dog.supplements,
+                            supplementTypes: dog.supplementTypes,
+                            penId: penId
+                        });
+                    }
+                });
+            }
+            
+            if (assignedDogs.length === 0) {
+                showToast('No dogs to submit. Assign dogs to pens first.', 'error');
                 return;
             }
-
+            
             updateStatus('Submitting...', 'syncing');
             
             const result = await submitToBackend({
-                mealType: mealType,
-                date: { day: today.getDate(), month: today.getMonth() + 1, year: today.getFullYear() }
+                mealType: currentMealType,
+                dogs: assignedDogs
             });
-
+            
             if (result.success) {
                 showToast(`✅ ${result.dogsProcessed} dogs submitted! Check Telegram.`, 'success');
                 dogs = [];
                 for (const penId of Object.keys(pens)) pens[penId] = [];
                 renderAllPens();
                 renderStagingArea();
-                updateStatus('✓ Report submitted', 'connected');
+                updateStatus('✓ Submitted', 'connected');
             } else {
-                showToast(`❌ Error: ${result.error}`, 'error');
-                updateStatus('✓ Connected', 'connected');
+                showToast('❌ Submit failed: ' + (result.error || 'Unknown error'), 'error');
+                updateStatus('Submit failed', 'error');
             }
         }
 
@@ -2681,7 +2096,7 @@
         }
 
         // ============================================
-        // TOAST NOTIFICATIONS - NO CHANGES
+        // TOAST NOTIFICATIONS
         // ============================================
 
         function showToast(message, type = 'info') {
@@ -2691,205 +2106,6 @@
             toast.textContent = message;
             container.appendChild(toast);
             setTimeout(() => toast.remove(), 4000);
-        }
-
-        // ============================================
-        // TV / WHITEBOARD MODE
-        // ============================================
-
-        // Enter TV mode - redirects with URL parameter
-        function enterTvMode() {
-            const currentUrl = new URL(window.location.href);
-            currentUrl.searchParams.set('mode', 'tv');
-            window.location.href = currentUrl.toString();
-        }
-
-        // Exit TV mode - removes URL parameter
-        function exitTvMode() {
-            const currentUrl = new URL(window.location.href);
-            currentUrl.searchParams.delete('mode');
-            window.location.href = currentUrl.toString();
-        }
-
-        // Activate TV mode (called when URL has mode=tv)
-        function activateTvMode() {
-            isTvMode = true;
-            document.body.classList.add('tv-mode');
-            
-            // Update meal display
-            updateTvMealDisplay();
-            
-            // Start faster polling for TV
-            startTvRefresh();
-            
-            // Disable all drag functionality in TV mode
-            disableDragForTvMode();
-            
-            // Initial scale calculation
-            setTimeout(calculateTvScale, 100);
-            
-            // Recalculate on window resize
-            window.addEventListener('resize', debounce(calculateTvScale, 200));
-        }
-
-        // Update the TV meal display with current meal type
-        function updateTvMealDisplay() {
-            const mealSelect = document.getElementById('mealType');
-            const tvMealDisplay = document.getElementById('tvMealDisplay');
-            if (mealSelect && tvMealDisplay) {
-                tvMealDisplay.textContent = '🍽️ ' + mealSelect.options[mealSelect.selectedIndex].text;
-            }
-        }
-
-        // Calculate and apply appropriate scale for TV display
-        function calculateTvScale() {
-            if (!isTvMode) return;
-            
-            const scaleClasses = ['tv-scale-xl', 'tv-scale-lg', 'tv-scale-md', 'tv-scale-sm', 'tv-scale-xs'];
-            
-            // Remove existing scale classes
-            document.body.classList.remove(...scaleClasses);
-            
-            // Count total dogs and max dogs in any pen
-            let totalDogs = dogs.length;
-            let maxDogsInPen = 0;
-            for (const penDogs of Object.values(pens)) {
-                if (penDogs.length > maxDogsInPen) {
-                    maxDogsInPen = penDogs.length;
-                }
-            }
-            
-            // Get viewport dimensions
-            const vh = window.innerHeight;
-            const vw = window.innerWidth;
-            
-            // Calculate initial scale based on data density
-            let scaleIndex;
-            
-            // More aggressive scaling based on max dogs per pen
-            if (maxDogsInPen <= 1) {
-                scaleIndex = 0; // xl
-            } else if (maxDogsInPen <= 2) {
-                scaleIndex = 1; // lg
-            } else if (maxDogsInPen <= 3) {
-                scaleIndex = 2; // md
-            } else if (maxDogsInPen <= 5) {
-                scaleIndex = 3; // sm
-            } else {
-                scaleIndex = 4; // xs
-            }
-            
-            // Adjust for viewport size
-            if (vh < 500) {
-                scaleIndex = Math.min(scaleIndex + 2, 4);
-            } else if (vh < 700) {
-                scaleIndex = Math.min(scaleIndex + 1, 4);
-            } else if (vh > 900 && maxDogsInPen <= 2) {
-                scaleIndex = Math.max(scaleIndex - 1, 0);
-            }
-            
-            // Apply initial scale
-            document.body.classList.add(scaleClasses[scaleIndex]);
-            
-            // After a short delay, check if content fits and adjust if needed
-            setTimeout(() => {
-                checkAndAdjustScale(scaleClasses, scaleIndex);
-            }, 50);
-        }
-        
-        function checkAndAdjustScale(scaleClasses, currentIndex) {
-            if (!isTvMode) return;
-            
-            const pensSection = document.querySelector('.pens-section');
-            if (!pensSection) return;
-            
-            // Check if any pen row is overflowing
-            const penRowScrolls = document.querySelectorAll('.pen-row-scroll');
-            let isOverflowing = false;
-            
-            penRowScrolls.forEach(scroll => {
-                const penRow = scroll.querySelector('.pen-row');
-                if (penRow) {
-                    // Check if content height exceeds container
-                    if (scroll.scrollHeight > scroll.clientHeight + 5) {
-                        isOverflowing = true;
-                    }
-                }
-            });
-            
-            // Also check if pens section itself is overflowing
-            if (pensSection.scrollHeight > pensSection.clientHeight + 5) {
-                isOverflowing = true;
-            }
-            
-            // If overflowing and not at smallest scale, go smaller
-            if (isOverflowing && currentIndex < scaleClasses.length - 1) {
-                document.body.classList.remove(scaleClasses[currentIndex]);
-                currentIndex++;
-                document.body.classList.add(scaleClasses[currentIndex]);
-                
-                // Check again
-                setTimeout(() => {
-                    checkAndAdjustScale(scaleClasses, currentIndex);
-                }, 50);
-            }
-        }
-
-        // Debounce helper for resize events
-        function debounce(func, wait) {
-            let timeout;
-            return function executedFunction(...args) {
-                const later = () => {
-                    clearTimeout(timeout);
-                    func(...args);
-                };
-                clearTimeout(timeout);
-                timeout = setTimeout(later, wait);
-            };
-        }
-
-        // Start faster refresh polling for TV mode
-        function startTvRefresh() {
-            // Clear existing sync interval
-            if (syncInterval) {
-                clearInterval(syncInterval);
-            }
-            
-            // Use faster refresh for TV
-            tvRefreshInterval = setInterval(async () => {
-                if (!isOnline) return;
-                
-                try {
-                    const response = await fetch(APPS_SCRIPT_URL + '?action=getSession', {
-                        method: 'GET',
-                        redirect: 'follow'
-                    });
-                    
-                    const result = await response.json();
-                    
-                    if (result.success && result.version > lastSyncVersion) {
-                        applyRemoteState(result);
-                        lastSyncVersion = result.version;
-                        updateTvMealDisplay();
-                        // Recalculate scale after data update
-                        setTimeout(calculateTvScale, 50);
-                    }
-                    
-                    updateStatus(`✓ Live (${dogs.length} dogs)`, 'connected');
-                } catch (error) {
-                    console.error('TV refresh error:', error);
-                }
-            }, TV_REFRESH_INTERVAL);
-        }
-
-        // Disable drag functionality in TV mode
-        function disableDragForTvMode() {
-            // Override startDrag to do nothing in TV mode
-            const originalStartDrag = startDrag;
-            startDrag = function(e) {
-                if (isTvMode) return;
-                originalStartDrag(e);
-            };
         }
     </script>
 </body>
