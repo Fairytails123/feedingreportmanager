@@ -335,7 +335,7 @@
             background: rgba(0, 172, 238, 0.15);
         }
 
-        /* ANDROID FIX: Dog Cards - allow panning in both directions */
+        /* ANDROID FIX: Dog Cards - allow panning initially, prevent context menu */
         .dog-card {
             background: var(--bg-pen);
             border-radius: 10px;
@@ -343,7 +343,8 @@
             cursor: grab;
             user-select: none;
             -webkit-user-select: none;
-            touch-action: pan-x pan-y !important;
+            -webkit-touch-callout: none;
+            touch-action: pan-x pan-y;
             border-left: 4px solid var(--status-all);
             transition: all 0.2s ease;
             font-size: 0.9rem;
@@ -351,6 +352,12 @@
             min-height: 44px;
             display: flex;
             align-items: center;
+        }
+        
+        /* CRITICAL: When drag is active, BLOCK browser touch handling */
+        .dog-card.drag-active,
+        .pen-dog-name.drag-active {
+            touch-action: none !important;
         }
 
         .dog-card:hover { background: #1a4a7a; }
@@ -580,15 +587,16 @@
             gap: 8px;
         }
 
-        /* ANDROID FIX: Dog name - allow panning in both directions */
+        /* ANDROID FIX: Dog name - allow panning initially, prevent context menu */
         .pen-dog-name {
             font-size: 0.8rem;
             font-weight: 700;
             color: var(--text-primary);
             cursor: grab;
-            touch-action: pan-x pan-y !important;
+            touch-action: pan-x pan-y;
             user-select: none;
             -webkit-user-select: none;
+            -webkit-touch-callout: none;
             flex: 1;
             padding: 4px 0;
             min-height: 28px;
@@ -1031,9 +1039,9 @@
         let activePointerId = null;
         let capturedElement = null;
         
-        // ANDROID FIX: Lower threshold for faster scroll detection
-        const LONG_PRESS_DURATION = 180;
-        const SCROLL_THRESHOLD = 3;
+        // ANDROID FIX: Higher threshold for finger "squish" tolerance
+        const LONG_PRESS_DURATION = 200;
+        const SCROLL_THRESHOLD = 10;
         
         let isOnline = false;
         let currentMealType = 'Lunch';
@@ -1832,8 +1840,14 @@
             document.removeEventListener('pointerup', cancelDragSetup);
             document.removeEventListener('pointercancel', cancelDragSetup);
             
-            // POINTER CAPTURE FIX: Capture the pointer to take control from browser
-            // This stops the browser from interpreting movement as scroll
+            // CRITICAL FIX: Add drag-active class FIRST to change touch-action to 'none'
+            // This tells the browser "stop handling this touch as a scroll"
+            // Must happen BEFORE setPointerCapture
+            if (dragInfo.element) {
+                dragInfo.element.classList.add('drag-active');
+            }
+            
+            // Now capture the pointer (browser is no longer trying to scroll)
             if (dragInfo.element && dragInfo.pointerId && dragInfo.element.setPointerCapture) {
                 try {
                     dragInfo.element.setPointerCapture(dragInfo.pointerId);
@@ -1842,7 +1856,7 @@
                 }
             }
             
-            // ANDROID FIX: Store scroll position and lock body
+            // Lock body scroll
             scrollPositionBeforeDrag = window.scrollY;
             document.body.classList.add('is-dragging');
             document.body.style.top = `-${scrollPositionBeforeDrag}px`;
@@ -1853,7 +1867,7 @@
             
             triggerHaptic('medium');
             
-            // Mark source element as dragging
+            // Mark source element as dragging visually
             const target = document.querySelector(`[data-dog-id="${dragInfo.dogId}"][data-draggable="true"]`);
             if (target) {
                 const parent = target.closest('.dog-card, .pen-dog');
@@ -1864,25 +1878,20 @@
             createGhostElement(dragInfo.dogId, dragInfo.coords.x, dragInfo.coords.y);
             showDropZones();
             
-            // POINTER CAPTURE FIX: Attach listeners to element if captured, otherwise document
-            // When pointer is captured, events go to the capturing element
-            if (dragInfo.element && dragInfo.pointerId) {
-                dragInfo.element.addEventListener('pointermove', handleDrag);
-                dragInfo.element.addEventListener('pointerup', endDrag);
-                dragInfo.element.addEventListener('pointercancel', endDrag);
-            } else {
-                // Fallback for desktop/mouse
-                document.addEventListener('pointermove', handleDrag);
-                document.addEventListener('pointerup', endDrag);
-                document.addEventListener('pointercancel', endDrag);
-            }
+            // ALWAYS use document listeners - more reliable than element listeners
+            // Even with pointer capture, document listeners work
+            document.addEventListener('pointermove', handleDrag);
+            document.addEventListener('pointerup', endDrag);
+            document.addEventListener('pointercancel', endDrag);
         }
 
         function handleDrag(e) {
             if (!isDragging) return;
             
-            // POINTER CAPTURE FIX: Prevent default now that we're dragging
-            e.preventDefault();
+            // Prevent default only if event is cancelable
+            if (e.cancelable) {
+                e.preventDefault();
+            }
             
             if (ghostElement) {
                 ghostElement.style.left = e.clientX + 'px';
@@ -1914,35 +1923,37 @@
         }
 
         async function endDrag(e) {
-            // POINTER CAPTURE FIX: Release pointer capture
-            if (capturedElement && activePointerId !== null) {
-                try {
-                    capturedElement.releasePointerCapture(activePointerId);
-                } catch (err) {
-                    console.log('Release capture failed:', err);
+            // Remove listeners from document
+            document.removeEventListener('pointermove', handleDrag);
+            document.removeEventListener('pointerup', endDrag);
+            document.removeEventListener('pointercancel', endDrag);
+            
+            // CRITICAL: Remove drag-active class to restore touch-action
+            if (capturedElement) {
+                capturedElement.classList.remove('drag-active');
+                
+                // Also release pointer capture
+                if (activePointerId !== null) {
+                    try {
+                        capturedElement.releasePointerCapture(activePointerId);
+                    } catch (err) {
+                        // Ignore - might already be released
+                    }
                 }
-                // Remove listeners from element
-                capturedElement.removeEventListener('pointermove', handleDrag);
-                capturedElement.removeEventListener('pointerup', endDrag);
-                capturedElement.removeEventListener('pointercancel', endDrag);
-            } else {
-                // Fallback: remove from document
-                document.removeEventListener('pointermove', handleDrag);
-                document.removeEventListener('pointerup', endDrag);
-                document.removeEventListener('pointercancel', endDrag);
             }
             
             // Clear pointer capture state
             activePointerId = null;
             capturedElement = null;
             
-            // ANDROID FIX: Unlock body and restore scroll position
+            // Unlock body and restore scroll position
             document.body.classList.remove('is-dragging');
             document.body.style.top = '';
             window.scrollTo(0, scrollPositionBeforeDrag);
             
             // Clean up visual states
             document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+            document.querySelectorAll('.drag-active').forEach(el => el.classList.remove('drag-active'));
             document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
             hideDropZones();
             removeGhostElement();
