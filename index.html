@@ -1027,9 +1027,13 @@
         let isDragging = false;
         let pendingDragInfo = null;
         
+        // POINTER CAPTURE FIX: Store pointerId and element for capture
+        let activePointerId = null;
+        let capturedElement = null;
+        
         // ANDROID FIX: Lower threshold for faster scroll detection
         const LONG_PRESS_DURATION = 180;
-        const SCROLL_THRESHOLD = 3; // Reduced from 5 to 3
+        const SCROLL_THRESHOLD = 3;
         
         let isOnline = false;
         let currentMealType = 'Lunch';
@@ -1118,8 +1122,12 @@
             
             if (!dogId) return;
             
+            // POINTER CAPTURE FIX: Store pointerId and element reference
+            activePointerId = e.pointerId;
+            capturedElement = draggable;
+            
             const coords = { x: e.clientX, y: e.clientY };
-            handlePointerDown(coords, dogId, penId);
+            handlePointerDown(coords, dogId, penId, e.pointerId, draggable);
         }
 
         // ============================================
@@ -1770,11 +1778,12 @@
             }
         }
 
-        // ANDROID FIX: Aggressive scroll detection
-        function handlePointerDown(coords, dogId, fromPen = null) {
+        // ANDROID FIX: Aggressive scroll detection with Pointer Capture
+        function handlePointerDown(coords, dogId, fromPen = null, pointerId = null, element = null) {
             // Store the exact starting point
             touchStartPos = { x: coords.x, y: coords.y };
-            pendingDragInfo = { dogId, fromPen, coords };
+            // POINTER CAPTURE FIX: Include pointerId and element in pending info
+            pendingDragInfo = { dogId, fromPen, coords, pointerId, element };
             
             if (dragTimeout) clearTimeout(dragTimeout);
             
@@ -1809,21 +1818,34 @@
             dragTimeout = null;
             touchStartPos = null;
             pendingDragInfo = null;
+            // POINTER CAPTURE FIX: Clear capture variables
+            activePointerId = null;
+            capturedElement = null;
             document.removeEventListener('pointermove', checkForScroll);
             document.removeEventListener('pointerup', cancelDragSetup);
             document.removeEventListener('pointercancel', cancelDragSetup);
         }
 
         function startDrag(dragInfo) {
+            // Clean up temporary listeners first
+            document.removeEventListener('pointermove', checkForScroll);
+            document.removeEventListener('pointerup', cancelDragSetup);
+            document.removeEventListener('pointercancel', cancelDragSetup);
+            
+            // POINTER CAPTURE FIX: Capture the pointer to take control from browser
+            // This stops the browser from interpreting movement as scroll
+            if (dragInfo.element && dragInfo.pointerId && dragInfo.element.setPointerCapture) {
+                try {
+                    dragInfo.element.setPointerCapture(dragInfo.pointerId);
+                } catch (err) {
+                    console.log('Pointer capture failed:', err);
+                }
+            }
+            
             // ANDROID FIX: Store scroll position and lock body
             scrollPositionBeforeDrag = window.scrollY;
             document.body.classList.add('is-dragging');
             document.body.style.top = `-${scrollPositionBeforeDrag}px`;
-            
-            // Clean up temporary listeners
-            document.removeEventListener('pointermove', checkForScroll);
-            document.removeEventListener('pointerup', cancelDragSetup);
-            document.removeEventListener('pointercancel', cancelDragSetup);
             
             isDragging = true;
             draggedDogId = dragInfo.dogId;
@@ -1842,13 +1864,26 @@
             createGhostElement(dragInfo.dogId, dragInfo.coords.x, dragInfo.coords.y);
             showDropZones();
             
-            // Start drag movement listeners
-            document.addEventListener('pointermove', handleDrag);
-            document.addEventListener('pointerup', endDrag);
-            document.addEventListener('pointercancel', endDrag);
+            // POINTER CAPTURE FIX: Attach listeners to element if captured, otherwise document
+            // When pointer is captured, events go to the capturing element
+            if (dragInfo.element && dragInfo.pointerId) {
+                dragInfo.element.addEventListener('pointermove', handleDrag);
+                dragInfo.element.addEventListener('pointerup', endDrag);
+                dragInfo.element.addEventListener('pointercancel', endDrag);
+            } else {
+                // Fallback for desktop/mouse
+                document.addEventListener('pointermove', handleDrag);
+                document.addEventListener('pointerup', endDrag);
+                document.addEventListener('pointercancel', endDrag);
+            }
         }
 
         function handleDrag(e) {
+            if (!isDragging) return;
+            
+            // POINTER CAPTURE FIX: Prevent default now that we're dragging
+            e.preventDefault();
+            
             if (ghostElement) {
                 ghostElement.style.left = e.clientX + 'px';
                 ghostElement.style.top = e.clientY + 'px';
@@ -1879,9 +1914,27 @@
         }
 
         async function endDrag(e) {
-            document.removeEventListener('pointermove', handleDrag);
-            document.removeEventListener('pointerup', endDrag);
-            document.removeEventListener('pointercancel', endDrag);
+            // POINTER CAPTURE FIX: Release pointer capture
+            if (capturedElement && activePointerId !== null) {
+                try {
+                    capturedElement.releasePointerCapture(activePointerId);
+                } catch (err) {
+                    console.log('Release capture failed:', err);
+                }
+                // Remove listeners from element
+                capturedElement.removeEventListener('pointermove', handleDrag);
+                capturedElement.removeEventListener('pointerup', endDrag);
+                capturedElement.removeEventListener('pointercancel', endDrag);
+            } else {
+                // Fallback: remove from document
+                document.removeEventListener('pointermove', handleDrag);
+                document.removeEventListener('pointerup', endDrag);
+                document.removeEventListener('pointercancel', endDrag);
+            }
+            
+            // Clear pointer capture state
+            activePointerId = null;
+            capturedElement = null;
             
             // ANDROID FIX: Unlock body and restore scroll position
             document.body.classList.remove('is-dragging');
