@@ -335,7 +335,7 @@
             background: rgba(0, 172, 238, 0.15);
         }
 
-        /* ANDROID FIX: Dog Cards - allow panning initially, prevent context menu */
+        /* Dog Cards - touch-action auto allows scrolling, we use preventDefault() during drag */
         .dog-card {
             background: var(--bg-pen);
             border-radius: 10px;
@@ -344,7 +344,7 @@
             user-select: none;
             -webkit-user-select: none;
             -webkit-touch-callout: none;
-            touch-action: pan-x pan-y;
+            touch-action: auto;
             border-left: 4px solid var(--status-all);
             transition: all 0.2s ease;
             font-size: 0.9rem;
@@ -352,12 +352,6 @@
             min-height: 44px;
             display: flex;
             align-items: center;
-        }
-        
-        /* CRITICAL: When drag is active, BLOCK browser touch handling */
-        .dog-card.drag-active,
-        .pen-dog-name.drag-active {
-            touch-action: none !important;
         }
 
         .dog-card:hover { background: #1a4a7a; }
@@ -587,13 +581,13 @@
             gap: 8px;
         }
 
-        /* ANDROID FIX: Dog name - allow panning initially, prevent context menu */
+        /* Dog name - touch-action auto allows scrolling */
         .pen-dog-name {
             font-size: 0.8rem;
             font-weight: 700;
             color: var(--text-primary);
             cursor: grab;
-            touch-action: pan-x pan-y;
+            touch-action: auto;
             user-select: none;
             -webkit-user-select: none;
             -webkit-touch-callout: none;
@@ -1035,13 +1029,12 @@
         let isDragging = false;
         let pendingDragInfo = null;
         
-        // POINTER CAPTURE FIX: Store pointerId and element for capture
-        let activePointerId = null;
-        let capturedElement = null;
+        // TOUCH EVENT FIX: Store the element being dragged
+        let dragSourceElement = null;
         
-        // ANDROID FIX: Higher threshold for finger "squish" tolerance
-        const LONG_PRESS_DURATION = 200;
-        const SCROLL_THRESHOLD = 10;
+        // Settings - PROVEN VALUES
+        const LONG_PRESS_DURATION = 300;  // Longer for reliable detection
+        const SCROLL_THRESHOLD = 8;       // Balance between scroll detection and finger squish
         
         let isOnline = false;
         let currentMealType = 'Lunch';
@@ -1055,6 +1048,12 @@
         
         // Store scroll position when locking body
         let scrollPositionBeforeDrag = 0;
+        
+        // Bound function references for proper removal
+        let boundTouchMove = null;
+        let boundTouchEnd = null;
+        let boundMouseMove = null;
+        let boundMouseUp = null;
 
         // ============================================
         // INITIALIZATION
@@ -1117,25 +1116,330 @@
                 if (e.key === 'Enter') addDog();
             });
             
-            // ANDROID FIX: Passive listener for drag detection
-            document.addEventListener('pointerdown', handleDelegatedPointerDown, { passive: true });
+            // TOUCH EVENTS - Use separate touch and mouse handlers
+            // Touch events for mobile
+            document.addEventListener('touchstart', handleTouchStart, { passive: true });
+            // Mouse events for desktop fallback
+            document.addEventListener('mousedown', handleMouseDown, { passive: true });
         }
         
-        function handleDelegatedPointerDown(e) {
+        // ============================================
+        // TOUCH HANDLERS (Mobile)
+        // ============================================
+        
+        function handleTouchStart(e) {
+            if (e.touches.length !== 1) return; // Only single touch
+            
+            const touch = e.touches[0];
+            const draggable = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('[data-draggable="true"]');
+            if (!draggable) return;
+            
+            const dogId = draggable.dataset.dogId;
+            const penId = draggable.dataset.penId || null;
+            if (!dogId) return;
+            
+            touchStartPos = { x: touch.clientX, y: touch.clientY };
+            dragSourceElement = draggable;
+            pendingDragInfo = { 
+                dogId, 
+                fromPen: penId, 
+                coords: { x: touch.clientX, y: touch.clientY }
+            };
+            
+            if (dragTimeout) clearTimeout(dragTimeout);
+            
+            // Start long-press timer
+            dragTimeout = setTimeout(() => {
+                if (pendingDragInfo && touchStartPos) {
+                    startDragTouch(pendingDragInfo);
+                }
+            }, LONG_PRESS_DURATION);
+            
+            // Listen for movement/cancel (passive to allow scroll initially)
+            document.addEventListener('touchmove', checkTouchScroll, { passive: true });
+            document.addEventListener('touchend', cancelTouchDrag);
+            document.addEventListener('touchcancel', cancelTouchDrag);
+        }
+        
+        function checkTouchScroll(e) {
+            if (!touchStartPos || isDragging) return;
+            
+            const touch = e.touches[0];
+            const dx = Math.abs(touch.clientX - touchStartPos.x);
+            const dy = Math.abs(touch.clientY - touchStartPos.y);
+            
+            // If moved too much before timer, it's a scroll - cancel drag
+            if (dx > SCROLL_THRESHOLD || dy > SCROLL_THRESHOLD) {
+                cancelTouchDrag();
+            }
+        }
+        
+        function cancelTouchDrag() {
+            if (dragTimeout) {
+                clearTimeout(dragTimeout);
+                dragTimeout = null;
+            }
+            touchStartPos = null;
+            pendingDragInfo = null;
+            dragSourceElement = null;
+            
+            document.removeEventListener('touchmove', checkTouchScroll);
+            document.removeEventListener('touchend', cancelTouchDrag);
+            document.removeEventListener('touchcancel', cancelTouchDrag);
+        }
+        
+        function startDragTouch(dragInfo) {
+            // Remove the scroll-checking listeners
+            document.removeEventListener('touchmove', checkTouchScroll);
+            document.removeEventListener('touchend', cancelTouchDrag);
+            document.removeEventListener('touchcancel', cancelTouchDrag);
+            
+            // Now we're dragging - set up state
+            isDragging = true;
+            draggedDogId = dragInfo.dogId;
+            draggedFromPen = dragInfo.fromPen;
+            
+            // Lock body scroll
+            scrollPositionBeforeDrag = window.scrollY;
+            document.body.classList.add('is-dragging');
+            document.body.style.top = `-${scrollPositionBeforeDrag}px`;
+            
+            triggerHaptic('medium');
+            
+            // Mark source element visually
+            if (dragSourceElement) {
+                const parent = dragSourceElement.closest('.dog-card, .pen-dog');
+                if (parent) parent.classList.add('dragging');
+            }
+            
+            // Create ghost and show drop zones
+            createGhostElement(dragInfo.dogId, dragInfo.coords.x, dragInfo.coords.y);
+            showDropZones();
+            
+            // CRITICAL: Add NON-PASSIVE touchmove listener to block scrolling
+            // This is the key - we call preventDefault() to stop scroll
+            boundTouchMove = handleTouchMove;
+            boundTouchEnd = handleTouchEnd;
+            document.addEventListener('touchmove', boundTouchMove, { passive: false });
+            document.addEventListener('touchend', boundTouchEnd);
+            document.addEventListener('touchcancel', boundTouchEnd);
+        }
+        
+        function handleTouchMove(e) {
+            if (!isDragging) return;
+            
+            // CRITICAL: Prevent default to STOP scrolling
+            e.preventDefault();
+            
+            const touch = e.touches[0];
+            
+            if (ghostElement) {
+                ghostElement.style.left = touch.clientX + 'px';
+                ghostElement.style.top = touch.clientY + 'px';
+            }
+            
+            // Check drop targets
+            updateDropTargetHighlight(touch.clientX, touch.clientY);
+        }
+        
+        async function handleTouchEnd(e) {
+            // Remove listeners
+            document.removeEventListener('touchmove', boundTouchMove);
+            document.removeEventListener('touchend', boundTouchEnd);
+            document.removeEventListener('touchcancel', boundTouchEnd);
+            
+            // Get final position from changedTouches
+            const touch = e.changedTouches[0];
+            const finalX = touch.clientX;
+            const finalY = touch.clientY;
+            
+            // Clean up and process drop
+            await finishDrag(finalX, finalY);
+        }
+        
+        // ============================================
+        // MOUSE HANDLERS (Desktop fallback)
+        // ============================================
+        
+        function handleMouseDown(e) {
+            // Skip if touch device or not left click
+            if (e.button !== 0) return;
+            
             const draggable = e.target.closest('[data-draggable="true"]');
             if (!draggable) return;
             
             const dogId = draggable.dataset.dogId;
             const penId = draggable.dataset.penId || null;
-            
             if (!dogId) return;
             
-            // POINTER CAPTURE FIX: Store pointerId and element reference
-            activePointerId = e.pointerId;
-            capturedElement = draggable;
+            touchStartPos = { x: e.clientX, y: e.clientY };
+            dragSourceElement = draggable;
+            pendingDragInfo = { 
+                dogId, 
+                fromPen: penId, 
+                coords: { x: e.clientX, y: e.clientY }
+            };
             
-            const coords = { x: e.clientX, y: e.clientY };
-            handlePointerDown(coords, dogId, penId, e.pointerId, draggable);
+            if (dragTimeout) clearTimeout(dragTimeout);
+            
+            // For mouse, we can start drag immediately on movement
+            // Or use long press - let's use long press for consistency
+            dragTimeout = setTimeout(() => {
+                if (pendingDragInfo && touchStartPos) {
+                    startDragMouse(pendingDragInfo);
+                }
+            }, LONG_PRESS_DURATION);
+            
+            document.addEventListener('mousemove', checkMouseScroll);
+            document.addEventListener('mouseup', cancelMouseDrag);
+        }
+        
+        function checkMouseScroll(e) {
+            if (!touchStartPos || isDragging) return;
+            
+            const dx = Math.abs(e.clientX - touchStartPos.x);
+            const dy = Math.abs(e.clientY - touchStartPos.y);
+            
+            if (dx > SCROLL_THRESHOLD || dy > SCROLL_THRESHOLD) {
+                cancelMouseDrag();
+            }
+        }
+        
+        function cancelMouseDrag() {
+            if (dragTimeout) {
+                clearTimeout(dragTimeout);
+                dragTimeout = null;
+            }
+            touchStartPos = null;
+            pendingDragInfo = null;
+            dragSourceElement = null;
+            
+            document.removeEventListener('mousemove', checkMouseScroll);
+            document.removeEventListener('mouseup', cancelMouseDrag);
+        }
+        
+        function startDragMouse(dragInfo) {
+            document.removeEventListener('mousemove', checkMouseScroll);
+            document.removeEventListener('mouseup', cancelMouseDrag);
+            
+            isDragging = true;
+            draggedDogId = dragInfo.dogId;
+            draggedFromPen = dragInfo.fromPen;
+            
+            scrollPositionBeforeDrag = window.scrollY;
+            document.body.classList.add('is-dragging');
+            document.body.style.top = `-${scrollPositionBeforeDrag}px`;
+            
+            triggerHaptic('medium');
+            
+            if (dragSourceElement) {
+                const parent = dragSourceElement.closest('.dog-card, .pen-dog');
+                if (parent) parent.classList.add('dragging');
+            }
+            
+            createGhostElement(dragInfo.dogId, dragInfo.coords.x, dragInfo.coords.y);
+            showDropZones();
+            
+            boundMouseMove = handleMouseMove;
+            boundMouseUp = handleMouseUp;
+            document.addEventListener('mousemove', boundMouseMove);
+            document.addEventListener('mouseup', boundMouseUp);
+        }
+        
+        function handleMouseMove(e) {
+            if (!isDragging) return;
+            
+            if (ghostElement) {
+                ghostElement.style.left = e.clientX + 'px';
+                ghostElement.style.top = e.clientY + 'px';
+            }
+            
+            updateDropTargetHighlight(e.clientX, e.clientY);
+        }
+        
+        async function handleMouseUp(e) {
+            document.removeEventListener('mousemove', boundMouseMove);
+            document.removeEventListener('mouseup', boundMouseUp);
+            
+            await finishDrag(e.clientX, e.clientY);
+        }
+        
+        // ============================================
+        // SHARED DRAG FUNCTIONS
+        // ============================================
+        
+        function updateDropTargetHighlight(x, y) {
+            if (!ghostElement) return;
+            
+            // Hide ghost to check what's underneath
+            ghostElement.style.display = 'none';
+            const elemBelow = document.elementFromPoint(x, y);
+            ghostElement.style.display = '';
+            
+            // Clear all highlights
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            
+            if (elemBelow) {
+                const pen = elemBelow.closest('.pen');
+                const bin = elemBelow.closest('#deleteBin') || elemBelow.closest('.bin');
+                const staging = elemBelow.closest('#stagingArea') || elemBelow.closest('.staging-section');
+                
+                if (bin) {
+                    document.getElementById('deleteBin').classList.add('drag-over');
+                } else if (pen) {
+                    pen.classList.add('drag-over');
+                } else if (staging) {
+                    document.getElementById('stagingArea').classList.add('drag-over');
+                }
+            }
+        }
+        
+        async function finishDrag(finalX, finalY) {
+            // Unlock body
+            document.body.classList.remove('is-dragging');
+            document.body.style.top = '';
+            window.scrollTo(0, scrollPositionBeforeDrag);
+            
+            // Clean up visuals
+            document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            hideDropZones();
+            removeGhostElement();
+            
+            if (!isDragging || !draggedDogId) {
+                isDragging = false;
+                draggedDogId = null;
+                draggedFromPen = null;
+                dragSourceElement = null;
+                return;
+            }
+            
+            // Check what's at the drop position
+            const elemBelow = document.elementFromPoint(finalX, finalY);
+            
+            if (elemBelow) {
+                if (elemBelow.closest('#deleteBin') || elemBelow.closest('.bin')) {
+                    triggerHaptic('delete');
+                    await deleteDog(draggedDogId);
+                } else if (elemBelow.closest('.pen')) {
+                    const pen = elemBelow.closest('.pen');
+                    const penId = pen.dataset.penId;
+                    triggerHaptic('success');
+                    await moveDogToPen(draggedDogId, penId);
+                    showToast(`Moved to ${penId.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}`, 'success');
+                } else if (elemBelow.closest('#stagingArea') || elemBelow.closest('.staging-section')) {
+                    if (draggedFromPen) {
+                        triggerHaptic('light');
+                        await moveDogToPen(draggedDogId, null);
+                        showToast('Returned to staging', 'info');
+                    }
+                }
+            }
+            
+            isDragging = false;
+            draggedDogId = null;
+            draggedFromPen = null;
+            dragSourceElement = null;
         }
 
         // ============================================
@@ -1786,212 +2090,7 @@
             }
         }
 
-        // ANDROID FIX: Aggressive scroll detection with Pointer Capture
-        function handlePointerDown(coords, dogId, fromPen = null, pointerId = null, element = null) {
-            // Store the exact starting point
-            touchStartPos = { x: coords.x, y: coords.y };
-            // POINTER CAPTURE FIX: Include pointerId and element in pending info
-            pendingDragInfo = { dogId, fromPen, coords, pointerId, element };
-            
-            if (dragTimeout) clearTimeout(dragTimeout);
-            
-            // Set the long-press timer
-            dragTimeout = setTimeout(() => {
-                if (pendingDragInfo) {
-                    startDrag(pendingDragInfo);
-                }
-            }, LONG_PRESS_DURATION);
-            
-            // ANDROID FIX: Passive listener so we don't block system scroll
-            document.addEventListener('pointermove', checkForScroll, { passive: true });
-            document.addEventListener('pointerup', cancelDragSetup);
-            document.addEventListener('pointercancel', cancelDragSetup);
-        }
-
-        // ANDROID FIX: 3px threshold for faster scroll detection
-        function checkForScroll(e) {
-            if (!touchStartPos) return;
-            
-            const dx = Math.abs(e.clientX - touchStartPos.x);
-            const dy = Math.abs(e.clientY - touchStartPos.y);
-            
-            // If finger moves more than 3px before timer, it's a scroll
-            if (dx > SCROLL_THRESHOLD || dy > SCROLL_THRESHOLD) {
-                cancelDragSetup();
-            }
-        }
-
-        function cancelDragSetup() {
-            clearTimeout(dragTimeout);
-            dragTimeout = null;
-            touchStartPos = null;
-            pendingDragInfo = null;
-            // POINTER CAPTURE FIX: Clear capture variables
-            activePointerId = null;
-            capturedElement = null;
-            document.removeEventListener('pointermove', checkForScroll);
-            document.removeEventListener('pointerup', cancelDragSetup);
-            document.removeEventListener('pointercancel', cancelDragSetup);
-        }
-
-        function startDrag(dragInfo) {
-            // Clean up temporary listeners first
-            document.removeEventListener('pointermove', checkForScroll);
-            document.removeEventListener('pointerup', cancelDragSetup);
-            document.removeEventListener('pointercancel', cancelDragSetup);
-            
-            // CRITICAL FIX: Add drag-active class FIRST to change touch-action to 'none'
-            // This tells the browser "stop handling this touch as a scroll"
-            // Must happen BEFORE setPointerCapture
-            if (dragInfo.element) {
-                dragInfo.element.classList.add('drag-active');
-            }
-            
-            // Now capture the pointer (browser is no longer trying to scroll)
-            if (dragInfo.element && dragInfo.pointerId && dragInfo.element.setPointerCapture) {
-                try {
-                    dragInfo.element.setPointerCapture(dragInfo.pointerId);
-                } catch (err) {
-                    console.log('Pointer capture failed:', err);
-                }
-            }
-            
-            // Lock body scroll
-            scrollPositionBeforeDrag = window.scrollY;
-            document.body.classList.add('is-dragging');
-            document.body.style.top = `-${scrollPositionBeforeDrag}px`;
-            
-            isDragging = true;
-            draggedDogId = dragInfo.dogId;
-            draggedFromPen = dragInfo.fromPen;
-            
-            triggerHaptic('medium');
-            
-            // Mark source element as dragging visually
-            const target = document.querySelector(`[data-dog-id="${dragInfo.dogId}"][data-draggable="true"]`);
-            if (target) {
-                const parent = target.closest('.dog-card, .pen-dog');
-                if (parent) parent.classList.add('dragging');
-            }
-            
-            // Create ghost element and show drop zones
-            createGhostElement(dragInfo.dogId, dragInfo.coords.x, dragInfo.coords.y);
-            showDropZones();
-            
-            // ALWAYS use document listeners - more reliable than element listeners
-            // Even with pointer capture, document listeners work
-            document.addEventListener('pointermove', handleDrag);
-            document.addEventListener('pointerup', endDrag);
-            document.addEventListener('pointercancel', endDrag);
-        }
-
-        function handleDrag(e) {
-            if (!isDragging) return;
-            
-            // Prevent default only if event is cancelable
-            if (e.cancelable) {
-                e.preventDefault();
-            }
-            
-            if (ghostElement) {
-                ghostElement.style.left = e.clientX + 'px';
-                ghostElement.style.top = e.clientY + 'px';
-            }
-            
-            // Check what's under the ghost for visual feedback
-            if (ghostElement) {
-                ghostElement.style.display = 'none';
-                const elemBelow = document.elementFromPoint(e.clientX, e.clientY);
-                ghostElement.style.display = '';
-                
-                document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-                
-                if (elemBelow) {
-                    const pen = elemBelow.closest('.pen');
-                    const bin = elemBelow.closest('#deleteBin') || elemBelow.closest('.bin');
-                    const staging = elemBelow.closest('#stagingArea') || elemBelow.closest('.staging-section');
-                    
-                    if (bin) {
-                        document.getElementById('deleteBin').classList.add('drag-over');
-                    } else if (pen) {
-                        pen.classList.add('drag-over');
-                    } else if (staging) {
-                        document.getElementById('stagingArea').classList.add('drag-over');
-                    }
-                }
-            }
-        }
-
-        async function endDrag(e) {
-            // Remove listeners from document
-            document.removeEventListener('pointermove', handleDrag);
-            document.removeEventListener('pointerup', endDrag);
-            document.removeEventListener('pointercancel', endDrag);
-            
-            // CRITICAL: Remove drag-active class to restore touch-action
-            if (capturedElement) {
-                capturedElement.classList.remove('drag-active');
-                
-                // Also release pointer capture
-                if (activePointerId !== null) {
-                    try {
-                        capturedElement.releasePointerCapture(activePointerId);
-                    } catch (err) {
-                        // Ignore - might already be released
-                    }
-                }
-            }
-            
-            // Clear pointer capture state
-            activePointerId = null;
-            capturedElement = null;
-            
-            // Unlock body and restore scroll position
-            document.body.classList.remove('is-dragging');
-            document.body.style.top = '';
-            window.scrollTo(0, scrollPositionBeforeDrag);
-            
-            // Clean up visual states
-            document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
-            document.querySelectorAll('.drag-active').forEach(el => el.classList.remove('drag-active'));
-            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-            hideDropZones();
-            removeGhostElement();
-            
-            if (!draggedDogId || !isDragging) {
-                isDragging = false;
-                draggedDogId = null;
-                draggedFromPen = null;
-                return;
-            }
-            
-            const elemBelow = document.elementFromPoint(e.clientX, e.clientY);
-            
-            if (elemBelow) {
-                if (elemBelow.closest('#deleteBin') || elemBelow.closest('.bin')) {
-                    triggerHaptic('delete');
-                    await deleteDog(draggedDogId);
-                } else if (elemBelow.closest('.pen')) {
-                    const pen = elemBelow.closest('.pen');
-                    const penId = pen.dataset.penId;
-                    triggerHaptic('success');
-                    await moveDogToPen(draggedDogId, penId);
-                    showToast(`Moved to ${penId.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}`, 'success');
-                } else if (elemBelow.closest('#stagingArea') || elemBelow.closest('.staging-section')) {
-                    if (draggedFromPen) {
-                        triggerHaptic('light');
-                        await moveDogToPen(draggedDogId, null);
-                        showToast('Returned to staging', 'info');
-                    }
-                }
-            }
-            
-            isDragging = false;
-            draggedDogId = null;
-            draggedFromPen = null;
-        }
-
-        // Drop zone hover handlers
+        // Drop zone hover handlers (kept for pointer events on drop zones)
         function handlePenEnter(e) {
             if (isDragging) e.currentTarget.classList.add('drag-over');
         }
