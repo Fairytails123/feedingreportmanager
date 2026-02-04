@@ -34,15 +34,11 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* ============================================
-           CRITICAL ANDROID FIX: Prevent pull-to-refresh
-           Must be on BOTH html and body for cross-browser
-           ============================================ */
         html {
             overflow-x: hidden;
-            overscroll-behavior-y: contain;
         }
 
+        /* ANDROID FIX: Allow default touch actions on body */
         body {
             font-family: 'Nunito', sans-serif;
             background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
@@ -52,16 +48,13 @@
             overflow-y: auto;
             overflow-x: hidden;
             -webkit-overflow-scrolling: touch;
-            /* CRITICAL: Prevent pull-to-refresh on Android Chrome */
-            overscroll-behavior-y: contain;
+            touch-action: auto;
         }
 
-        /* Lock screen when drag is active */
+        /* ANDROID FIX: Prevent scroll during drag - NO position fixed (causes jump) */
         body.is-dragging {
             overflow: hidden !important;
             touch-action: none !important;
-            position: fixed;
-            width: 100%;
         }
 
         .container {
@@ -267,7 +260,7 @@
             gap: 10px;
             color: var(--text-secondary);
             font-size: 0.85rem;
-            transition: all 0.2s ease;
+            transition: background-color 0.15s ease, border-color 0.15s ease;
         }
 
         .bin.drop-ready {
@@ -279,7 +272,6 @@
             border-color: var(--status-none);
             background: rgba(231, 76, 60, 0.3);
             color: var(--status-none);
-            transform: scale(1.02);
         }
 
         .bin-icon { font-size: 1.3rem; }
@@ -327,7 +319,7 @@
             gap: 8px;
             align-content: flex-start;
             border: 2px solid transparent;
-            transition: all 0.2s ease;
+            transition: border-color 0.2s ease, background-color 0.2s ease;
         }
 
         .staging-area.drop-ready {
@@ -340,10 +332,7 @@
             background: rgba(0, 172, 238, 0.15);
         }
 
-        /* ============================================
-           ANDROID FIX: Dog Cards with touch-action: none
-           This MUST be set BEFORE gesture starts!
-           ============================================ */
+        /* Dog Cards - ANDROID FIX: touch-action:none blocks browser gestures on tiles */
         .dog-card {
             background: var(--bg-pen);
             border-radius: 10px;
@@ -352,43 +341,33 @@
             user-select: none;
             -webkit-user-select: none;
             -webkit-touch-callout: none;
-            /* Default: allow scroll for non-draggable cards */
-            touch-action: auto;
+            touch-action: none;  /* CRITICAL: Must be none for Android drag to work */
             border-left: 4px solid var(--status-all);
-            transition: all 0.2s ease;
             font-size: 0.9rem;
             font-weight: 600;
             min-height: 44px;
             display: flex;
             align-items: center;
         }
-
-        /* CRITICAL: Draggable cards must have touch-action: none
-           This prevents the browser from taking over the gesture */
-        .dog-card[data-draggable="true"] {
-            touch-action: none;
+        
+        .dog-card:active {
+            background: #1a4a7a;
         }
 
-        .dog-card:hover { background: #1a4a7a; }
+        /* Hover only on devices with fine pointer (mouse) */
+        @media (hover: hover) and (pointer: fine) {
+            .dog-card:hover { background: #1a4a7a; }
+        }
 
         .dog-card.dragging {
             opacity: 0.4;
             transform: scale(0.95);
         }
 
-        /* Visual feedback during long-press (before drag starts) */
-        .dog-card.press-active {
-            transform: scale(0.98);
-            background: #1a4a7a;
-            box-shadow: 0 0 0 2px var(--fairy-tails-blue);
-        }
-
         .dog-card.unmatched {
             border-left: 4px solid var(--accent-secondary);
             min-width: 140px;
             max-width: 170px;
-            /* Unmatched cards are NOT draggable, so keep touch-action: auto */
-            touch-action: auto !important;
         }
 
         .unmatched-header {
@@ -474,66 +453,123 @@
             box-shadow: var(--shadow);
         }
 
-        .pens-container {
+        .pen-row-label {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--accent-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 0 0 10px 5px;
             display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .pen-row {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            align-items: center;
             gap: 8px;
         }
 
-        @media (max-width: 600px) {
-            .pen-row {
-                grid-template-columns: repeat(2, 1fr);
-            }
+        .pen-row-label:not(:first-child) { margin-top: 15px; }
+
+        .swipe-hint {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+
+        /* ANDROID FIX: Horizontal scroll - allow BOTH x and y panning */
+        .pen-row-scroll {
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            scroll-snap-type: x proximity;
+            scrollbar-width: thin;
+            scrollbar-color: var(--bg-pen) transparent;
+            padding-bottom: 8px;
+            margin: 0 -5px;
+            padding-left: 5px;
+            padding-right: 5px;
+            touch-action: pan-x pan-y !important;
+            display: flex;
+        }
+
+        .pen-row-scroll::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .pen-row-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .pen-row-scroll::-webkit-scrollbar-thumb {
+            background: var(--bg-pen);
+            border-radius: 3px;
+        }
+
+        .pen-row {
+            display: flex;
+            gap: 12px;
+            min-width: max-content;
         }
 
         .pen {
             background: var(--bg-pen);
-            border-radius: 10px;
+            border-radius: var(--radius);
+            width: 160px;
+            min-width: 160px;
+            min-height: 200px;
             padding: 10px;
-            min-height: 100px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
             border: 2px solid transparent;
-            transition: all 0.2s ease;
+            transition: border-color 0.2s ease, background-color 0.2s ease;
+            scroll-snap-align: start;
+            flex-shrink: 0;
+        }
+
+        /* Hover only on devices with fine pointer (mouse) */
+        @media (hover: hover) and (pointer: fine) {
+            .pen:hover { border-color: rgba(233, 69, 96, 0.3); }
         }
 
         .pen.drop-ready {
-            border-color: var(--fairy-tails-blue);
-            background: rgba(15, 52, 96, 0.8);
+            border-color: rgba(0, 172, 238, 0.3);
         }
 
         .pen.drag-over {
-            border-color: var(--status-all);
-            background: rgba(46, 204, 113, 0.2);
-            transform: scale(1.02);
+            border-color: var(--fairy-tails-blue);
+            background: rgba(0, 172, 238, 0.2);
+            box-shadow: 0 0 20px rgba(0, 172, 238, 0.4);
         }
 
         .pen-header {
-            font-size: 0.7rem;
+            font-size: 0.8rem;
             font-weight: 700;
             color: var(--text-secondary);
-            text-transform: uppercase;
-            margin-bottom: 8px;
             text-align: center;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
         }
 
         .pen-dogs {
+            flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 8px;
+            overflow: visible;
         }
 
         .pen-dog {
             background: var(--bg-secondary);
-            border-radius: 8px;
-            padding: 8px;
-            border-left: 3px solid var(--status-all);
+            border-radius: 10px;
+            padding: 10px;
+            border-left: 5px solid var(--status-all);
+            transition: opacity 0.15s ease, border-left-color 0.15s ease;
         }
 
+        /* Hover only on devices with fine pointer (mouse) */
+        @media (hover: hover) and (pointer: fine) {
+            .pen-dog:hover { background: rgba(22, 33, 62, 0.8); }
+        }
         .pen-dog.status-all { border-left-color: var(--status-all); }
         .pen-dog.status-three-quarter { border-left-color: var(--status-three-quarter); }
         .pen-dog.status-half { border-left-color: var(--status-half); }
@@ -542,6 +578,7 @@
 
         .pen-dog.dragging {
             opacity: 0.4;
+            transform: scale(0.95);
         }
 
         .pen-dog-header {
@@ -552,14 +589,13 @@
             gap: 8px;
         }
 
-        /* ANDROID FIX: pen-dog-name with touch-action: none */
+        /* Dog name - touch-action auto allows scrolling */
         .pen-dog-name {
             font-size: 0.8rem;
             font-weight: 700;
             color: var(--text-primary);
             cursor: grab;
-            /* CRITICAL: Must be none BEFORE gesture starts */
-            touch-action: none;
+            touch-action: auto;
             user-select: none;
             -webkit-user-select: none;
             -webkit-touch-callout: none;
@@ -568,11 +604,6 @@
             min-height: 28px;
             display: flex;
             align-items: center;
-        }
-
-        /* Visual feedback during long-press */
-        .pen-dog-name.press-active {
-            color: var(--fairy-tails-blue);
         }
 
         .pen-dog-remove {
@@ -596,14 +627,13 @@
         .pen-dog-remove:hover { background: #c0392b; transform: scale(1.1); }
 
         .pen-dog-controls {
-            display: grid;
-            grid-template-columns: 1fr auto auto;
-            gap: 6px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
             align-items: center;
         }
 
         .pen-dog-controls select {
-            width: 100%;
             padding: 8px 6px;
             border: 1px solid var(--bg-pen);
             border-radius: 6px;
@@ -611,45 +641,42 @@
             color: var(--text-primary);
             font-family: inherit;
             font-size: 14px;
-            min-width: 60px;
+            cursor: pointer;
+            min-width: 50px;
+            min-height: 36px;
         }
 
         .toggle-btn {
-            width: 36px;
-            height: 36px;
-            border: none;
+            padding: 8px 10px;
+            border: 1px solid var(--bg-pen);
             border-radius: 6px;
-            background: var(--bg-pen);
+            background: var(--bg-primary);
             color: var(--text-secondary);
-            font-weight: 700;
+            font-family: inherit;
             font-size: 0.7rem;
+            font-weight: 700;
             cursor: pointer;
             transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            min-height: 36px;
+            min-width: 40px;
         }
 
-        .toggle-btn.active {
-            background: var(--accent-primary);
-            color: white;
-        }
+        .toggle-btn:hover { border-color: var(--accent-secondary); }
+        .toggle-btn.active { background: var(--accent-secondary); border-color: var(--accent-secondary); color: white; }
 
-        .prescription-panel, .supplement-panel {
+        .prescription-panel {
             display: none;
             margin-top: 8px;
             padding-top: 8px;
-            border-top: 1px solid var(--bg-pen);
+            border-top: 1px dashed rgba(255,255,255,0.1);
         }
 
-        .prescription-panel.active, .supplement-panel.active {
-            display: block;
-        }
+        .prescription-panel.active { display: block; }
 
         .prescription-input {
             width: 100%;
-            padding: 8px;
-            border: 1px solid var(--bg-pen);
+            padding: 10px;
+            border: 1px solid var(--accent-primary);
             border-radius: 6px;
             background: var(--bg-primary);
             color: var(--text-primary);
@@ -657,10 +684,21 @@
             font-size: 14px;
         }
 
+        .prescription-input::placeholder { color: var(--text-secondary); }
+
+        .supplement-panel {
+            display: none;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px dashed rgba(255,255,255,0.1);
+        }
+
+        .supplement-panel.active { display: block; }
+
         .supplement-checkboxes {
             display: flex;
             flex-wrap: wrap;
-            gap: 6px;
+            gap: 8px;
         }
 
         .supplement-checkbox {
@@ -670,91 +708,80 @@
             font-size: 0.7rem;
             color: var(--text-secondary);
             cursor: pointer;
+            padding: 4px 8px;
+            background: var(--bg-primary);
+            border-radius: 4px;
         }
 
         .supplement-checkbox input {
-            width: 16px;
-            height: 16px;
-            cursor: pointer;
+            accent-color: var(--accent-secondary);
+            min-width: 18px;
+            min-height: 18px;
         }
 
-        /* Actions */
-        .actions-section {
+        /* Action Bar */
+        .action-bar {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
             background: var(--bg-secondary);
             border-radius: var(--radius);
             padding: 15px;
             box-shadow: var(--shadow);
         }
 
-        .actions-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-        }
-
-        @media (max-width: 400px) {
-            .actions-grid {
-                grid-template-columns: 1fr 1fr;
-            }
-        }
-
-        /* Drag Ghost */
+        /* Drag Ghost - MUST block touch */
         .drag-ghost {
             position: fixed;
-            padding: 10px 16px;
-            background: var(--accent-primary);
+            padding: 12px 20px;
+            background: var(--fairy-tails-blue);
             color: white;
             border-radius: 8px;
             font-weight: 700;
             font-size: 0.9rem;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.4);
             pointer-events: none;
             z-index: 10000;
+            box-shadow: 0 8px 25px rgba(0, 172, 238, 0.5);
             transform: translate(-50%, -50%);
-            white-space: nowrap;
+            touch-action: none;
         }
 
-        /* Preview Modal */
+        /* Modal */
         .modal-overlay {
             display: none;
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: 9999;
-            justify-content: center;
-            align-items: center;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 5000;
             padding: 20px;
+            overflow-y: auto;
         }
 
-        .modal-overlay.active {
-            display: flex;
-        }
+        .modal-overlay.active { display: flex; align-items: center; justify-content: center; }
 
         .modal {
             background: var(--bg-secondary);
             border-radius: var(--radius);
-            max-width: 500px;
+            max-width: 600px;
             width: 100%;
-            max-height: 80vh;
+            max-height: 90vh;
             overflow-y: auto;
-            box-shadow: var(--shadow);
         }
 
         .modal-header {
-            padding: 15px 20px;
-            border-bottom: 1px solid var(--bg-pen);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid var(--bg-pen);
         }
 
-        .modal-title {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: var(--fairy-tails-blue);
+        .modal-header h2 {
+            font-size: 1.2rem;
+            color: var(--accent-primary);
         }
 
         .modal-close {
@@ -763,56 +790,22 @@
             color: var(--text-secondary);
             font-size: 1.5rem;
             cursor: pointer;
-            padding: 0;
-            line-height: 1;
+            min-width: 44px;
+            min-height: 44px;
         }
 
         .modal-body {
             padding: 20px;
+            font-size: 0.9rem;
+            line-height: 1.6;
         }
 
         .modal-footer {
-            padding: 15px 20px;
-            border-top: 1px solid var(--bg-pen);
             display: flex;
             gap: 10px;
             justify-content: flex-end;
-        }
-
-        .preview-pen {
-            margin-bottom: 15px;
-        }
-
-        .preview-pen-title {
-            font-weight: 700;
-            color: var(--accent-secondary);
-            margin-bottom: 8px;
-            font-size: 0.9rem;
-        }
-
-        .preview-dog {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 12px;
-            background: var(--bg-primary);
-            border-radius: 6px;
-            margin-bottom: 6px;
-        }
-
-        .preview-dog-name {
-            font-weight: 600;
-        }
-
-        .preview-dog-status {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-        }
-
-        .preview-extras {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            margin-top: 2px;
+            padding: 20px;
+            border-top: 1px solid var(--bg-pen);
         }
 
         /* Toast */
@@ -821,40 +814,90 @@
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 10001;
+            z-index: 9999;
             display: flex;
             flex-direction: column;
             gap: 10px;
-            pointer-events: none;
         }
 
         .toast {
-            background: var(--bg-secondary);
-            padding: 12px 20px;
+            padding: 12px 24px;
             border-radius: 8px;
-            box-shadow: var(--shadow);
+            font-size: 0.9rem;
+            font-weight: 600;
             animation: slideUp 0.3s ease;
-            white-space: nowrap;
-            pointer-events: auto;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
         }
 
-        .toast.success { border-left: 4px solid var(--status-all); }
-        .toast.error { border-left: 4px solid var(--status-none); }
-        .toast.info { border-left: 4px solid var(--fairy-tails-blue); }
+        .toast.success { background: var(--status-all); color: white; }
+        .toast.error { background: var(--status-none); color: white; }
+        .toast.info { background: var(--fairy-tails-blue); color: white; }
 
         @keyframes slideUp {
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Preview Styling */
+        .preview-pen {
+            margin-bottom: 15px;
+        }
+
+        .preview-pen-title {
+            font-weight: 700;
+            color: var(--accent-secondary);
+            margin-bottom: 8px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid var(--bg-pen);
+        }
+
+        .preview-dog {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px;
+            background: var(--bg-primary);
+            border-radius: 6px;
+            margin-bottom: 5px;
+        }
+
+        .preview-dog-name { font-weight: 600; }
+        .preview-dog-status { color: var(--text-secondary); font-size: 0.85rem; }
+
+        .preview-extras {
+            margin-top: 3px;
+            font-size: 0.75rem;
+            color: var(--accent-secondary);
+        }
+
+        /* Mobile Adjustments */
+        @media (max-width: 600px) {
+            .container { padding: 10px; }
+            h1 { font-size: 1.2rem; }
+            .header-logo { width: 32px; height: 32px; }
+            
+            .pen {
+                width: 150px;
+                min-width: 150px;
+                min-height: 180px;
+            }
+            
+            .action-bar {
+                grid-template-columns: 1fr 1fr;
+            }
+            
+            .action-bar .btn:last-child {
+                grid-column: span 2;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <img src="https://i.ibb.co/whdBKp0L/Logo-1.jpg" alt="Fairy Tails Logo" class="header-logo">
-            <h1>Feeding Report</h1>
+            <img src="https://i.ibb.co/whdBKp0L/Logo-1.jpg" alt="Fairy Tails" class="header-logo">
+            <h1>🍽️ Feeding Report</h1>
         </div>
-
+        
         <div class="status-bar connected" id="statusBar">
             <div class="sync-indicator" id="syncIndicator"></div>
             <span id="statusText">Connecting...</span>
@@ -862,58 +905,70 @@
 
         <div class="layout">
             <div class="sidebar">
+                <!-- Add Dog -->
                 <div class="entry-section">
-                    <div class="section-title">Add Dog</div>
+                    <div class="section-title">➕ Add Dog</div>
                     <div class="entry-row">
-                        <input type="text" id="dogNameInput" placeholder="Dog name..." autocomplete="off">
-                        <button class="btn btn-primary" onclick="addDog()">Add</button>
+                        <input type="text" id="dogNameInput" placeholder="Type dog name..." autocomplete="off">
+                        <button class="btn btn-primary" onclick="addDog()" id="addDogBtn">Add</button>
                     </div>
                 </div>
 
-                <div class="entry-section">
-                    <div class="section-title">Meal Type</div>
-                    <select class="meal-select" id="mealType" onchange="updateMealType()">
-                        <option value="Breakfast">Breakfast</option>
-                        <option value="Lunch">Lunch</option>
-                        <option value="Dinner">Dinner</option>
-                    </select>
-                </div>
-
+                <!-- Delete Bin -->
                 <div class="bin-section">
-                    <div class="section-title">Delete Zone</div>
                     <div class="bin" id="deleteBin">
                         <span class="bin-icon">🗑️</span>
                         <span>Drop here to delete</span>
                     </div>
                 </div>
 
+                <!-- Meal Type -->
+                <div class="entry-section">
+                    <div class="section-title">🕐 Meal Type</div>
+                    <select id="mealType" class="meal-select" onchange="updateMealType()">
+                        <option value="Morning Meal">Morning Meal (Breakfast)</option>
+                        <option value="Lunch" selected>Lunch</option>
+                        <option value="Evening Meal">Evening Meal (Dinner)</option>
+                    </select>
+                </div>
+
+                <!-- Staging Area -->
                 <div class="staging-section">
                     <div class="staging-header">
-                        <span class="section-title">Unassigned Dogs</span>
+                        <span class="section-title">🐕 Dogs to Assign</span>
                         <span class="count-badge" id="stagingCount">0</span>
                     </div>
                     <div class="staging-area" id="stagingArea">
-                        <div class="empty-message">Add dogs using the form above</div>
+                        <div class="empty-message">Type a dog name above to get started</div>
                     </div>
                 </div>
             </div>
 
             <div class="main-content">
+                <!-- Pens Section -->
                 <div class="pens-section">
-                    <div class="section-title">Pens</div>
-                    <div class="pens-container">
+                    <div class="pen-row-label">
+                        Top Pens
+                        <span class="swipe-hint">← swipe →</span>
+                    </div>
+                    <div class="pen-row-scroll">
                         <div class="pen-row" id="topPens"></div>
+                    </div>
+                    
+                    <div class="pen-row-label">
+                        Bottom Pens
+                        <span class="swipe-hint">← swipe →</span>
+                    </div>
+                    <div class="pen-row-scroll">
                         <div class="pen-row" id="bottomPens"></div>
                     </div>
                 </div>
 
-                <div class="actions-section">
-                    <div class="section-title">Actions</div>
-                    <div class="actions-grid">
-                        <button class="btn btn-secondary" onclick="submitReport()">Preview</button>
-                        <button class="btn btn-success" onclick="confirmSubmit()">Submit</button>
-                        <button class="btn btn-secondary" onclick="clearAll()">Clear All</button>
-                    </div>
+                <!-- Action Buttons -->
+                <div class="action-bar">
+                    <button class="btn btn-secondary" onclick="showPreview()">📋 Preview</button>
+                    <button class="btn btn-success" onclick="submitReport()">✅ Submit</button>
+                    <button class="btn btn-secondary" onclick="clearAll()">🗑️ Clear All</button>
                 </div>
             </div>
         </div>
@@ -923,77 +978,83 @@
     <div class="modal-overlay" id="previewModal">
         <div class="modal">
             <div class="modal-header">
-                <span class="modal-title">Report Preview</span>
-                <button class="modal-close" onclick="closePreview()">&times;</button>
+                <h2>📋 Report Preview</h2>
+                <button class="modal-close" onclick="closePreview()">×</button>
             </div>
             <div class="modal-body" id="previewContent"></div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closePreview()">Cancel</button>
-                <button class="btn btn-success" onclick="confirmSubmit()">Confirm & Send</button>
+                <button class="btn btn-secondary" onclick="closePreview()">Back</button>
+                <button class="btn btn-success" onclick="confirmSubmit()">Submit</button>
             </div>
         </div>
     </div>
 
-    <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
 
     <script>
         // ============================================
         // CONFIGURATION
         // ============================================
-
-        const APPS_SCRIPT_URL = 'YOUR_APPS_SCRIPT_URL_HERE';
+        
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwP74AXOe1cZmHKTxi9KbMhZJU48EHRFI7NQ6Og65_FcTVB1sMQuqgkPKIkr7Fm7e40mw/exec';
+        
         const SYNC_INTERVAL = 5000;
         const SYNC_PAUSE_DURATION = 8000;
         const INITIAL_LOAD_DELAY = 2000;
-        
-        // ANDROID FIX: Shorter long-press for better responsiveness
-        const LONG_PRESS_DURATION = 250; // Reduced from 300ms
-        const SCROLL_THRESHOLD = 10; // Pixels of movement before cancelling drag
+
+        const JOTFORM_DOG_NAMES = [
+            "Aldo","Alfie","April","Argo","Arlo","Banjo","Barney Homewood","Barney Leeming","Baron","Bay","Beano","Bella","Belle","Benson","Betsy","Birdy","Blue","Bluey","Bo","Bonnie Gallagher","Bonnie Lockwood","Bramble","Branko","Bruce","Bruno","Buddy Dann","Buddy Dargan","Buddy Selby","Casper Hamilton","Casper Kukreja","Che","Chester","Chloe","Clifford","Daisy Cremin","Daisy Parsons","Darcy Campbell","Darcy Dunn","Darwin","Delphine","Dexter","Dicee","Diego Gonsavles","Diego Wojcik","Dierdra","Digby","Dolly","Dottie","Dougie","Dudley","Dusty","Echo","Eddie","Effie","Enzo","Fenton","Ferox","Flaco","Fletcher","Florence","Freddie","Fredo","Frida Walsh","George Elliston","George Jackson","George Mohammed","Gina","Goldie","Haggis","Hattie Campbell","Hattie Duncan","Henry","Holly","Hugo","Incy","Ivy","Jack","Jeff","Jessie","Keti","Kip","Koji","Leo","Lily","Lola Bowles","Lola Fenloni","Lola Hall","Luke","Luna Crockford","Luna Grimshaw","Mac","Macy","Maggie","Margo","Marli","Marloe","Marlow","Martha","Max Tigwell","Max Wang","Merlin Crowley","Merlin Mayne","Miles","Miley","Millie Bowles","Millie Carter","Millie Cartwright","Millie Ellis","Milo McVey","Missy Evans","Mocha Gasper","Mocha Kolumbajew","Mochi","Moka","Mollie","Mos Wan","Moss Harris","Naira","Nala Sands","Nala Warnes","Narla Tester","Ned","Neo","Nevis","Nina","Obie","Oliver","Otis","Peggy Gibbons","Peggy Lucas","Pepper","Petch","Pippin","Pluto","Poppy Clark","Poppy Lancaster","Poppy Lass","Poppy Pike","Ralph Goddard","Raven","Reggie Daly","Reggie Foreman","Reggie Russel","Rex","Rita","River","Rocco","Roman","Roxy","Ruby Brooker","Ruby Favell","Ruby Jones","Rudy","Ruffles","Rufus","Rupy","Sam","Sebastian","Shadow Podkalicka","Shadow Wightman","Snoopy","Sonny","Sophie","Stanley James","Star","Storm","Tallulah","Tam","Tasha","Ted Lambie","Teddy Brown","Teddy Jamison","Terry","Tilly Mills","Tokyo","Warwick","Winnie Awele","Winnie Evans","Winnie Hall","Winnie Lancaster","Winnie Ryan","Woody Johns","Woody Warren","Zero","Ziggy"
+        ];
+
+        const SUPPLEMENT_TYPES = [
+            { id: 'calming', label: 'Calming', jotformValue: 'Calming Tablets' },
+            { id: 'hemp', label: 'Hemp', jotformValue: 'Hemp Oil' },
+            { id: 'vitamins', label: 'Vitamins', jotformValue: 'Multi Vitamins' },
+            { id: 'probiotics', label: 'Probiotics', jotformValue: 'FortiFlora Probiotics' }
+        ];
 
         const FEEDING_STATUS_MAP = {
             'all': 'All',
-            'three-quarter': '¾',
-            'half': '½',
-            'quarter': '¼',
+            'three-quarter': '3/4',
+            'half': '1/2',
+            'quarter': '1/4',
             'none': 'None'
         };
-
-        const SUPPLEMENT_TYPES = [
-            { id: 'paste', label: 'Paste' },
-            { id: 'gel', label: 'Gel' },
-            { id: 'probiotic', label: 'Probiotic' },
-            { id: 'oil', label: 'Oil' }
-        ];
 
         // ============================================
         // STATE
         // ============================================
-
+        
+        let dogNameList = JOTFORM_DOG_NAMES;
         let masterDogList = [];
-        let dogNameList = [];
         let dogs = [];
         let pens = {};
-        let currentMealType = 'Breakfast';
-
-        // Sync state
-        let syncInterval = null;
-        let isSyncing = false;
-        let isOnline = false;
-        let lastSyncVersion = 0;
-        let syncPausedUntil = 0;
-        let initialLoadComplete = false;
-        let pendingDogIds = new Set();
-
-        // Drag state
-        let isDragging = false;
         let draggedDogId = null;
         let draggedFromPen = null;
         let ghostElement = null;
-        let dragSourceElement = null;
-        let touchStartPos = null;
-        let pendingDragInfo = null;
         let dragTimeout = null;
+        let touchStartPos = null;
+        let isDragging = false;
+        let pendingDragInfo = null;
+        
+        // TOUCH EVENT FIX: Store the element being dragged
+        let dragSourceElement = null;
+        
+        // Settings - PROVEN VALUES
+        const LONG_PRESS_DURATION = 300;  // Longer for reliable detection
+        const SCROLL_THRESHOLD = 8;       // Balance between scroll detection and finger squish
+        
+        let isOnline = false;
+        let currentMealType = 'Lunch';
+        
+        let lastSyncVersion = 0;
+        let syncInterval = null;
+        let isSyncing = false;
+        let syncPausedUntil = 0;
+        let pendingDogIds = new Set();
+        let initialLoadComplete = false;
+        
+        // Store scroll position when locking body
         let scrollPositionBeforeDrag = 0;
         
         // Bound function references for proper removal
@@ -1063,49 +1124,28 @@
                 if (e.key === 'Enter') addDog();
             });
             
-            // Mouse events for desktop - use document level
+            // TOUCH EVENTS - Use separate touch and mouse handlers
+            // Touch events for mobile
+            document.addEventListener('touchstart', handleTouchStart, { passive: true });
+            // Mouse events for desktop fallback
             document.addEventListener('mousedown', handleMouseDown, { passive: true });
-            
-            // ANDROID FIX: We'll attach touch listeners directly to draggables after render
-            // This allows us to use non-passive listeners on specific elements
-            attachTouchListeners();
         }
         
         // ============================================
-        // ANDROID FIX: Attach touch listeners to draggables
-        // This is called after rendering and attaches NON-PASSIVE
-        // listeners directly to draggable elements
+        // TOUCH HANDLERS (Mobile)
         // ============================================
         
-        function attachTouchListeners() {
-            // Remove old listeners by re-querying (simple approach)
-            // For a more robust solution, track and remove properly
-            document.querySelectorAll('[data-draggable="true"]').forEach(el => {
-                // Remove any existing listener (won't work for anonymous functions, but we'll use named ones)
-                el.removeEventListener('touchstart', handleDraggableTouchStart);
-                // Attach NON-PASSIVE listener directly to draggable
-                // This is the key fix - passive: false allows preventDefault
-                el.addEventListener('touchstart', handleDraggableTouchStart, { passive: false });
-            });
-        }
-        
-        // ============================================
-        // TOUCH HANDLERS (Mobile) - ANDROID FIXED
-        // ============================================
-        
-        function handleDraggableTouchStart(e) {
-            // Only single touch
-            if (e.touches.length !== 1) return;
+        function handleTouchStart(e) {
+            if (e.touches.length !== 1) return; // Only single touch
             
             const touch = e.touches[0];
-            const draggable = e.currentTarget;
+            const draggable = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('[data-draggable="true"]');
+            if (!draggable) return;
             
-            // Get dog info from the element
             const dogId = draggable.dataset.dogId;
             const penId = draggable.dataset.penId || null;
             if (!dogId) return;
             
-            // Store initial touch position
             touchStartPos = { x: touch.clientX, y: touch.clientY };
             dragSourceElement = draggable;
             pendingDragInfo = { 
@@ -1114,26 +1154,17 @@
                 coords: { x: touch.clientX, y: touch.clientY }
             };
             
-            // Add visual feedback immediately
-            const parent = draggable.closest('.dog-card, .pen-dog');
-            if (parent) parent.classList.add('press-active');
-            draggable.classList.add('press-active');
-            
-            // Clear any existing timeout
             if (dragTimeout) clearTimeout(dragTimeout);
             
             // Start long-press timer
             dragTimeout = setTimeout(() => {
                 if (pendingDragInfo && touchStartPos) {
-                    // Remove press-active and start actual drag
-                    document.querySelectorAll('.press-active').forEach(el => el.classList.remove('press-active'));
                     startDragTouch(pendingDragInfo);
                 }
             }, LONG_PRESS_DURATION);
             
-            // Listen for movement/cancel during long-press wait
-            // Using non-passive to allow preventDefault if needed
-            document.addEventListener('touchmove', checkTouchScroll, { passive: false });
+            // Listen for movement/cancel (passive to allow scroll initially)
+            document.addEventListener('touchmove', checkTouchScroll, { passive: true });
             document.addEventListener('touchend', cancelTouchDrag);
             document.addEventListener('touchcancel', cancelTouchDrag);
         }
@@ -1147,7 +1178,6 @@
             
             // If moved too much before timer, it's a scroll - cancel drag
             if (dx > SCROLL_THRESHOLD || dy > SCROLL_THRESHOLD) {
-                // DON'T preventDefault here - let it scroll
                 cancelTouchDrag();
             }
         }
@@ -1157,10 +1187,6 @@
                 clearTimeout(dragTimeout);
                 dragTimeout = null;
             }
-            
-            // Remove visual feedback
-            document.querySelectorAll('.press-active').forEach(el => el.classList.remove('press-active'));
-            
             touchStartPos = null;
             pendingDragInfo = null;
             dragSourceElement = null;
@@ -1181,10 +1207,8 @@
             draggedDogId = dragInfo.dogId;
             draggedFromPen = dragInfo.fromPen;
             
-            // Lock body scroll
-            scrollPositionBeforeDrag = window.scrollY;
+            // Lock body scroll (no position fixed - prevents visual jump)
             document.body.classList.add('is-dragging');
-            document.body.style.top = `-${scrollPositionBeforeDrag}px`;
             
             triggerHaptic('medium');
             
@@ -1262,17 +1286,12 @@
                 coords: { x: e.clientX, y: e.clientY }
             };
             
-            // Add visual feedback
-            const parent = draggable.closest('.dog-card, .pen-dog');
-            if (parent) parent.classList.add('press-active');
-            draggable.classList.add('press-active');
-            
             if (dragTimeout) clearTimeout(dragTimeout);
             
-            // For mouse, use long press for consistency
+            // For mouse, we can start drag immediately on movement
+            // Or use long press - let's use long press for consistency
             dragTimeout = setTimeout(() => {
                 if (pendingDragInfo && touchStartPos) {
-                    document.querySelectorAll('.press-active').forEach(el => el.classList.remove('press-active'));
                     startDragMouse(pendingDragInfo);
                 }
             }, LONG_PRESS_DURATION);
@@ -1297,9 +1316,6 @@
                 clearTimeout(dragTimeout);
                 dragTimeout = null;
             }
-            
-            document.querySelectorAll('.press-active').forEach(el => el.classList.remove('press-active'));
-            
             touchStartPos = null;
             pendingDragInfo = null;
             dragSourceElement = null;
@@ -1316,9 +1332,8 @@
             draggedDogId = dragInfo.dogId;
             draggedFromPen = dragInfo.fromPen;
             
-            scrollPositionBeforeDrag = window.scrollY;
+            // Lock body scroll (no position fixed - prevents visual jump)
             document.body.classList.add('is-dragging');
-            document.body.style.top = `-${scrollPositionBeforeDrag}px`;
             
             triggerHaptic('medium');
             
@@ -1387,13 +1402,10 @@
         async function finishDrag(finalX, finalY) {
             // Unlock body
             document.body.classList.remove('is-dragging');
-            document.body.style.top = '';
-            window.scrollTo(0, scrollPositionBeforeDrag);
             
             // Clean up visuals
             document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
             document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-            document.querySelectorAll('.press-active').forEach(el => el.classList.remove('press-active'));
             hideDropZones();
             removeGhostElement();
             
@@ -1511,9 +1523,6 @@
             
             renderAllPens();
             renderStagingArea();
-            
-            // ANDROID FIX: Re-attach touch listeners after render
-            attachTouchListeners();
         }
 
         async function loadSessionState() {
@@ -1592,7 +1601,7 @@
                 return result;
             } catch (error) {
                 console.error('Sync add error:', error);
-                return { success: false };
+                return { success: false, error: error.toString() };
             } finally {
                 pendingDogIds.delete(dog.id);
             }
@@ -1621,7 +1630,7 @@
                 return result;
             } catch (error) {
                 console.error('Sync update error:', error);
-                return { success: false };
+                return { success: false, error: error.toString() };
             } finally {
                 pendingDogIds.delete(dogId);
             }
@@ -1634,10 +1643,7 @@
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     redirect: 'follow',
-                    body: JSON.stringify({
-                        action: 'deleteDog',
-                        dogId: dogId
-                    })
+                    body: JSON.stringify({ action: 'deleteDog', dogId: dogId })
                 });
                 
                 const result = await response.json();
@@ -1647,21 +1653,20 @@
                 return result;
             } catch (error) {
                 console.error('Sync delete error:', error);
-                return { success: false };
+                return { success: false, error: error.toString() };
             }
         }
 
         async function syncMealType(mealType) {
             if (!isOnline) return { success: false };
             
+            pauseSync();
+            
             try {
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     redirect: 'follow',
-                    body: JSON.stringify({
-                        action: 'updateMealType',
-                        mealType: mealType
-                    })
+                    body: JSON.stringify({ action: 'setMealType', mealType: mealType })
                 });
                 
                 const result = await response.json();
@@ -1671,7 +1676,7 @@
                 return result;
             } catch (error) {
                 console.error('Sync meal type error:', error);
-                return { success: false };
+                return { success: false, error: error.toString() };
             }
         }
 
@@ -1682,9 +1687,7 @@
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     redirect: 'follow',
-                    body: JSON.stringify({
-                        action: 'clearSession'
-                    })
+                    body: JSON.stringify({ action: 'clearSession' })
                 });
                 
                 const result = await response.json();
@@ -1694,7 +1697,7 @@
                 return result;
             } catch (error) {
                 console.error('Sync clear error:', error);
-                return { success: false };
+                return { success: false, error: error.toString() };
             }
         }
 
@@ -1808,10 +1811,6 @@
             input.value = '';
             
             renderStagingArea();
-            
-            // ANDROID FIX: Re-attach touch listeners after render
-            attachTouchListeners();
-            
             showToast(dog.matchedName ? `Added ${dog.matchedName}` : `Added ${name} - select from dropdown`, 'success');
             
             await syncAddDog(dog);
@@ -1828,10 +1827,6 @@
             
             renderAllPens();
             renderStagingArea();
-            
-            // ANDROID FIX: Re-attach touch listeners after render
-            attachTouchListeners();
-            
             showToast('Dog removed', 'info');
             
             await syncDeleteDog(dogId);
@@ -1858,9 +1853,6 @@
             renderAllPens();
             renderStagingArea();
             
-            // ANDROID FIX: Re-attach touch listeners after render
-            attachTouchListeners();
-            
             await syncUpdateDog(dogId, { penId: newPenId || '' });
         }
 
@@ -1882,9 +1874,6 @@
             
             renderStagingArea();
             renderAllPens();
-            
-            // ANDROID FIX: Re-attach touch listeners after render
-            attachTouchListeners();
             
             await syncUpdateDog(dogId, { matchedName: selectedName, possibleMatches: [selectedName] });
         }
@@ -2005,7 +1994,6 @@
                 pauseSync();
                 dog.status = status;
                 renderPen(getDogPen(dogId));
-                attachTouchListeners(); // ANDROID FIX
                 await syncUpdateDog(dogId, { status: status });
             }
         }
@@ -2017,7 +2005,6 @@
                 dog.prescription = !dog.prescription;
                 if (!dog.prescription) dog.prescriptionComment = '';
                 renderPen(getDogPen(dogId));
-                attachTouchListeners(); // ANDROID FIX
                 await syncUpdateDog(dogId, { prescription: dog.prescription, prescriptionComment: dog.prescriptionComment });
             }
         }
@@ -2038,7 +2025,6 @@
                 dog.supplements = !dog.supplements;
                 if (!dog.supplements) dog.supplementTypes = [];
                 renderPen(getDogPen(dogId));
-                attachTouchListeners(); // ANDROID FIX
                 await syncUpdateDog(dogId, { supplements: dog.supplements, supplementTypes: dog.supplementTypes });
             }
         }
@@ -2057,7 +2043,7 @@
         }
 
         // ============================================
-        // DRAG AND DROP - HELPER FUNCTIONS
+        // DRAG AND DROP - ANDROID FIXED VERSION
         // ============================================
 
         function triggerHaptic(pattern = 'light') {
@@ -2244,7 +2230,6 @@
                 for (const penId of Object.keys(pens)) pens[penId] = [];
                 renderAllPens();
                 renderStagingArea();
-                attachTouchListeners(); // ANDROID FIX
                 updateStatus('✓ Submitted', 'connected');
             } else {
                 showToast('❌ Submit failed: ' + (result.error || 'Unknown error'), 'error');
@@ -2259,7 +2244,6 @@
             for (const penId of Object.keys(pens)) pens[penId] = [];
             renderAllPens();
             renderStagingArea();
-            attachTouchListeners(); // ANDROID FIX
             
             updateStatus('Clearing...', 'syncing');
             const result = await syncClearSession();
