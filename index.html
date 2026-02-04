@@ -558,12 +558,14 @@
             overflow: visible;
         }
 
+        /* Pen dog tile - touch-action auto allows scroll, only the name handle has none */
         .pen-dog {
             background: var(--bg-secondary);
             border-radius: 10px;
             padding: 10px;
             border-left: 5px solid var(--status-all);
             transition: opacity 0.15s ease, border-left-color 0.15s ease;
+            touch-action: auto;  /* Allow scroll - drag handle (.pen-dog-name) has none */
         }
 
         /* Hover only on devices with fine pointer (mouse) */
@@ -589,13 +591,13 @@
             gap: 8px;
         }
 
-        /* Dog name - touch-action auto allows scrolling */
+        /* Dog name - DRAG HANDLE with touch-action: none for Android compatibility */
         .pen-dog-name {
             font-size: 0.8rem;
             font-weight: 700;
             color: var(--text-primary);
             cursor: grab;
-            touch-action: auto;
+            touch-action: none;  /* CRITICAL: Must be none on drag handle */
             user-select: none;
             -webkit-user-select: none;
             -webkit-touch-callout: none;
@@ -604,6 +606,21 @@
             min-height: 28px;
             display: flex;
             align-items: center;
+            gap: 6px;
+        }
+        
+        /* Drag grip icon - visual indicator for drag handle */
+        .pen-dog-name::before {
+            content: '⋮⋮';
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            letter-spacing: -3px;
+            opacity: 0.6;
+        }
+        
+        .pen-dog-name:active {
+            background: rgba(0, 172, 238, 0.1);
+            border-radius: 4px;
         }
 
         .pen-dog-remove {
