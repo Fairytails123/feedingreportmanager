@@ -354,6 +354,16 @@
             background: #1a4a7a;
         }
 
+        /* NEW-DOG FIX: Highlight animation for newly-added cards to draw attention */
+        @keyframes newCardHighlight {
+            0% { background: var(--fairy-tails-blue); transform: scale(1.05); }
+            100% { background: var(--bg-pen); transform: scale(1); }
+        }
+        
+        .dog-card.newly-added {
+            animation: newCardHighlight 0.6s ease-out forwards;
+        }
+
         /* Hover only on devices with fine pointer (mouse) */
         @media (hover: hover) and (pointer: fine) {
             .dog-card:hover { background: #1a4a7a; }
@@ -1141,6 +1151,19 @@
                 if (e.key === 'Enter') addDog();
             });
             
+            // ANDROID FIX: Prevent native context menu (Download/Share/Print) on long-press
+            // This fires on ALL elements but we only preventDefault on draggable targets
+            document.addEventListener('contextmenu', function(e) {
+                const draggable = e.target.closest('[data-draggable="true"]');
+                const dogCard = e.target.closest('.dog-card');
+                const penDog = e.target.closest('.pen-dog');
+                if (draggable || dogCard || penDog) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
+                }
+            }, { passive: false });
+            
             // TOUCH EVENTS - Use separate touch and mouse handlers
             // Touch events for mobile
             document.addEventListener('touchstart', handleTouchStart, { passive: true });
@@ -1207,6 +1230,11 @@
             touchStartPos = null;
             pendingDragInfo = null;
             dragSourceElement = null;
+            
+            // GHOST FIX: Clean up any ghost elements or dragging classes left from interrupted drags
+            removeGhostElement();
+            document.querySelectorAll('.drag-ghost').forEach(el => el.remove());
+            document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
             
             document.removeEventListener('touchmove', checkTouchScroll);
             document.removeEventListener('touchend', cancelTouchDrag);
@@ -1337,6 +1365,11 @@
             pendingDragInfo = null;
             dragSourceElement = null;
             
+            // GHOST FIX: Clean up any ghost elements or dragging classes left from interrupted drags
+            removeGhostElement();
+            document.querySelectorAll('.drag-ghost').forEach(el => el.remove());
+            document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+            
             document.removeEventListener('mousemove', checkMouseScroll);
             document.removeEventListener('mouseup', cancelMouseDrag);
         }
@@ -1425,6 +1458,8 @@
             document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
             hideDropZones();
             removeGhostElement();
+            // GHOST FIX: Sweep any orphaned ghost elements from the DOM
+            document.querySelectorAll('.drag-ghost').forEach(el => el.remove());
             
             if (!isDragging || !draggedDogId) {
                 isDragging = false;
@@ -1828,6 +1863,18 @@
             input.value = '';
             
             renderStagingArea();
+            
+            // NEW-DOG FIX: Scroll to and highlight the newly-added card for immediate visibility
+            requestAnimationFrame(() => {
+                const newCard = document.querySelector(`.dog-card[data-dog-id="${dog.id}"], .dog-card.unmatched[data-dog-id="${dog.id}"]`);
+                if (newCard) {
+                    newCard.classList.add('newly-added');
+                    newCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    // Remove highlight class after animation completes
+                    setTimeout(() => newCard.classList.remove('newly-added'), 700);
+                }
+            });
+            
             showToast(dog.matchedName ? `Added ${dog.matchedName}` : `Added ${name} - select from dropdown`, 'success');
             
             await syncAddDog(dog);
@@ -2094,6 +2141,11 @@
         }
 
         function createGhostElement(dogId, x, y) {
+            // GHOST FIX: Remove any pre-existing ghost elements to prevent orphans
+            removeGhostElement();
+            // Also sweep for any stale ghost elements left in the DOM
+            document.querySelectorAll('.drag-ghost').forEach(el => el.remove());
+            
             const name = getDogDisplayName(dogId);
             ghostElement = document.createElement('div');
             ghostElement.className = 'drag-ghost';
