@@ -1563,6 +1563,34 @@
                 supplementTypes: d.supplementTypes || []
             }));
             
+            // RE-MATCH FIX: Attempt to re-match any dogs that arrived from the session
+            // with empty possibleMatches (caused by previous Lookup tab failures).
+            // This repairs broken data on every sync cycle without altering already-matched dogs.
+            dogs.forEach(dog => {
+                if (!dog.matchedName && dog.possibleMatches.length === 0 && dog.inputName) {
+                    const rematched = matchDogName(dog.inputName);
+                    if (rematched.length === 1) {
+                        dog.matchedName = rematched[0];
+                        dog.possibleMatches = rematched;
+                        console.log('[applyRemoteState] Re-matched "' + dog.inputName + '" → ' + rematched[0]);
+                        // Sync the fix back to the Session sheet (non-blocking)
+                        syncUpdateDog(dog.id, { matchedName: rematched[0], possibleMatches: rematched });
+                    } else if (rematched.length > 1) {
+                        dog.possibleMatches = rematched;
+                        console.log('[applyRemoteState] Re-matched "' + dog.inputName + '" → ' + rematched.length + ' options');
+                        syncUpdateDog(dog.id, { possibleMatches: rematched });
+                    } else {
+                        // Exact match failed, try fuzzy match
+                        const fuzzyMatches = fuzzyMatchDogName(dog.inputName);
+                        if (fuzzyMatches.length > 0) {
+                            dog.possibleMatches = fuzzyMatches;
+                            console.log('[applyRemoteState] Fuzzy re-matched "' + dog.inputName + '" → ' + fuzzyMatches.length + ' options');
+                            syncUpdateDog(dog.id, { possibleMatches: fuzzyMatches });
+                        }
+                    }
+                }
+            });
+            
             for (const penId of Object.keys(pens)) {
                 pens[penId] = [];
             }
@@ -1609,12 +1637,26 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    masterDogList = result.dogs;
-                    dogNameList = result.dogs.map(d => d.name);
+                    // GUARD FIX: Only replace the hardcoded fallback if the API returned
+                    // a reasonable number of dogs. An empty or near-empty Lookup tab should
+                    // NOT destroy the known-good JOTFORM_DOG_NAMES fallback list.
+                    const MIN_DOG_COUNT = 10; // Safety threshold — Lookup tab should have many more
+                    
+                    if (result.dogs && result.dogs.length >= MIN_DOG_COUNT) {
+                        masterDogList = result.dogs;
+                        dogNameList = result.dogs.map(d => d.name);
+                        console.log('[loadDogList] Loaded ' + dogNameList.length + ' dogs from Lookup tab');
+                    } else {
+                        // API succeeded but returned too few dogs — keep the hardcoded fallback
+                        console.warn('[loadDogList] Lookup tab returned only ' + (result.dogs ? result.dogs.length : 0) + ' dogs — keeping hardcoded fallback (' + JOTFORM_DOG_NAMES.length + ' dogs)');
+                        masterDogList = result.dogs || [];
+                        // dogNameList stays as JOTFORM_DOG_NAMES (not overwritten)
+                    }
                     isOnline = true;
                 }
             } catch (error) {
-                console.error('API Error:', error);
+                console.error('[loadDogList] API Error:', error);
+                console.warn('[loadDogList] Keeping hardcoded fallback list (' + JOTFORM_DOG_NAMES.length + ' dogs)');
                 isOnline = false;
             }
         }
