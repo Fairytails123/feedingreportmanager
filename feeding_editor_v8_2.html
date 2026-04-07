@@ -1028,6 +1028,7 @@
         const SYNC_INTERVAL = 5000;
         const SYNC_PAUSE_DURATION = 8000;
         const INITIAL_LOAD_DELAY = 2000;
+        const DOG_LIST_REFRESH_INTERVAL = 60000; // Re-fetch Lookup tab every 60s so new dogs appear without page reload
 
         const JOTFORM_DOG_NAMES = [
             "Aldo","Alfie","April","Argo","Arlo","Banjo","Barney Homewood","Barney Leeming","Baron","Bay","Beano","Bella","Belle","Benson","Betsy","Birdy","Blue","Bluey","Bo","Bonnie Gallagher","Bonnie Lockwood","Bramble","Branko","Bruce","Bruno","Buddy Dann","Buddy Dargan","Buddy Selby","Casper Hamilton","Casper Kukreja","Che","Chester","Chloe","Clifford","Daisy Cremin","Daisy Parsons","Darcy Campbell","Darcy Dunn","Darwin","Delphine","Dexter","Dicee","Diego Gonsavles","Diego Wojcik","Dierdra","Digby","Dolly","Dottie","Dougie","Dudley","Dusty","Echo","Eddie","Effie","Enzo","Fenton","Ferox","Flaco","Fletcher","Florence","Freddie","Fredo","Frida Walsh","George Elliston","George Jackson","George Mohammed","Gina","Goldie","Haggis","Hattie Campbell","Hattie Duncan","Henry","Holly","Hugo","Incy","Ivy","Jack","Jeff","Jessie","Keti","Kip","Koji","Leo","Lily","Lola Bowles","Lola Fenloni","Lola Hall","Luke","Luna Crockford","Luna Grimshaw","Mac","Macy","Maggie","Margo","Marli","Marloe","Marlow","Martha","Max Tigwell","Max Wang","Merlin Crowley","Merlin Mayne","Miles","Miley","Millie Bowles","Millie Carter","Millie Cartwright","Millie Ellis","Milo McVey","Missy Evans","Mocha Gasper","Mocha Kolumbajew","Mochi","Moka","Mollie","Mos Wan","Moss Harris","Naira","Nala Sands","Nala Warnes","Narla Tester","Ned","Neo","Nevis","Nina","Obie","Oliver","Otis","Peggy Gibbons","Peggy Lucas","Pepper","Petch","Pippin","Pluto","Poppy Clark","Poppy Lancaster","Poppy Lass","Poppy Pike","Ralph Goddard","Raven","Reggie Daly","Reggie Foreman","Reggie Russel","Rex","Rita","River","Rocco","Roman","Roxy","Ruby Brooker","Ruby Favell","Ruby Jones","Rudy","Ruffles","Rufus","Rupy","Sam","Sebastian","Shadow Podkalicka","Shadow Wightman","Snoopy","Sonny","Sophie","Stanley James","Star","Storm","Tallulah","Tam","Tasha","Ted Lambie","Teddy Brown","Teddy Jamison","Terry","Tilly Mills","Tokyo","Warwick","Winnie Awele","Winnie Evans","Winnie Hall","Winnie Lancaster","Winnie Ryan","Woody Johns","Woody Warren","Zero","Ziggy"
@@ -1080,6 +1081,7 @@
         let syncPausedUntil = 0;
         let pendingDogIds = new Set();
         let initialLoadComplete = false;
+        let lastDogListRefresh = 0;
         
         // Store scroll position when locking body
         let scrollPositionBeforeDrag = 0;
@@ -1526,7 +1528,13 @@
             if (isSyncing || isSyncPaused() || !isOnline || !initialLoadComplete || pendingDogIds.size > 0) {
                 return;
             }
-            
+
+            // Periodically refresh the dog name list from the Lookup tab
+            // so newly added dogs appear without a page reload
+            if (Date.now() - lastDogListRefresh > DOG_LIST_REFRESH_INTERVAL) {
+                await loadDogList();
+            }
+
             try {
                 const response = await fetch(APPS_SCRIPT_URL + '?action=getSession', {
                     method: 'GET',
@@ -1641,7 +1649,7 @@
                     // a reasonable number of dogs. An empty or near-empty Lookup tab should
                     // NOT destroy the known-good JOTFORM_DOG_NAMES fallback list.
                     const MIN_DOG_COUNT = 10; // Safety threshold — Lookup tab should have many more
-                    
+
                     if (result.dogs && result.dogs.length >= MIN_DOG_COUNT) {
                         masterDogList = result.dogs;
                         dogNameList = result.dogs.map(d => d.name);
@@ -1652,6 +1660,7 @@
                         masterDogList = result.dogs || [];
                         // dogNameList stays as JOTFORM_DOG_NAMES (not overwritten)
                     }
+                    lastDogListRefresh = Date.now();
                     isOnline = true;
                 }
             } catch (error) {

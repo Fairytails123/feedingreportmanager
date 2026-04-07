@@ -1,0 +1,558 @@
+{
+  "name": "Feeding Report - Send Command (v2 Real-Time Sync)",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "id": "telegram-trigger-001",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "position": [200, 300],
+      "webhookId": "feeding-report-trigger",
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message.text }}",
+                    "rightValue": "/send",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Send"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message.text }}",
+                    "rightValue": "/cancel",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Cancel"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message.text }}",
+                    "rightValue": "/status",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Status"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      },
+      "id": "switch-router-001",
+      "name": "Command Router",
+      "type": "n8n-nodes-base.switch",
+      "position": [420, 300],
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "1Ejjoo55BaoCPRaLdmFb9EdqtiAT9eNa52QRWjuVThyc",
+          "mode": "list",
+          "cachedResultName": "Feeding report manager"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Temp",
+          "mode": "list",
+          "cachedResultName": "Temp"
+        },
+        "options": {}
+      },
+      "id": "sheets-read-001",
+      "name": "Read Temp Tab",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [640, 180],
+      "typeVersion": 4.5,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 3,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-rows",
+              "leftValue": "={{ $json['Dog Name'] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-has-data-001",
+      "name": "Has Data?",
+      "type": "n8n-nodes-base.if",
+      "position": [860, 180],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process each row from Temp tab and prepare JotForm submission data\n// TEMP TAB COLUMNS (7 columns - NO Parent Name):\n// A: Dog Name | B: Parent Email | C: Meal | D: Food Consumed | E: Medicine Supplement | F: Supplement Types | G: Comments\n\nconst items = $input.all();\nconst results = [];\n\n// JotForm field IDs (from your form)\nconst FORM_ID = '240143730611039';\n\n// Get today's date\nconst today = new Date();\nconst day = today.getDate().toString();\nconst month = (today.getMonth() + 1).toString();\nconst year = today.getFullYear().toString();\n\nfor (const item of items) {\n  const row = item.json;\n  \n  // Skip empty rows\n  if (!row['Dog Name']) continue;\n  \n  // Build form data object for JotForm API\n  const formData = {};\n  \n  // Date (field 3)\n  formData['submission[3][day]'] = day;\n  formData['submission[3][month]'] = month;\n  formData['submission[3][year]'] = year;\n  \n  // Dog name (field 13)\n  formData['submission[13]'] = row['Dog Name'] || '';\n  \n  // Parent email (field 14)\n  formData['submission[14]'] = row['Parent Email'] || '';\n  \n  // Meal time (field 9)\n  formData['submission[9]'] = row['Meal'] || 'Lunch';\n  \n  // Food consumed (field 6)\n  formData['submission[6]'] = row['Food Consumed'] || 'All';\n  \n  // Has medicine/supplement (field 10)\n  formData['submission[10]'] = row['Medicine Supplement'] || 'No';\n  \n  // Medicine and supplements (field 7) - can be multiple\n  // Format in sheet: \"Calming Tablets, Hemp Oil\" -> split to array\n  const suppTypes = row['Supplement Types'] || '';\n  if (suppTypes) {\n    const supps = suppTypes.split(',').map(s => s.trim()).filter(s => s);\n    supps.forEach((supp, idx) => {\n      formData[`submission[7][${idx}]`] = supp;\n    });\n  }\n  \n  // Check if comments indicate prescription and add to supplements if needed\n  const comments = row['Comments'] || '';\n  if (row['Medicine Supplement'] === 'Yes' && comments.toLowerCase().includes('prescription')) {\n    // Check if Prescription Medicine not already in supplements\n    if (!suppTypes.includes('Prescription Medicine')) {\n      const currentSupps = suppTypes ? suppTypes.split(',').filter(s => s.trim()).length : 0;\n      formData[`submission[7][${currentSupps}]`] = 'Prescription Medicine';\n    }\n  }\n  \n  // Additional comments (field 21)\n  formData['submission[21]'] = comments;\n  \n  results.push({\n    json: {\n      dogName: row['Dog Name'],\n      parentEmail: row['Parent Email'],\n      formData: formData,\n      formId: FORM_ID\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "code-prepare-001",
+      "name": "Prepare JotForm Data",
+      "type": "n8n-nodes-base.code",
+      "position": [1080, 80],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.jotform.com/form/{{ $json.formId }}/submissions?apiKey=cc09d33db2d5a133da8ad05d796fcbc7",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": []
+        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.formData) }}",
+        "options": {}
+      },
+      "id": "http-jotform-001",
+      "name": "Submit to JotForm",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1300, 80],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Count successful submissions\nconst items = $input.all();\nlet successCount = 0;\nlet failCount = 0;\nconst errors = [];\n\nfor (const item of items) {\n  const response = item.json;\n  if (response.responseCode === 200 || response.responseCode === '200' || response.content?.submissionID) {\n    successCount++;\n  } else {\n    failCount++;\n    errors.push(response.message || 'Unknown error');\n  }\n}\n\nreturn [{\n  json: {\n    successCount,\n    failCount,\n    totalProcessed: items.length,\n    errors: errors.slice(0, 5) // Limit error messages\n  }\n}];"
+      },
+      "id": "code-count-001",
+      "name": "Count Results",
+      "type": "n8n-nodes-base.code",
+      "position": [1520, 80],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "operation": "clear",
+        "documentId": {
+          "__rl": true,
+          "value": "1Ejjoo55BaoCPRaLdmFb9EdqtiAT9eNa52QRWjuVThyc",
+          "mode": "list",
+          "cachedResultName": "Feeding report manager"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Temp",
+          "mode": "list",
+          "cachedResultName": "Temp"
+        },
+        "options": {
+          "keepFirstRow": true
+        }
+      },
+      "id": "sheets-clear-001",
+      "name": "Clear Temp Tab",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [1740, 80],
+      "typeVersion": 4.5
+    },
+    {
+      "parameters": {
+        "chatId": "-1003653235960",
+        "text": "=✅ *FEEDING REPORTS SUBMITTED*\n━━━━━━━━━━━━━━━━━━━━━━━━\n\n📊 *Results:*\n✓ Successful: {{ $('Count Results').item.json.successCount }}\n✗ Failed: {{ $('Count Results').item.json.failCount }}\n\n📧 JotForm will send emails to parents automatically.\n\n🗑️ Temp sheet cleared.",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-success-001",
+      "name": "Send Success Message",
+      "type": "n8n-nodes-base.telegram",
+      "position": [1960, 80],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "chatId": "-1003653235960",
+        "text": "⚠️ *NO REPORTS TO SUBMIT*\n━━━━━━━━━━━━━━━━━━━━━━━━\n\nThe Temp sheet is empty.\n\nPlease submit a feeding report from the website first.",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-empty-001",
+      "name": "Send Empty Message",
+      "type": "n8n-nodes-base.telegram",
+      "position": [1080, 280],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "operation": "clear",
+        "documentId": {
+          "__rl": true,
+          "value": "1Ejjoo55BaoCPRaLdmFb9EdqtiAT9eNa52QRWjuVThyc",
+          "mode": "list",
+          "cachedResultName": "Feeding report manager"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Temp",
+          "mode": "list",
+          "cachedResultName": "Temp"
+        },
+        "options": {
+          "keepFirstRow": true
+        }
+      },
+      "id": "sheets-clear-cancel-001",
+      "name": "Clear Temp (Cancel)",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [640, 420],
+      "typeVersion": 4.5
+    },
+    {
+      "parameters": {
+        "operation": "clear",
+        "documentId": {
+          "__rl": true,
+          "value": "1Ejjoo55BaoCPRaLdmFb9EdqtiAT9eNa52QRWjuVThyc",
+          "mode": "list",
+          "cachedResultName": "Feeding report manager"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Session",
+          "mode": "list",
+          "cachedResultName": "Session"
+        },
+        "options": {
+          "keepFirstRow": true
+        }
+      },
+      "id": "sheets-clear-session-cancel-001",
+      "name": "Clear Session (Cancel)",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [860, 420],
+      "typeVersion": 4.5
+    },
+    {
+      "parameters": {
+        "chatId": "-1003653235960",
+        "text": "❌ *REPORTS CANCELLED*\n━━━━━━━━━━━━━━━━━━━━━━━━\n\n🗑️ All data cleared (Temp + Session).\n\n📱 Website will reset on next sync.\n\nNo reports were submitted to JotForm.",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-cancel-001",
+      "name": "Send Cancel Message",
+      "type": "n8n-nodes-base.telegram",
+      "position": [1080, 420],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "1Ejjoo55BaoCPRaLdmFb9EdqtiAT9eNa52QRWjuVThyc",
+          "mode": "list",
+          "cachedResultName": "Feeding report manager"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Temp",
+          "mode": "list",
+          "cachedResultName": "Temp"
+        },
+        "options": {}
+      },
+      "id": "sheets-status-001",
+      "name": "Read Temp (Status)",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [640, 620],
+      "typeVersion": 4.5,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "1Ejjoo55BaoCPRaLdmFb9EdqtiAT9eNa52QRWjuVThyc",
+          "mode": "list",
+          "cachedResultName": "Feeding report manager"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Session",
+          "mode": "list",
+          "cachedResultName": "Session"
+        },
+        "options": {}
+      },
+      "id": "sheets-status-session-001",
+      "name": "Read Session (Status)",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [640, 780],
+      "typeVersion": 4.5,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Count pending reports from both Temp and Session tabs\nconst tempItems = $('Read Temp (Status)').all();\nconst sessionItems = $('Read Session (Status)').all();\n\n// Count Temp tab (ready for JotForm submission)\nlet tempCount = 0;\nconst tempDogs = [];\nfor (const item of tempItems) {\n  if (item.json['Dog Name']) {\n    tempCount++;\n    tempDogs.push(item.json['Dog Name']);\n  }\n}\n\n// Count Session tab (in progress on website)\nlet sessionCount = 0;\nconst sessionDogs = [];\nfor (const item of sessionItems) {\n  if (item.json['Dog_ID']) {\n    sessionCount++;\n    sessionDogs.push(item.json['Matched_Name'] || item.json['Input_Name'] || 'Unknown');\n  }\n}\n\nreturn [{\n  json: {\n    tempCount,\n    tempDogs: tempDogs.slice(0, 10),\n    sessionCount,\n    sessionDogs: sessionDogs.slice(0, 10),\n    hasTempMore: tempDogs.length > 10,\n    hasSessionMore: sessionDogs.length > 10\n  }\n}];"
+      },
+      "id": "code-status-001",
+      "name": "Count Pending",
+      "type": "n8n-nodes-base.code",
+      "position": [920, 700],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "chatId": "-1003653235960",
+        "text": "=📋 *FEEDING REPORT STATUS*\n━━━━━━━━━━━━━━━━━━━━━━━━\n\n📤 *Ready for JotForm (Temp):* {{ $json.tempCount }}\n{{ $json.tempCount > 0 ? $json.tempDogs.map(d => '   • ' + d).join('\\n') + ($json.hasTempMore ? '\\n   ... and more' : '') : '   (none)' }}\n\n📱 *In Progress on Website (Session):* {{ $json.sessionCount }}\n{{ $json.sessionCount > 0 ? $json.sessionDogs.map(d => '   • ' + d).join('\\n') + ($json.hasSessionMore ? '\\n   ... and more' : '') : '   (none)' }}\n\n{{ $json.tempCount > 0 ? '\\n✅ Reply `/send` to submit to JotForm\\n❌ Reply `/cancel` to clear all' : ($json.sessionCount > 0 ? '\\n⏳ Dogs are being prepared on the website.\\nSubmit from website when ready.' : '\\n📝 No pending reports.') }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-status-001",
+      "name": "Send Status Message",
+      "type": "n8n-nodes-base.telegram",
+      "position": [1140, 700],
+      "typeVersion": 1.2
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Command Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Command Router": {
+      "main": [
+        [
+          {
+            "node": "Read Temp Tab",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Clear Temp (Cancel)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read Temp (Status)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read Session (Status)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Temp Tab": {
+      "main": [
+        [
+          {
+            "node": "Has Data?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Data?": {
+      "main": [
+        [
+          {
+            "node": "Prepare JotForm Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Empty Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare JotForm Data": {
+      "main": [
+        [
+          {
+            "node": "Submit to JotForm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit to JotForm": {
+      "main": [
+        [
+          {
+            "node": "Count Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Results": {
+      "main": [
+        [
+          {
+            "node": "Clear Temp Tab",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear Temp Tab": {
+      "main": [
+        [
+          {
+            "node": "Send Success Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear Temp (Cancel)": {
+      "main": [
+        [
+          {
+            "node": "Clear Session (Cancel)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear Session (Cancel)": {
+      "main": [
+        [
+          {
+            "node": "Send Cancel Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Temp (Status)": {
+      "main": [
+        [
+          {
+            "node": "Count Pending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Session (Status)": {
+      "main": [
+        [
+          {
+            "node": "Count Pending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Pending": {
+      "main": [
+        [
+          {
+            "node": "Send Status Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}
