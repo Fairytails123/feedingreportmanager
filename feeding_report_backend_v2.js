@@ -536,23 +536,31 @@ function getDogList() {
  */
 function submitReport(data) {
   try {
-    // Get session state
-    const sessionResult = getSessionState();
-    if (!sessionResult.success) {
-      return { success: false, error: 'Failed to get session: ' + sessionResult.error };
+    // POST-BODY-FIRST: Trust the tablet's local snapshot (data.dogs) when present.
+    // The tablet may have edits that never reached the Session tab due to transient
+    // GAS sync failures — its in-memory view is the authoritative truth at submit time.
+    // Fall back to the Session tab only when no dogs are in the POST body.
+    let dogsInPens;
+    let mealType;
+
+    if (data && Array.isArray(data.dogs) && data.dogs.length > 0) {
+      dogsInPens = data.dogs.filter(d => d.penId && d.penId !== '');
+      mealType = data.mealType || 'Lunch';
+    } else {
+      const sessionResult = getSessionState();
+      if (!sessionResult.success) {
+        return { success: false, error: 'Failed to get session: ' + sessionResult.error };
+      }
+      dogsInPens = sessionResult.dogs.filter(d => d.penId && d.penId !== '');
+      mealType = (data && data.mealType) || sessionResult.mealType;
     }
-    
-    const sessionDogs = sessionResult.dogs;
-    const mealType = data.mealType || sessionResult.mealType;
-    const reportDate = data.date || {
+
+    const reportDate = (data && data.date) || {
       day: new Date().getDate(),
       month: new Date().getMonth() + 1,
       year: new Date().getFullYear()
     };
-    
-    // Filter to only dogs in pens
-    const dogsInPens = sessionDogs.filter(d => d.penId && d.penId !== '');
-    
+
     if (dogsInPens.length === 0) {
       return { success: false, error: 'No dogs assigned to pens' };
     }
@@ -593,7 +601,9 @@ function submitReport(data) {
     };
     
     dogsInPens.forEach((dog, index) => {
-      const finalName = dog.matchedName || dog.inputName;
+      // Tablet POST body sends a pre-resolved 'name'; Session-tab fallback has matchedName/inputName.
+      const finalName = dog.matchedName || dog.inputName || dog.name || '';
+      if (!finalName) return; // skip malformed row rather than crash
       const lookupData = lookupMap[finalName.toLowerCase()];
       const parentEmail = lookupData ? lookupData.email : '';
       

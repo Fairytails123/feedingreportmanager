@@ -132,6 +132,63 @@
             50% { opacity: 0.5; transform: scale(1.2); }
         }
 
+        /* OFFLINE BANNER — full-width, top of viewport, must not be missed */
+        .offline-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 9999;
+            min-height: 56px;
+            padding: 12px 16px;
+            background: #c0392b;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            text-align: center;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.35);
+            animation: bannerPulse 2.5s ease-in-out infinite;
+            pointer-events: auto;
+        }
+        .offline-banner.hidden { display: none; }
+        .offline-banner .offline-icon {
+            font-size: 1.4rem;
+            line-height: 1;
+        }
+        .offline-banner #offlineBannerText {
+            flex: 1 1 auto;
+            max-width: 700px;
+            line-height: 1.3;
+        }
+        .offline-banner button {
+            background: #ffffff;
+            color: #c0392b;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 14px;
+            font-weight: 800;
+            font-size: 0.9rem;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .offline-banner button:active { transform: scale(0.96); }
+        @keyframes bannerPulse {
+            0%, 100% { background: #c0392b; }
+            50% { background: #e74c3c; }
+        }
+        body.offline-active { padding-top: 60px; }
+
+        /* Disabled submit button visual */
+        .btn[disabled], .btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            filter: grayscale(0.5);
+        }
+
         /* ============================================
            MOBILE-FIRST LAYOUT
            ============================================ */
@@ -919,6 +976,11 @@
     </style>
 </head>
 <body>
+    <div id="offlineBanner" class="offline-banner hidden" role="alert" aria-live="assertive">
+        <span class="offline-icon">⚠</span>
+        <span id="offlineBannerText">Connection lost. Your changes are saved on this device but NOT synced. Do not submit yet.</span>
+        <button type="button" id="offlineRetryBtn" onclick="retryConnection()">Retry now</button>
+    </div>
     <div class="container">
         <div class="header">
             <img src="https://i.ibb.co/whdBKp0L/Logo-1.jpg" alt="Fairy Tails" class="header-logo">
@@ -994,7 +1056,7 @@
                 <!-- Action Buttons -->
                 <div class="action-bar">
                     <button class="btn btn-secondary" onclick="showPreview()">📋 Preview</button>
-                    <button class="btn btn-success" onclick="submitReport()">✅ Submit</button>
+                    <button class="btn btn-success" id="submitBtn" onclick="submitReport()">✅ Submit</button>
                     <button class="btn btn-secondary" onclick="clearAll()">🗑️ Clear All</button>
                 </div>
             </div>
@@ -1011,7 +1073,7 @@
             <div class="modal-body" id="previewContent"></div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closePreview()">Back</button>
-                <button class="btn btn-success" onclick="confirmSubmit()">Submit</button>
+                <button class="btn btn-success" id="confirmSubmitBtn" onclick="confirmSubmit()">Submit</button>
             </div>
         </div>
     </div>
@@ -1093,6 +1155,191 @@
         let boundMouseUp = null;
 
         // ============================================
+        // CONNECTION HEALTH (offline detection + persistence)
+        // ============================================
+
+        const HEARTBEAT_INTERVAL = 7000;       // Independent ping every 7s — runs even mid-edit
+        const FAILURE_THRESHOLD = 1;           // Show banner on first failure (feeding sessions are short)
+        const LS_KEY = 'feedingManager.snapshot.v1';
+
+        let consecutiveSyncFailures = 0;
+        let lastSuccessfulSyncAt = Date.now();
+        let heartbeatInterval = null;
+
+        function showOfflineBanner(message) {
+            const banner = document.getElementById('offlineBanner');
+            const text = document.getElementById('offlineBannerText');
+            if (!banner) return;
+            if (message && text) text.textContent = message;
+            banner.classList.remove('hidden');
+            document.body.classList.add('offline-active');
+        }
+
+        function hideOfflineBanner() {
+            const banner = document.getElementById('offlineBanner');
+            if (!banner) return;
+            banner.classList.add('hidden');
+            document.body.classList.remove('offline-active');
+        }
+
+        function disableSubmitButton(reason) {
+            ['submitBtn', 'confirmSubmitBtn'].forEach(id => {
+                const btn = document.getElementById(id);
+                if (!btn) return;
+                btn.disabled = true;
+                btn.title = reason || 'Cannot submit right now';
+            });
+        }
+
+        function enableSubmitButton() {
+            ['submitBtn', 'confirmSubmitBtn'].forEach(id => {
+                const btn = document.getElementById(id);
+                if (!btn) return;
+                btn.disabled = false;
+                btn.title = '';
+            });
+        }
+
+        function markSyncFailure(source) {
+            consecutiveSyncFailures++;
+            if (consecutiveSyncFailures >= FAILURE_THRESHOLD) {
+                isOnline = false;
+                showOfflineBanner('⚠ Connection lost. Your changes are saved on this device but NOT synced. Do not submit yet.');
+                updateStatus('⚠ DISCONNECTED — changes saved locally only', 'error');
+                disableSubmitButton('Cannot submit while disconnected');
+            }
+        }
+
+        function markSyncSuccess() {
+            const wasOffline = consecutiveSyncFailures > 0;
+            consecutiveSyncFailures = 0;
+            lastSuccessfulSyncAt = Date.now();
+            isOnline = true;
+            hideOfflineBanner();
+            enableSubmitButton();
+            if (wasOffline) {
+                showToast('✓ Reconnected', 'success');
+            }
+        }
+
+        async function retryConnection() {
+            updateStatus('Retrying...', 'syncing');
+            try {
+                const r = await fetch(APPS_SCRIPT_URL + '?action=getSessionVersion', { method: 'GET', redirect: 'follow' });
+                const j = await r.json();
+                if (j && j.success) {
+                    markSyncSuccess();
+                    if (initialLoadComplete) await pollForUpdates();
+                } else {
+                    markSyncFailure('manual-retry');
+                }
+            } catch (e) {
+                markSyncFailure('manual-retry');
+            }
+        }
+
+        function startHeartbeat() {
+            if (heartbeatInterval) clearInterval(heartbeatInterval);
+            heartbeatInterval = setInterval(async () => {
+                try {
+                    const r = await fetch(APPS_SCRIPT_URL + '?action=getSessionVersion', { method: 'GET', redirect: 'follow' });
+                    const j = await r.json();
+                    if (j && j.success) markSyncSuccess();
+                    else markSyncFailure('heartbeat');
+                } catch (e) {
+                    markSyncFailure('heartbeat');
+                }
+            }, HEARTBEAT_INTERVAL);
+        }
+
+        // ----- localStorage snapshot -----
+
+        function saveLocalSnapshot() {
+            try {
+                localStorage.setItem(LS_KEY, JSON.stringify({
+                    dogs: dogs,
+                    pens: pens,
+                    currentMealType: currentMealType,
+                    lastSyncVersion: lastSyncVersion,
+                    savedAt: Date.now()
+                }));
+            } catch (e) {
+                console.warn('[snapshot] save failed', e);
+            }
+        }
+
+        function loadLocalSnapshot() {
+            try {
+                const raw = localStorage.getItem(LS_KEY);
+                return raw ? JSON.parse(raw) : null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function clearLocalSnapshot() {
+            try { localStorage.removeItem(LS_KEY); } catch (e) {}
+        }
+
+        async function maybeRestoreLocalSnapshot() {
+            const snap = loadLocalSnapshot();
+            if (!snap || !Array.isArray(snap.dogs) || snap.dogs.length === 0) return;
+
+            // Identify dogs in the snapshot that didn't survive into the current session.
+            const currentIds = new Set(dogs.map(d => d.id));
+            const missing = snap.dogs.filter(d => !currentIds.has(d.id));
+            if (missing.length === 0) {
+                // Snapshot is consistent with server — keep it but don't prompt.
+                return;
+            }
+
+            const restore = confirm(
+                'Found ' + missing.length + ' unsaved dog(s) from your previous session that did not sync.\n\n' +
+                'Restore them now?'
+            );
+            if (!restore) {
+                clearLocalSnapshot();
+                return;
+            }
+
+            // Merge missing dogs back into local state and re-sync each.
+            missing.forEach(d => {
+                dogs.push({
+                    id: d.id,
+                    inputName: d.inputName,
+                    matchedName: d.matchedName || null,
+                    possibleMatches: d.possibleMatches || [],
+                    status: d.status || 'all',
+                    prescription: d.prescription || false,
+                    prescriptionComment: d.prescriptionComment || '',
+                    supplements: d.supplements || false,
+                    supplementTypes: d.supplementTypes || []
+                });
+            });
+            // Restore pen assignments from snapshot
+            if (snap.pens) {
+                Object.keys(snap.pens).forEach(penId => {
+                    if (!pens[penId]) return;
+                    snap.pens[penId].forEach(dogId => {
+                        if (missing.find(m => m.id === dogId) && !pens[penId].includes(dogId)) {
+                            pens[penId].push(dogId);
+                        }
+                    });
+                });
+            }
+            renderAllPens();
+            renderStagingArea();
+            saveLocalSnapshot();
+
+            // Replay each missing dog through syncAddDog so the Session sheet catches up.
+            for (const d of missing) {
+                const dog = dogs.find(x => x.id === d.id);
+                if (dog) await syncAddDog(dog);
+            }
+            showToast('Restored ' + missing.length + ' dog(s) from local backup', 'success');
+        }
+
+        // ============================================
         // INITIALIZATION
         // ============================================
 
@@ -1104,13 +1351,20 @@
 
         async function initialLoad() {
             updateStatus('Connecting...', 'syncing');
-            
+
             await loadDogList();
             await loadSessionState();
-            
+
+            // Offer to restore any unsynced dogs from a previous (possibly crashed) session.
+            await maybeRestoreLocalSnapshot();
+
+            // Persist whatever we ended up with as the new baseline snapshot.
+            saveLocalSnapshot();
+
             setTimeout(() => {
                 initialLoadComplete = true;
                 startSyncPolling();
+                startHeartbeat();
             }, INITIAL_LOAD_DELAY);
         }
 
@@ -1540,16 +1794,23 @@
                     method: 'GET',
                     redirect: 'follow'
                 });
-                
+
                 const result = await response.json();
-                
-                if (result.success && result.version > lastSyncVersion) {
-                    applyRemoteState(result);
-                    lastSyncVersion = result.version;
-                    updateStatus(`✓ Synced (${dogs.length} dogs)`, 'connected');
+
+                if (result && result.success) {
+                    markSyncSuccess();
+                    if (result.version > lastSyncVersion) {
+                        applyRemoteState(result);
+                        lastSyncVersion = result.version;
+                        updateStatus(`✓ Synced (${dogs.length} dogs)`, 'connected');
+                        saveLocalSnapshot();
+                    }
+                } else {
+                    markSyncFailure('poll-bad-response');
                 }
             } catch (error) {
                 console.error('Sync poll error:', error);
+                markSyncFailure('poll');
             }
         }
 
@@ -1581,19 +1842,20 @@
                         dog.matchedName = rematched[0];
                         dog.possibleMatches = rematched;
                         console.log('[applyRemoteState] Re-matched "' + dog.inputName + '" → ' + rematched[0]);
-                        // Sync the fix back to the Session sheet (non-blocking)
-                        syncUpdateDog(dog.id, { matchedName: rematched[0], possibleMatches: rematched });
+                        // Sync the fix back to the Session sheet (non-blocking, quiet so it
+                        // doesn't trip the offline banner if a single rematch fetch fails)
+                        syncUpdateDog(dog.id, { matchedName: rematched[0], possibleMatches: rematched }, true);
                     } else if (rematched.length > 1) {
                         dog.possibleMatches = rematched;
                         console.log('[applyRemoteState] Re-matched "' + dog.inputName + '" → ' + rematched.length + ' options');
-                        syncUpdateDog(dog.id, { possibleMatches: rematched });
+                        syncUpdateDog(dog.id, { possibleMatches: rematched }, true);
                     } else {
                         // Exact match failed, try fuzzy match
                         const fuzzyMatches = fuzzyMatchDogName(dog.inputName);
                         if (fuzzyMatches.length > 0) {
                             dog.possibleMatches = fuzzyMatches;
                             console.log('[applyRemoteState] Fuzzy re-matched "' + dog.inputName + '" → ' + fuzzyMatches.length + ' options');
-                            syncUpdateDog(dog.id, { possibleMatches: fuzzyMatches });
+                            syncUpdateDog(dog.id, { possibleMatches: fuzzyMatches }, true);
                         }
                     }
                 }
@@ -1611,6 +1873,7 @@
             
             renderAllPens();
             renderStagingArea();
+            saveLocalSnapshot();
         }
 
         async function loadSessionState() {
@@ -1619,17 +1882,20 @@
                     method: 'GET',
                     redirect: 'follow'
                 });
-                
+
                 const result = await response.json();
-                
-                if (result.success) {
+
+                if (result && result.success) {
                     applyRemoteState(result);
                     lastSyncVersion = result.version;
-                    isOnline = true;
+                    markSyncSuccess();
                     updateStatus(`✓ Connected (${result.count} dogs)`, 'connected');
+                } else {
+                    markSyncFailure('loadSession-bad-response');
                 }
             } catch (error) {
                 console.error('Load session error:', error);
+                markSyncFailure('loadSession');
                 updateStatus('⚠ Offline mode', 'offline');
             }
         }
@@ -1643,8 +1909,8 @@
                 const url = APPS_SCRIPT_URL + '?action=getDogList';
                 const response = await fetch(url, { method: 'GET', redirect: 'follow' });
                 const result = await response.json();
-                
-                if (result.success) {
+
+                if (result && result.success) {
                     // GUARD FIX: Only replace the hardcoded fallback if the API returned
                     // a reasonable number of dogs. An empty or near-empty Lookup tab should
                     // NOT destroy the known-good JOTFORM_DOG_NAMES fallback list.
@@ -1661,20 +1927,26 @@
                         // dogNameList stays as JOTFORM_DOG_NAMES (not overwritten)
                     }
                     lastDogListRefresh = Date.now();
-                    isOnline = true;
+                    markSyncSuccess();
+                } else {
+                    markSyncFailure('loadDogList-bad-response');
                 }
             } catch (error) {
                 console.error('[loadDogList] API Error:', error);
                 console.warn('[loadDogList] Keeping hardcoded fallback list (' + JOTFORM_DOG_NAMES.length + ' dogs)');
-                isOnline = false;
+                markSyncFailure('loadDogList');
             }
         }
 
-        async function syncAddDog(dog) {
-            if (!isOnline) return { success: false };
-            
+        // 'quiet' = true skips the failure-counter bump.
+        // Used by background fixers (e.g. applyRemoteState's auto-rematch) so a single
+        // bad sheet row doesn't flood the counter and trip the offline banner spuriously.
+        async function syncAddDog(dog, quiet) {
+            saveLocalSnapshot();
+            if (!isOnline) return { success: false, offline: true };
+
             pendingDogIds.add(dog.id);
-            
+
             try {
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
@@ -1696,25 +1968,30 @@
                         }
                     })
                 });
-                
+
                 const result = await response.json();
-                if (result.success) {
+                if (result && result.success) {
                     lastSyncVersion = result.version;
+                    if (!quiet) markSyncSuccess();
+                } else if (!quiet) {
+                    markSyncFailure('syncAddDog-bad-response');
                 }
                 return result;
             } catch (error) {
                 console.error('Sync add error:', error);
+                if (!quiet) markSyncFailure('syncAddDog');
                 return { success: false, error: error.toString() };
             } finally {
                 pendingDogIds.delete(dog.id);
             }
         }
 
-        async function syncUpdateDog(dogId, updates) {
-            if (!isOnline) return { success: false };
-            
+        async function syncUpdateDog(dogId, updates, quiet) {
+            saveLocalSnapshot();
+            if (!isOnline) return { success: false, offline: true };
+
             pendingDogIds.add(dogId);
-            
+
             try {
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
@@ -1725,99 +2002,124 @@
                         updates: updates
                     })
                 });
-                
+
                 const result = await response.json();
-                if (result.success) {
+                if (result && result.success) {
                     lastSyncVersion = result.version;
+                    if (!quiet) markSyncSuccess();
+                } else if (!quiet) {
+                    markSyncFailure('syncUpdateDog-bad-response');
                 }
                 return result;
             } catch (error) {
                 console.error('Sync update error:', error);
+                if (!quiet) markSyncFailure('syncUpdateDog');
                 return { success: false, error: error.toString() };
             } finally {
                 pendingDogIds.delete(dogId);
             }
         }
 
-        async function syncDeleteDog(dogId) {
-            if (!isOnline) return { success: false };
-            
+        async function syncDeleteDog(dogId, quiet) {
+            saveLocalSnapshot();
+            if (!isOnline) return { success: false, offline: true };
+
             try {
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     redirect: 'follow',
                     body: JSON.stringify({ action: 'deleteDog', dogId: dogId })
                 });
-                
+
                 const result = await response.json();
-                if (result.success) {
+                if (result && result.success) {
                     lastSyncVersion = result.version;
+                    if (!quiet) markSyncSuccess();
+                } else if (!quiet) {
+                    markSyncFailure('syncDeleteDog-bad-response');
                 }
                 return result;
             } catch (error) {
                 console.error('Sync delete error:', error);
+                if (!quiet) markSyncFailure('syncDeleteDog');
                 return { success: false, error: error.toString() };
             }
         }
 
         async function syncMealType(mealType) {
-            if (!isOnline) return { success: false };
-            
+            saveLocalSnapshot();
+            if (!isOnline) return { success: false, offline: true };
+
             pauseSync();
-            
+
             try {
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     redirect: 'follow',
                     body: JSON.stringify({ action: 'setMealType', mealType: mealType })
                 });
-                
+
                 const result = await response.json();
-                if (result.success) {
+                if (result && result.success) {
                     lastSyncVersion = result.version;
+                    markSyncSuccess();
+                } else {
+                    markSyncFailure('syncMealType-bad-response');
                 }
                 return result;
             } catch (error) {
                 console.error('Sync meal type error:', error);
+                markSyncFailure('syncMealType');
                 return { success: false, error: error.toString() };
             }
         }
 
         async function syncClearSession() {
-            if (!isOnline) return { success: false };
-            
+            if (!isOnline) return { success: false, offline: true };
+
             try {
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     redirect: 'follow',
                     body: JSON.stringify({ action: 'clearSession' })
                 });
-                
+
                 const result = await response.json();
-                if (result.success) {
+                if (result && result.success) {
                     lastSyncVersion = result.version;
+                    markSyncSuccess();
+                } else {
+                    markSyncFailure('syncClearSession-bad-response');
                 }
                 return result;
             } catch (error) {
                 console.error('Sync clear error:', error);
+                markSyncFailure('syncClearSession');
                 return { success: false, error: error.toString() };
             }
         }
 
         async function submitToBackend(reportData) {
             if (!isOnline) {
-                return { success: false, error: 'Not connected. Please refresh.' };
+                return { success: false, error: 'Not connected. Please wait for reconnection and try again.' };
             }
-            
+
             try {
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     redirect: 'follow',
                     body: JSON.stringify({ action: 'submitReport', ...reportData })
                 });
-                
-                return await response.json();
+
+                const result = await response.json();
+                if (result && result.success) {
+                    markSyncSuccess();
+                } else {
+                    markSyncFailure('submit-bad-response');
+                }
+                return result;
             } catch (error) {
+                markSyncFailure('submit');
                 return { success: false, error: error.toString() };
             }
         }
@@ -2312,7 +2614,14 @@
 
         async function confirmSubmit() {
             closePreview();
-            
+
+            // Hard offline guard — even with the disabled button, belt-and-suspenders
+            // in case state changed between Preview and Confirm.
+            if (!isOnline || consecutiveSyncFailures > 0) {
+                showToast('Cannot submit — connection lost. Wait for reconnection and try again.', 'error');
+                return;
+            }
+
             const assignedDogs = [];
             for (const [penId, dogIds] of Object.entries(pens)) {
                 dogIds.forEach(dogId => {
@@ -2321,6 +2630,10 @@
                         assignedDogs.push({
                             id: dog.id,
                             name: dog.matchedName || (dog.possibleMatches.length === 1 ? dog.possibleMatches[0] : dog.inputName),
+                            // Send both raw fields so the backend can resolve finalName robustly
+                            // regardless of whether it falls through to the Session-tab path.
+                            inputName: dog.inputName,
+                            matchedName: dog.matchedName,
                             status: dog.status,
                             prescription: dog.prescription,
                             prescriptionComment: dog.prescriptionComment,
@@ -2331,43 +2644,47 @@
                     }
                 });
             }
-            
+
             if (assignedDogs.length === 0) {
                 showToast('No dogs to submit. Assign dogs to pens first.', 'error');
                 return;
             }
-            
+
             updateStatus('Submitting...', 'syncing');
-            
+
             const result = await submitToBackend({
                 mealType: currentMealType,
                 dogs: assignedDogs
             });
-            
-            if (result.success) {
+
+            if (result && result.success) {
                 showToast(`✅ ${result.dogsProcessed} dogs submitted! Check Telegram.`, 'success');
                 dogs = [];
                 for (const penId of Object.keys(pens)) pens[penId] = [];
                 renderAllPens();
                 renderStagingArea();
+                clearLocalSnapshot();
                 updateStatus('✓ Submitted', 'connected');
             } else {
-                showToast('❌ Submit failed: ' + (result.error || 'Unknown error'), 'error');
+                showToast('❌ Submit failed: ' + (result && result.error || 'Unknown error'), 'error');
                 updateStatus('Submit failed', 'error');
+                // Snapshot is preserved automatically — if the user retries or refreshes,
+                // their dogs are still in localStorage.
             }
         }
 
         async function clearAll() {
             if (!confirm('Clear all dogs and reset?\n\nThis will clear data on ALL devices.')) return;
-            
+
             dogs = [];
             for (const penId of Object.keys(pens)) pens[penId] = [];
             renderAllPens();
             renderStagingArea();
-            
+            clearLocalSnapshot();
+
             updateStatus('Clearing...', 'syncing');
             const result = await syncClearSession();
-            
+
             if (result && result.success) {
                 showToast('Session cleared', 'success');
                 updateStatus('✓ Cleared', 'connected');
