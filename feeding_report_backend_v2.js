@@ -675,15 +675,27 @@ function submitReport(data) {
     
     // Send to Telegram
     const telegramResult = sendTelegramSummary(mealType, reportDate, jotformLinks, missingEmails);
-    
-    // Clear session after successful submission
+
+    // If Telegram delivery failed, the report has no review links to act on. Do NOT clear the
+    // session — keep Temp + Session intact so the tablet can retry without losing any data.
+    if (!telegramResult.success) {
+      return {
+        success: false,
+        telegramSent: false,
+        dogsProcessed: dogsInPens.length,
+        missingEmails: missingEmails,
+        error: 'Telegram delivery failed: ' + (telegramResult.error || JSON.stringify(telegramResult.response || {}))
+      };
+    }
+
+    // Clear session only after a confirmed Telegram delivery
     clearSession();
-    
+
     return {
       success: true,
+      telegramSent: true,
       dogsProcessed: dogsInPens.length,
       missingEmails: missingEmails,
-      telegramSent: telegramResult.success,
       message: `${dogsInPens.length} dogs submitted. Check Telegram for review links.`
     };
     
@@ -737,6 +749,19 @@ function buildJotformUrl(dog, parentEmail, mealType, reportDate) {
 }
 
 /**
+ * Neutralise Telegram legacy-Markdown control characters in free-text (dog names,
+ * comments). Legacy 'Markdown' has no escape syntax, so an unbalanced _ * [ ] or `
+ * makes the WHOLE sendMessage call fail with HTTP 400 and the report never sends.
+ * Replacing them with spaces keeps the message readable and guarantees it parses.
+ */
+function escapeTelegramMarkdown(text) {
+  return String(text == null ? '' : text)
+    .replace(/[\\_*\[\]`]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
  * Send summary to Telegram with JotForm links
  */
 function sendTelegramSummary(mealType, reportDate, jotformLinks, missingEmails) {
@@ -769,7 +794,7 @@ function sendTelegramSummary(mealType, reportDate, jotformLinks, missingEmails) 
           let extras = '';
           if (dog.hasMedicine) extras = ' 💊';
           
-          message += '   • ' + dog.name + ' — ' + dog.foodConsumed + extras + '\n';
+          message += '   • ' + escapeTelegramMarkdown(dog.name) + ' — ' + dog.foodConsumed + extras + '\n';
           message += '     [Review Form](' + dog.url + ')\n';
         });
         message += '\n';
@@ -780,7 +805,7 @@ function sendTelegramSummary(mealType, reportDate, jotformLinks, missingEmails) 
     if (missingEmails.length > 0) {
       message += '⚠️ *Missing parent emails:*\n';
       missingEmails.forEach(name => {
-        message += '   • ' + name + '\n';
+        message += '   • ' + escapeTelegramMarkdown(name) + '\n';
       });
       message += '\n';
     }

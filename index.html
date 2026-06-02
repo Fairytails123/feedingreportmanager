@@ -1159,12 +1159,12 @@
         // ============================================
 
         const HEARTBEAT_INTERVAL = 7000;       // Independent ping every 7s — runs even mid-edit
-        const FAILURE_THRESHOLD = 1;           // Show banner on first failure (feeding sessions are short)
-        const LS_KEY = 'feedingManager.snapshot.v1';
+        const QUEUE_KEY = 'feedingManager.queue.v1';   // durable outbound mutation queue
 
-        let consecutiveSyncFailures = 0;
-        let lastSuccessfulSyncAt = Date.now();
         let heartbeatInterval = null;
+        let mutationQueue = [];   // [{op:'add'|'update'|'delete'|'mealType', dogId, payload, ts}]
+        let isFlushing = false;
+        let lastHealthy = true;   // tracks the offline/syncing -> fully-synced transition for the toast
 
         function showOfflineBanner(message) {
             const banner = document.getElementById('offlineBanner');
@@ -1200,26 +1200,38 @@
             });
         }
 
-        function markSyncFailure(source) {
-            consecutiveSyncFailures++;
-            if (consecutiveSyncFailures >= FAILURE_THRESHOLD) {
-                isOnline = false;
+        // Single owner of the banner + Submit-button state. "Safe to submit" requires BOTH
+        // a reachable server AND an empty outbound queue, so a cheap heartbeat ping can never
+        // re-enable Submit while local edits are still unsynced.
+        function updateConnectionUI() {
+            const pending = mutationQueue.length;
+            const healthy = isOnline && pending === 0;
+            if (!isOnline) {
                 showOfflineBanner('⚠ Connection lost. Your changes are saved on this device but NOT synced. Do not submit yet.');
-                updateStatus('⚠ DISCONNECTED — changes saved locally only', 'error');
                 disableSubmitButton('Cannot submit while disconnected');
+                updateStatus('⚠ DISCONNECTED — changes saved on this device', 'error');
+            } else if (pending > 0) {
+                // Reachable but still flushing local edits — don't alarm, but block submit.
+                hideOfflineBanner();
+                disableSubmitButton('Waiting for ' + pending + ' change(s) to sync');
+                updateStatus('Syncing ' + pending + ' change(s)…', 'syncing');
+            } else {
+                hideOfflineBanner();
+                enableSubmitButton();
             }
+            if (healthy && !lastHealthy) showToast('✓ Reconnected & synced', 'success');
+            lastHealthy = healthy;
+        }
+
+        function markSyncFailure(source) {
+            isOnline = false;
+            updateConnectionUI();
         }
 
         function markSyncSuccess() {
-            const wasOffline = consecutiveSyncFailures > 0;
-            consecutiveSyncFailures = 0;
-            lastSuccessfulSyncAt = Date.now();
-            isOnline = true;
-            hideOfflineBanner();
-            enableSubmitButton();
-            if (wasOffline) {
-                showToast('✓ Reconnected', 'success');
-            }
+            isOnline = true;     // server reachable
+            updateConnectionUI();
+            flushQueue();        // ...so drain any queued local edits (this is what clears "syncing")
         }
 
         async function retryConnection() {
@@ -1252,91 +1264,131 @@
             }, HEARTBEAT_INTERVAL);
         }
 
-        // ----- localStorage snapshot -----
+        // ----- Durable outbound mutation queue -----
+        // Every local edit is recorded here and flushed to the Session sheet IN ORDER.
+        // This queue is the single source of truth for unsynced work and survives reloads/
+        // crashes, so applyRemoteState's server snapshot can never silently destroy local edits.
 
-        function saveLocalSnapshot() {
+        function loadQueue() {
             try {
-                localStorage.setItem(LS_KEY, JSON.stringify({
-                    dogs: dogs,
-                    pens: pens,
-                    currentMealType: currentMealType,
-                    lastSyncVersion: lastSyncVersion,
-                    savedAt: Date.now()
-                }));
-            } catch (e) {
-                console.warn('[snapshot] save failed', e);
-            }
+                const raw = localStorage.getItem(QUEUE_KEY);
+                mutationQueue = raw ? JSON.parse(raw) : [];
+                if (!Array.isArray(mutationQueue)) mutationQueue = [];
+            } catch (e) { mutationQueue = []; }
         }
 
-        function loadLocalSnapshot() {
+        function persistQueue() {
+            try { localStorage.setItem(QUEUE_KEY, JSON.stringify(mutationQueue)); }
+            catch (e) { console.warn('[queue] persist failed', e); }
+        }
+
+        function clearQueue() {
+            mutationQueue = [];
+            try { localStorage.removeItem(QUEUE_KEY); } catch (e) {}
+        }
+
+        function hasPendingOp(dogId) {
+            return mutationQueue.some(it => it.dogId === dogId);
+        }
+
+        // Record a local mutation. Collapses repeats so the queue can't grow unbounded
+        // (e.g. repeated re-match repairs or rapid edits to the same dog while offline).
+        function enqueue(op, dogId, payload) {
+            if (op === 'delete') {
+                const hadPendingAdd = mutationQueue.some(it => it.dogId === dogId && it.op === 'add');
+                mutationQueue = mutationQueue.filter(it => it.dogId !== dogId);
+                if (hadPendingAdd) {
+                    // Dog was never synced — there is nothing to delete on the server.
+                    persistQueue();
+                    updateConnectionUI();
+                    return;
+                }
+            } else if (op === 'update') {
+                // Merge into the most recent pending add/update for the same dog.
+                for (let i = mutationQueue.length - 1; i >= 0; i--) {
+                    const it = mutationQueue[i];
+                    if (it.dogId !== dogId) continue;
+                    if (it.op === 'add' || it.op === 'update') {
+                        it.payload = Object.assign({}, it.payload, payload);
+                        persistQueue();
+                        updateConnectionUI();
+                        return;
+                    }
+                    break;
+                }
+            } else if (op === 'mealType') {
+                mutationQueue = mutationQueue.filter(it => it.op !== 'mealType');
+            }
+            mutationQueue.push({ op: op, dogId: dogId, payload: payload, ts: Date.now() });
+            persistQueue();
+            updateConnectionUI();
+        }
+
+        function queueItemToBody(item) {
+            const d = item.payload || {};
+            switch (item.op) {
+                case 'add':      return { action: 'addDog', dog: d };
+                case 'update':   return { action: 'updateDog', dogId: item.dogId, updates: d };
+                case 'delete':   return { action: 'deleteDog', dogId: item.dogId };
+                case 'mealType': return { action: 'setMealType', mealType: d.mealType };
+            }
+            return null;
+        }
+
+        // Drain the queue IN ORDER. Each item is removed only after its POST succeeds.
+        // Stops on the first failure (leaving the rest queued) and marks the link offline.
+        async function flushQueue() {
+            if (isFlushing || !isOnline || mutationQueue.length === 0) { updateConnectionUI(); return; }
+            isFlushing = true;
             try {
-                const raw = localStorage.getItem(LS_KEY);
-                return raw ? JSON.parse(raw) : null;
-            } catch (e) {
-                return null;
+                while (mutationQueue.length > 0) {
+                    const item = mutationQueue[0];
+                    const body = queueItemToBody(item);
+                    if (!body) { mutationQueue.shift(); persistQueue(); continue; }
+                    let result;
+                    try {
+                        const response = await fetch(APPS_SCRIPT_URL, {
+                            method: 'POST', redirect: 'follow', body: JSON.stringify(body)
+                        });
+                        result = await response.json();
+                    } catch (e) {
+                        console.error('[flushQueue] network error', e);
+                        isOnline = false;     // genuine connectivity failure
+                        return;
+                    }
+                    if (result && result.success) {
+                        if (result.version) lastSyncVersion = result.version;
+                        mutationQueue.shift();
+                        persistQueue();
+                        isOnline = true;
+                        continue;
+                    }
+                    // We got a response, so the server is reachable — this is an op-level rejection,
+                    // NOT a connectivity failure. Don't raise the offline banner.
+                    isOnline = true;
+                    if (item.op === 'delete') {
+                        // Row already gone (e.g. cleared elsewhere) — treat as done.
+                        mutationQueue.shift();
+                        persistQueue();
+                        continue;
+                    }
+                    item.attempts = (item.attempts || 0) + 1;
+                    if (item.attempts >= 5) {
+                        // Persistently rejected (e.g. the dog was deleted on another device) —
+                        // drop it so the queue can't wedge forever, and continue with the rest.
+                        console.warn('[flushQueue] dropping op after ' + item.attempts + ' attempts', item, result);
+                        mutationQueue.shift();
+                        persistQueue();
+                        continue;
+                    }
+                    // Likely transient — keep it queued and retry on the next sync cycle.
+                    persistQueue();
+                    return;
+                }
+            } finally {
+                isFlushing = false;
+                updateConnectionUI();
             }
-        }
-
-        function clearLocalSnapshot() {
-            try { localStorage.removeItem(LS_KEY); } catch (e) {}
-        }
-
-        async function maybeRestoreLocalSnapshot() {
-            const snap = loadLocalSnapshot();
-            if (!snap || !Array.isArray(snap.dogs) || snap.dogs.length === 0) return;
-
-            // Identify dogs in the snapshot that didn't survive into the current session.
-            const currentIds = new Set(dogs.map(d => d.id));
-            const missing = snap.dogs.filter(d => !currentIds.has(d.id));
-            if (missing.length === 0) {
-                // Snapshot is consistent with server — keep it but don't prompt.
-                return;
-            }
-
-            const restore = confirm(
-                'Found ' + missing.length + ' unsaved dog(s) from your previous session that did not sync.\n\n' +
-                'Restore them now?'
-            );
-            if (!restore) {
-                clearLocalSnapshot();
-                return;
-            }
-
-            // Merge missing dogs back into local state and re-sync each.
-            missing.forEach(d => {
-                dogs.push({
-                    id: d.id,
-                    inputName: d.inputName,
-                    matchedName: d.matchedName || null,
-                    possibleMatches: d.possibleMatches || [],
-                    status: d.status || 'all',
-                    prescription: d.prescription || false,
-                    prescriptionComment: d.prescriptionComment || '',
-                    supplements: d.supplements || false,
-                    supplementTypes: d.supplementTypes || []
-                });
-            });
-            // Restore pen assignments from snapshot
-            if (snap.pens) {
-                Object.keys(snap.pens).forEach(penId => {
-                    if (!pens[penId]) return;
-                    snap.pens[penId].forEach(dogId => {
-                        if (missing.find(m => m.id === dogId) && !pens[penId].includes(dogId)) {
-                            pens[penId].push(dogId);
-                        }
-                    });
-                });
-            }
-            renderAllPens();
-            renderStagingArea();
-            saveLocalSnapshot();
-
-            // Replay each missing dog through syncAddDog so the Session sheet catches up.
-            for (const d of missing) {
-                const dog = dogs.find(x => x.id === d.id);
-                if (dog) await syncAddDog(dog);
-            }
-            showToast('Restored ' + missing.length + ' dog(s) from local backup', 'success');
         }
 
         // ============================================
@@ -1352,14 +1404,20 @@
         async function initialLoad() {
             updateStatus('Connecting...', 'syncing');
 
+            // Restore any unsynced edits from a previous (possibly crashed) session BEFORE
+            // loading server state, so applyRemoteState can merge them in instead of losing them.
+            loadQueue();
+
             await loadDogList();
-            await loadSessionState();
+            await loadSessionState();   // applyRemoteState merges the queue, so pending ops survive
 
-            // Offer to restore any unsynced dogs from a previous (possibly crashed) session.
-            await maybeRestoreLocalSnapshot();
+            if (!isOnline) {
+                // Couldn't reach the server. Render whatever is queued locally so the staff
+                // still see (and don't re-add) their unsynced dogs.
+                applyRemoteState({ dogs: [], mealType: currentMealType });
+            }
 
-            // Persist whatever we ended up with as the new baseline snapshot.
-            saveLocalSnapshot();
+            await flushQueue();         // push queued ops now that we're loaded
 
             setTimeout(() => {
                 initialLoadComplete = true;
@@ -1798,13 +1856,12 @@
                 const result = await response.json();
 
                 if (result && result.success) {
-                    markSyncSuccess();
                     if (result.version > lastSyncVersion) {
-                        applyRemoteState(result);
+                        applyRemoteState(result);   // merges the queue, so it can't clobber unsynced edits
                         lastSyncVersion = result.version;
                         updateStatus(`✓ Synced (${dogs.length} dogs)`, 'connected');
-                        saveLocalSnapshot();
                     }
+                    markSyncSuccess();              // reachable + drain queue
                 } else {
                     markSyncFailure('poll-bad-response');
                 }
@@ -1814,66 +1871,128 @@
             }
         }
 
+        // Reconcile the server snapshot with locally-pending edits. The server is authoritative
+        // ONLY for dogs that have no pending op; any queued add/update/delete/mealType is overlaid
+        // so unsynced local work is never clobbered (this is the core of fixes #2 and #8).
         function applyRemoteState(result) {
-            if (result.mealType) {
-                currentMealType = result.mealType;
-                document.getElementById('mealType').value = currentMealType;
+            const serverDogs = result.dogs || [];
+
+            // Summarise pending ops from the durable queue.
+            const pendingAdds = new Map();      // dogId -> add payload
+            const pendingUpdates = new Map();   // dogId -> merged updates payload
+            const pendingDeletes = new Set();   // dogIds to suppress from the server view
+            let pendingMeal = null;
+            for (const it of mutationQueue) {
+                if (it.op === 'add') {
+                    pendingAdds.set(it.dogId, it.payload);
+                } else if (it.op === 'update') {
+                    pendingUpdates.set(it.dogId, Object.assign({}, pendingUpdates.get(it.dogId) || {}, it.payload));
+                } else if (it.op === 'delete') {
+                    pendingDeletes.add(it.dogId);
+                    pendingAdds.delete(it.dogId);
+                    pendingUpdates.delete(it.dogId);
+                } else if (it.op === 'mealType') {
+                    pendingMeal = it.payload.mealType;
+                }
             }
-            
-            dogs = result.dogs.map(d => ({
-                id: d.id,
-                inputName: d.inputName,
-                matchedName: d.matchedName,
-                possibleMatches: d.possibleMatches || [],
-                status: d.status || 'all',
-                prescription: d.prescription || false,
-                prescriptionComment: d.prescriptionComment || '',
-                supplements: d.supplements || false,
-                supplementTypes: d.supplementTypes || []
+
+            // Meal type: a pending local change wins over the server value.
+            if (pendingMeal) currentMealType = pendingMeal;
+            else if (result.mealType) currentMealType = result.mealType;
+            const mealSelect = document.getElementById('mealType');
+            if (mealSelect) mealSelect.value = currentMealType;
+
+            // Build the merged dog set keyed by id, carrying a transient penId used to rebuild pens.
+            const byId = new Map();
+            serverDogs.forEach(d => {
+                if (pendingDeletes.has(d.id)) return;   // suppress server copy of a pending delete (#8)
+                byId.set(d.id, {
+                    id: d.id,
+                    inputName: d.inputName,
+                    matchedName: d.matchedName,
+                    possibleMatches: d.possibleMatches || [],
+                    status: d.status || 'all',
+                    prescription: d.prescription || false,
+                    prescriptionComment: d.prescriptionComment || '',
+                    supplements: d.supplements || false,
+                    supplementTypes: d.supplementTypes || [],
+                    penId: d.penId || null
+                });
+            });
+
+            // Overlay pending adds (dogs the server hasn't seen yet).
+            pendingAdds.forEach((p, id) => {
+                if (byId.has(id)) return;
+                byId.set(id, {
+                    id: id,
+                    inputName: p.inputName,
+                    matchedName: p.matchedName || null,
+                    possibleMatches: p.possibleMatches || [],
+                    status: p.status || 'all',
+                    prescription: p.prescription || false,
+                    prescriptionComment: p.prescriptionComment || '',
+                    supplements: p.supplements || false,
+                    supplementTypes: p.supplementTypes || [],
+                    penId: p.penId || null
+                });
+            });
+
+            // Overlay pending field updates (including pen moves) on top.
+            pendingUpdates.forEach((u, id) => {
+                const m = byId.get(id);
+                if (!m) return;
+                if (u.matchedName !== undefined) m.matchedName = u.matchedName;
+                if (u.possibleMatches !== undefined) m.possibleMatches = u.possibleMatches;
+                if (u.status !== undefined) m.status = u.status;
+                if (u.prescription !== undefined) m.prescription = u.prescription;
+                if (u.prescriptionComment !== undefined) m.prescriptionComment = u.prescriptionComment;
+                if (u.supplements !== undefined) m.supplements = u.supplements;
+                if (u.supplementTypes !== undefined) m.supplementTypes = u.supplementTypes;
+                if (u.penId !== undefined) m.penId = u.penId || null;
+            });
+
+            // Derive dogs[] (strip the transient penId) and rebuild pens{} from the merged view.
+            const merged = [...byId.values()];
+            dogs = merged.map(m => ({
+                id: m.id,
+                inputName: m.inputName,
+                matchedName: m.matchedName,
+                possibleMatches: m.possibleMatches,
+                status: m.status,
+                prescription: m.prescription,
+                prescriptionComment: m.prescriptionComment,
+                supplements: m.supplements,
+                supplementTypes: m.supplementTypes
             }));
-            
-            // RE-MATCH FIX: Attempt to re-match any dogs that arrived from the session
-            // with empty possibleMatches (caused by previous Lookup tab failures).
-            // This repairs broken data on every sync cycle without altering already-matched dogs.
+            for (const penId of Object.keys(pens)) pens[penId] = [];
+            merged.forEach(m => {
+                if (m.penId && pens[m.penId]) pens[m.penId].push(m.id);
+            });
+
+            // RE-MATCH FIX: repair dogs that arrived with no match, but ONLY those with no pending
+            // op (so we never fight the user's own in-flight edit). Repairs are queued like any edit.
             dogs.forEach(dog => {
-                if (!dog.matchedName && dog.possibleMatches.length === 0 && dog.inputName) {
+                if (!dog.matchedName && dog.possibleMatches.length === 0 && dog.inputName && !hasPendingOp(dog.id)) {
                     const rematched = matchDogName(dog.inputName);
                     if (rematched.length === 1) {
                         dog.matchedName = rematched[0];
                         dog.possibleMatches = rematched;
-                        console.log('[applyRemoteState] Re-matched "' + dog.inputName + '" → ' + rematched[0]);
-                        // Sync the fix back to the Session sheet (non-blocking, quiet so it
-                        // doesn't trip the offline banner if a single rematch fetch fails)
                         syncUpdateDog(dog.id, { matchedName: rematched[0], possibleMatches: rematched }, true);
                     } else if (rematched.length > 1) {
                         dog.possibleMatches = rematched;
-                        console.log('[applyRemoteState] Re-matched "' + dog.inputName + '" → ' + rematched.length + ' options');
                         syncUpdateDog(dog.id, { possibleMatches: rematched }, true);
                     } else {
-                        // Exact match failed, try fuzzy match
                         const fuzzyMatches = fuzzyMatchDogName(dog.inputName);
                         if (fuzzyMatches.length > 0) {
                             dog.possibleMatches = fuzzyMatches;
-                            console.log('[applyRemoteState] Fuzzy re-matched "' + dog.inputName + '" → ' + fuzzyMatches.length + ' options');
                             syncUpdateDog(dog.id, { possibleMatches: fuzzyMatches }, true);
                         }
                     }
                 }
             });
-            
-            for (const penId of Object.keys(pens)) {
-                pens[penId] = [];
-            }
-            
-            result.dogs.forEach(d => {
-                if (d.penId && pens[d.penId]) {
-                    pens[d.penId].push(d.id);
-                }
-            });
-            
+
             renderAllPens();
             renderStagingArea();
-            saveLocalSnapshot();
         }
 
         async function loadSessionState() {
@@ -1938,140 +2057,40 @@
             }
         }
 
-        // 'quiet' = true skips the failure-counter bump.
-        // Used by background fixers (e.g. applyRemoteState's auto-rematch) so a single
-        // bad sheet row doesn't flood the counter and trip the offline banner spuriously.
+        // The sync* helpers below now ENQUEUE durable mutations and kick off a flush; the queue
+        // (not these calls) owns ordering, retry, and offline persistence. The 'quiet' arg is kept
+        // for call-site compatibility and intentionally ignored.
         async function syncAddDog(dog, quiet) {
-            saveLocalSnapshot();
-            if (!isOnline) return { success: false, offline: true };
-
-            pendingDogIds.add(dog.id);
-
-            try {
-                const response = await fetch(APPS_SCRIPT_URL, {
-                    method: 'POST',
-                    redirect: 'follow',
-                    body: JSON.stringify({
-                        action: 'addDog',
-                        dog: {
-                            id: dog.id,
-                            inputName: dog.inputName,
-                            matchedName: dog.matchedName,
-                            possibleMatches: dog.possibleMatches,
-                            status: dog.status,
-                            prescription: dog.prescription,
-                            prescriptionComment: dog.prescriptionComment,
-                            supplements: dog.supplements,
-                            supplementTypes: dog.supplementTypes,
-                            penId: getDogPen(dog.id) || '',
-                            mealType: currentMealType
-                        }
-                    })
-                });
-
-                const result = await response.json();
-                if (result && result.success) {
-                    lastSyncVersion = result.version;
-                    if (!quiet) markSyncSuccess();
-                } else if (!quiet) {
-                    markSyncFailure('syncAddDog-bad-response');
-                }
-                return result;
-            } catch (error) {
-                console.error('Sync add error:', error);
-                if (!quiet) markSyncFailure('syncAddDog');
-                return { success: false, error: error.toString() };
-            } finally {
-                pendingDogIds.delete(dog.id);
-            }
+            enqueue('add', dog.id, {
+                id: dog.id,
+                inputName: dog.inputName,
+                matchedName: dog.matchedName,
+                possibleMatches: dog.possibleMatches,
+                status: dog.status,
+                prescription: dog.prescription,
+                prescriptionComment: dog.prescriptionComment,
+                supplements: dog.supplements,
+                supplementTypes: dog.supplementTypes,
+                penId: getDogPen(dog.id) || '',
+                mealType: currentMealType
+            });
+            flushQueue();
         }
 
         async function syncUpdateDog(dogId, updates, quiet) {
-            saveLocalSnapshot();
-            if (!isOnline) return { success: false, offline: true };
-
-            pendingDogIds.add(dogId);
-
-            try {
-                const response = await fetch(APPS_SCRIPT_URL, {
-                    method: 'POST',
-                    redirect: 'follow',
-                    body: JSON.stringify({
-                        action: 'updateDog',
-                        dogId: dogId,
-                        updates: updates
-                    })
-                });
-
-                const result = await response.json();
-                if (result && result.success) {
-                    lastSyncVersion = result.version;
-                    if (!quiet) markSyncSuccess();
-                } else if (!quiet) {
-                    markSyncFailure('syncUpdateDog-bad-response');
-                }
-                return result;
-            } catch (error) {
-                console.error('Sync update error:', error);
-                if (!quiet) markSyncFailure('syncUpdateDog');
-                return { success: false, error: error.toString() };
-            } finally {
-                pendingDogIds.delete(dogId);
-            }
+            enqueue('update', dogId, updates);
+            flushQueue();
         }
 
         async function syncDeleteDog(dogId, quiet) {
-            saveLocalSnapshot();
-            if (!isOnline) return { success: false, offline: true };
-
-            try {
-                const response = await fetch(APPS_SCRIPT_URL, {
-                    method: 'POST',
-                    redirect: 'follow',
-                    body: JSON.stringify({ action: 'deleteDog', dogId: dogId })
-                });
-
-                const result = await response.json();
-                if (result && result.success) {
-                    lastSyncVersion = result.version;
-                    if (!quiet) markSyncSuccess();
-                } else if (!quiet) {
-                    markSyncFailure('syncDeleteDog-bad-response');
-                }
-                return result;
-            } catch (error) {
-                console.error('Sync delete error:', error);
-                if (!quiet) markSyncFailure('syncDeleteDog');
-                return { success: false, error: error.toString() };
-            }
+            enqueue('delete', dogId, {});
+            flushQueue();
         }
 
         async function syncMealType(mealType) {
-            saveLocalSnapshot();
-            if (!isOnline) return { success: false, offline: true };
-
             pauseSync();
-
-            try {
-                const response = await fetch(APPS_SCRIPT_URL, {
-                    method: 'POST',
-                    redirect: 'follow',
-                    body: JSON.stringify({ action: 'setMealType', mealType: mealType })
-                });
-
-                const result = await response.json();
-                if (result && result.success) {
-                    lastSyncVersion = result.version;
-                    markSyncSuccess();
-                } else {
-                    markSyncFailure('syncMealType-bad-response');
-                }
-                return result;
-            } catch (error) {
-                console.error('Sync meal type error:', error);
-                markSyncFailure('syncMealType');
-                return { success: false, error: error.toString() };
-            }
+            enqueue('mealType', '__meal__', { mealType: mealType });
+            flushQueue();
         }
 
         async function syncClearSession() {
@@ -2087,7 +2106,8 @@
                 const result = await response.json();
                 if (result && result.success) {
                     lastSyncVersion = result.version;
-                    markSyncSuccess();
+                    isOnline = true;
+                    updateConnectionUI();
                 } else {
                     markSyncFailure('syncClearSession-bad-response');
                 }
@@ -2112,11 +2132,11 @@
                 });
 
                 const result = await response.json();
-                if (result && result.success) {
-                    markSyncSuccess();
-                } else {
-                    markSyncFailure('submit-bad-response');
-                }
+                // We got a response, so the server is reachable. Do NOT treat result.success===false
+                // as a connectivity failure — a failed submit (e.g. Telegram delivery) is handled by
+                // the caller, not by flipping the offline banner.
+                isOnline = true;
+                updateConnectionUI();
                 return result;
             } catch (error) {
                 markSyncFailure('submit');
@@ -2615,10 +2635,9 @@
         async function confirmSubmit() {
             closePreview();
 
-            // Hard offline guard — even with the disabled button, belt-and-suspenders
-            // in case state changed between Preview and Confirm.
-            if (!isOnline || consecutiveSyncFailures > 0) {
-                showToast('Cannot submit — connection lost. Wait for reconnection and try again.', 'error');
+            // Hard guard — only submit when reachable AND every local edit has synced.
+            if (!isOnline || mutationQueue.length > 0) {
+                showToast('Cannot submit — ' + (!isOnline ? 'connection lost' : mutationQueue.length + ' change(s) still syncing') + '. Wait and try again.', 'error');
                 return;
             }
 
@@ -2657,37 +2676,52 @@
                 dogs: assignedDogs
             });
 
-            if (result && result.success) {
+            // Success requires BOTH a successful backend AND a confirmed Telegram delivery.
+            // A report with no review links in Telegram is a failed submit — don't wipe state.
+            if (result && result.success && result.telegramSent) {
                 showToast(`✅ ${result.dogsProcessed} dogs submitted! Check Telegram.`, 'success');
                 dogs = [];
                 for (const penId of Object.keys(pens)) pens[penId] = [];
+                clearQueue();
                 renderAllPens();
                 renderStagingArea();
-                clearLocalSnapshot();
+                updateConnectionUI();
                 updateStatus('✓ Submitted', 'connected');
             } else {
-                showToast('❌ Submit failed: ' + (result && result.error || 'Unknown error'), 'error');
+                const reason = (result && result.error) ? result.error
+                             : (result && result.success && !result.telegramSent) ? 'Telegram delivery failed — report not sent'
+                             : 'Unknown error';
+                showToast('❌ Submit failed: ' + reason + '. Your dogs are still here — try again.', 'error');
                 updateStatus('Submit failed', 'error');
-                // Snapshot is preserved automatically — if the user retries or refreshes,
-                // their dogs are still in localStorage.
+                // Local state + queue are preserved, so the user can retry or refresh safely.
             }
         }
 
         async function clearAll() {
             if (!confirm('Clear all dogs and reset?\n\nThis will clear data on ALL devices.')) return;
 
-            dogs = [];
-            for (const penId of Object.keys(pens)) pens[penId] = [];
-            renderAllPens();
-            renderStagingArea();
-            clearLocalSnapshot();
+            // Don't destroy local state until the server confirms the clear — otherwise an
+            // offline/failed clear would wipe the device while the session lives on elsewhere.
+            if (!isOnline) {
+                showToast('Cannot clear while disconnected. Reconnect and try again.', 'error');
+                return;
+            }
 
             updateStatus('Clearing...', 'syncing');
             const result = await syncClearSession();
 
             if (result && result.success) {
+                dogs = [];
+                for (const penId of Object.keys(pens)) pens[penId] = [];
+                clearQueue();
+                renderAllPens();
+                renderStagingArea();
+                updateConnectionUI();
                 showToast('Session cleared', 'success');
                 updateStatus('✓ Cleared', 'connected');
+            } else {
+                showToast('Clear failed — your data is safe. Try again when reconnected.', 'error');
+                updateStatus('Clear failed', 'error');
             }
         }
 
