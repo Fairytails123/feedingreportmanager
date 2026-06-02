@@ -1003,6 +1003,12 @@
                     </div>
                 </div>
 
+                <!-- Quick Start: auto-add today's dogs from the Whiteboard -->
+                <div class="entry-section">
+                    <div class="section-title">⚡ Quick Start</div>
+                    <button class="btn btn-primary" id="addTodayBtn" onclick="addDogsForToday()" style="width:100%;">🐶 Add Dogs for Today</button>
+                </div>
+
                 <!-- Delete Bin -->
                 <div class="bin-section">
                     <div class="bin" id="deleteBin">
@@ -2281,6 +2287,141 @@
             showToast(dog.matchedName ? `Added ${dog.matchedName}` : `Added ${name} - select from dropdown`, 'success');
             
             await syncAddDog(dog);
+        }
+
+        // ============================================
+        // ADD DOGS FOR TODAY (auto-populate from Whiteboard)
+        // ============================================
+
+        // Canonical pen fill order — matches the backend / Feeding Display convention.
+        const PEN_ORDER = ['top-1', 'top-2', 'top-3', 'top-4', 'top-5',
+                           'bottom-1', 'bottom-2', 'bottom-3', 'bottom-4', 'bottom-5'];
+
+        // Meal period from the tablet clock: <10:30 → Breakfast, 10:30–<14:00 → Lunch, ≥14:00 → Dinner.
+        function computeMealPeriod(date) {
+            const mins = date.getHours() * 60 + date.getMinutes();
+            if (mins < 10 * 60 + 30) return 'Morning Meal';
+            if (mins < 14 * 60) return 'Lunch';
+            return 'Evening Meal';
+        }
+
+        // Least-occupied eligible pen (tie-break by canonical order) using a live count
+        // map, so dogs spread evenly and balance against any already on the board.
+        function pickLeastOccupiedPen(eligible, counts) {
+            let best = null, bestCount = Infinity;
+            for (const penId of eligible) {
+                const c = counts[penId] || 0;
+                if (c < bestCount) { bestCount = c; best = penId; }
+            }
+            return best;
+        }
+
+        // One-press: pick the meal from the clock, pull that meal's dogs from the
+        // Whiteboard (via the backend), and merge them onto the board into pens.
+        async function addDogsForToday() {
+            const btn = document.getElementById('addTodayBtn');
+            const mealPeriod = computeMealPeriod(new Date());
+            const mealLabel = { 'Morning Meal': 'Breakfast', 'Lunch': 'Lunch', 'Evening Meal': 'Dinner' }[mealPeriod];
+
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ Loading…'; }
+
+            let result;
+            try {
+                const url = APPS_SCRIPT_URL + '?action=getTodayPlan&mealPeriod=' + encodeURIComponent(mealPeriod);
+                const response = await gasFetch(url, { method: 'GET', redirect: 'follow' });
+                result = await response.json();
+            } catch (e) {
+                result = { success: false, error: e.toString() };
+            }
+
+            if (btn) { btn.disabled = false; btn.textContent = '🐶 Add Dogs for Today'; }
+
+            if (!result || !result.success) {
+                showToast("Couldn't load today's dogs: " + ((result && result.error) || 'unknown error'), 'error');
+                return;
+            }
+
+            const planDogs = Array.isArray(result.dogs) ? result.dogs : [];
+            if (planDogs.length === 0) {
+                showToast(`No ${mealLabel} dogs found on the whiteboard for today.`, 'info');
+                return;
+            }
+
+            // Merge: skip dogs already on the board (by matched/typed name, case-insensitive).
+            const onBoard = new Set(dogs.map(d => (d.matchedName || d.inputName || '').toLowerCase().trim()));
+            const newDogs = planDogs.filter(d => !onBoard.has((d.name || '').toLowerCase().trim()));
+            const dupCount = planDogs.length - newDogs.length;
+
+            if (newDogs.length === 0) {
+                showToast(`All ${planDogs.length} ${mealLabel} dogs are already on the board.`, 'info');
+                return;
+            }
+
+            const confirmMsg = `Add ${newDogs.length} dog${newDogs.length === 1 ? '' : 's'} for ${mealLabel}?` +
+                (dupCount ? `\n(${dupCount} already on the board — will be skipped.)` : '');
+            if (!confirm(confirmMsg)) return;
+
+            pauseSync();
+
+            // Set the meal type to match the period, and sync it.
+            const mealSelect = document.getElementById('mealType');
+            if (mealSelect) mealSelect.value = mealPeriod;
+            currentMealType = mealPeriod;
+            await syncMealType(mealPeriod);
+
+            // Seed pen occupancy from the current board so the spread stays balanced.
+            const counts = {};
+            for (const penId of PEN_ORDER) counts[penId] = (pens[penId] || []).length;
+
+            let added = 0;
+            const unmatched = [];
+
+            for (const planDog of newDogs) {
+                const name = (planDog.name || '').trim();
+                if (!name) continue;
+
+                // Lunch confines each dog to its B/T side; breakfast/dinner use all pens.
+                let eligible = PEN_ORDER;
+                if (planDog.penGroup === 'top') eligible = PEN_ORDER.filter(p => p.indexOf('top-') === 0);
+                else if (planDog.penGroup === 'bottom') eligible = PEN_ORDER.filter(p => p.indexOf('bottom-') === 0);
+
+                const targetPen = pickLeastOccupiedPen(eligible, counts);
+
+                // Resolve the name against the Lookup list exactly like addDog().
+                const matches = matchDogName(name);
+                const dog = {
+                    id: Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+                    inputName: name,
+                    matchedName: matches.length === 1 ? matches[0] : null,
+                    possibleMatches: matches.length ? matches : fuzzyMatchDogName(name),
+                    status: 'all',
+                    prescription: false,
+                    prescriptionComment: '',
+                    supplements: false,
+                    supplementTypes: []
+                };
+                if (!dog.matchedName) unmatched.push(name);
+
+                dogs.push(dog);
+                if (targetPen && pens[targetPen]) {
+                    // Set the pen BEFORE syncAddDog so the queued 'add' carries the penId
+                    // (syncAddDog reads getDogPen) — avoids a second update round-trip.
+                    pens[targetPen].push(dog.id);
+                    counts[targetPen] = (counts[targetPen] || 0) + 1;
+                }
+                await syncAddDog(dog);
+                added++;
+            }
+
+            renderAllPens();
+            renderStagingArea();
+            updateConnectionUI();
+
+            let msg = `Added ${added} dog${added === 1 ? '' : 's'} for ${mealLabel}.`;
+            if (dupCount) msg += ` ${dupCount} already on board.`;
+            if (result.skipped && result.skipped.length) msg += ` ${result.skipped.length} skipped (no B/T pen).`;
+            if (unmatched.length) msg += ` ${unmatched.length} need a name match.`;
+            showToast(msg, unmatched.length ? 'info' : 'success');
         }
 
         async function deleteDog(dogId) {

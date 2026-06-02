@@ -33,8 +33,17 @@ const CONFIG = {
   
   TELEGRAM_BOT_TOKEN: '8436854999:AAGk4PDevCMCJu76tIuraI-MjW0tH94sjek',
   TELEGRAM_CHAT_ID: '-1003653235960',
-  
+
   JOTFORM_ID: '240143730611039',
+
+  // ── Whiteboard Display integration (for the "Add Dogs for Today" button) ──
+  // These point at the separate Whiteboard project's GAS web apps. They are read
+  // server-side via UrlFetchApp (no browser CORS). The URLs + token are already
+  // public in the Pages-hosted whiteboard display, so this introduces no new secret.
+  WHITEBOARD_TODAY_URL: 'https://script.google.com/macros/s/AKfycbzqXD9OCM5oSNFdy3OF7pOG0PRcpy4dgkEYWJBVh40CFHJgjvSpPn6SE-mNjloo-GKw/exec', // ?action=loadToday → today's daycare/boarding roster (lunch source)
+  CHECKINOUT_URL: 'https://script.google.com/macros/s/AKfycbz2kc3lJbrGk7lw9jVcZMdUrPWjRx4qBARM8YVAIARhYAlQwCzlhHBbKswyOcVHytmB7Q/exec', // ?mode=checkinout&token=… → boarding stays w/ reliable dates (breakfast/dinner source)
+  CHECKINOUT_TOKEN: 'ft-k9-board-2024-sec',
+  BT_PEN_GID: 1567330092,   // tab in THIS feeding sheet: Dog Name | Pen Number (B/T/blank) | Size of Dog
   
   // JotForm Unique Names (required for URL pre-fill)
   JOTFORM_FIELDS: {
@@ -93,6 +102,9 @@ function doGet(e) {
       case 'getSessionVersion':
         result = getSessionVersion();
         break;
+      case 'getTodayPlan':
+        result = getTodayPlan(e.parameter.mealPeriod);
+        break;
       default:
         result = { success: true, status: 'ok', message: 'Feeding Report API v2.0 - Real-Time Sync' };
     }
@@ -147,6 +159,9 @@ function doPost(e) {
         break;
       case 'clearTemp':
         result = clearTempTab();
+        break;
+      case 'getTodayPlan':
+        result = getTodayPlan(data.mealPeriod);
         break;
       default:
         result = { success: false, error: 'Unknown action: ' + action };
@@ -519,10 +534,214 @@ function getDogList() {
     }
     
     return { success: true, dogs: dogs, count: dogs.length };
-    
+
   } catch (error) {
     return { success: false, error: error.toString() };
   }
+}
+
+// ============================================
+// ADD DOGS FOR TODAY (Whiteboard integration)
+// ============================================
+
+/**
+ * Build the list of dogs to auto-add for a meal period, sourced from the Whiteboard
+ * Display. The frontend's "Add Dogs for Today" button calls this, then drops the
+ * returned dogs into pens.
+ *
+ *   Morning Meal / Evening Meal → boarding + boarding-school dogs from the check-in/out
+ *     feed, date-filtered (breakfast = slept here last night incl. dogs leaving this
+ *     morning; dinner = here tonight incl. today's check-ins). penGroup = null (any pen).
+ *   Lunch → today's full-day / half-day dogs from the whiteboard roster, kept only if
+ *     listed in the B/T pen tab with B (→bottom) or T (→top). penGroup = 'top'|'bottom'.
+ *
+ * Returns { success, mealPeriod, today, dogs:[{name, penGroup}], skipped:[name], counts }.
+ * Never throws to the client.
+ */
+function getTodayPlan(mealPeriod) {
+  try {
+    if (!mealPeriod) return { success: false, error: 'Missing mealPeriod' };
+
+    // "Today" is authoritative in the business timezone, independent of the tablet clock.
+    const today = Utilities.formatDate(new Date(), 'Europe/London', 'yyyy-MM-dd');
+
+    if (mealPeriod === 'Morning Meal' || mealPeriod === 'Evening Meal') {
+      return getBoardingPlan_(mealPeriod, today);
+    }
+    if (mealPeriod === 'Lunch') {
+      return getLunchPlan_(today);
+    }
+    return { success: false, error: 'Unknown mealPeriod: ' + mealPeriod };
+  } catch (error) {
+    return { success: false, error: error.toString() };
+  }
+}
+
+/**
+ * Breakfast / Dinner roster from the check-in/out feed.
+ *   checkIn  = arrival day; checkOut = departure-morning day (last night = checkOut - 1).
+ *   Breakfast (Morning Meal): checkIn <  today AND checkOut >= today
+ *     → slept here last night; INCLUDES dogs leaving this morning, EXCLUDES today's arrivals.
+ *   Dinner    (Evening Meal): checkIn <= today AND checkOut >  today
+ *     → here tonight; INCLUDES today's check-ins, EXCLUDES today's check-outs.
+ * Dates are ISO 'YYYY-MM-DD' so lexicographic string comparison is correct.
+ * type ∈ {boarding, school} — both count.
+ */
+function getBoardingPlan_(mealPeriod, today) {
+  const url = CONFIG.CHECKINOUT_URL +
+    '?mode=checkinout&token=' + encodeURIComponent(CONFIG.CHECKINOUT_TOKEN);
+  const feed = fetchJson_(url);
+  const stays = (feed && Array.isArray(feed.stays)) ? feed.stays : [];
+
+  const isMorning = (mealPeriod === 'Morning Meal');
+  const seen = {};
+  const dogs = [];
+
+  for (let i = 0; i < stays.length; i++) {
+    const stay = stays[i] || {};
+    const name = stay.dogName ? stay.dogName.toString().trim() : '';
+    const checkIn = stay.checkIn ? stay.checkIn.toString() : '';
+    const checkOut = stay.checkOut ? stay.checkOut.toString() : '';
+    if (!name || !checkIn || !checkOut) continue;
+
+    const include = isMorning
+      ? (checkIn < today && checkOut >= today)
+      : (checkIn <= today && checkOut > today);
+    if (!include) continue;
+
+    const key = normName_(name);
+    if (seen[key]) continue;   // a dog can have multiple stays; count once
+    seen[key] = true;
+    dogs.push({ name: name, penGroup: null });
+  }
+
+  dogs.sort(function (a, b) { return a.name.localeCompare(b.name); });
+
+  return {
+    success: true,
+    mealPeriod: mealPeriod,
+    today: today,
+    dogs: dogs,
+    skipped: [],
+    counts: { source: stays.length, eligible: dogs.length }
+  };
+}
+
+/**
+ * Lunch roster: today's full-day / half-day dogs from the whiteboard, kept only if
+ * present in the B/T pen tab with B (bottom) or T (top). Boarding dogs do not get a
+ * lunch report; dogs with a blank/absent pen are returned in `skipped` for visibility.
+ */
+function getLunchPlan_(today) {
+  const DAYCARE = { 'Full Day': true, 'Half Day AM': true, 'Half Day PM': true };
+
+  const board = fetchJson_(CONFIG.WHITEBOARD_TODAY_URL + '?action=loadToday');
+  const roster = (board && Array.isArray(board.dogs)) ? board.dogs : [];
+  const penMap = readPenMap_();   // { normName: 'top' | 'bottom' }
+
+  const seen = {};
+  const dogs = [];
+  const skipped = [];
+
+  for (let i = 0; i < roster.length; i++) {
+    const entry = roster[i] || {};
+    const name = entry.name ? entry.name.toString().trim() : '';
+    const serviceType = entry.serviceType ? entry.serviceType.toString().trim() : '';
+    if (!name || !DAYCARE[serviceType]) continue;
+
+    const key = normName_(name);
+    if (seen[key]) continue;
+    seen[key] = true;
+
+    const penGroup = penMap[key];   // 'top' | 'bottom' | undefined
+    if (penGroup !== 'top' && penGroup !== 'bottom') {
+      skipped.push(name);           // not in the B/T tab, or blank pen
+      continue;
+    }
+    dogs.push({ name: name, penGroup: penGroup });
+  }
+
+  // Top group first, alphabetical within each group (frontend fills top-1.. / bottom-1..).
+  dogs.sort(function (a, b) {
+    if (a.penGroup !== b.penGroup) return a.penGroup === 'top' ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  return {
+    success: true,
+    mealPeriod: 'Lunch',
+    today: today,
+    dogs: dogs,
+    skipped: skipped,
+    counts: { roster: roster.length, eligible: dogs.length, skipped: skipped.length }
+  };
+}
+
+/**
+ * Read the B/T pen-assignment tab (gid CONFIG.BT_PEN_GID) in THIS feeding sheet.
+ * Columns: Dog Name | Pen Number (B/T/blank) | Size of Dog.
+ * Returns { normalizedDogName: 'top' | 'bottom' } — only rows with B or T; blanks skipped.
+ */
+function readPenMap_() {
+  const map = {};
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+    const sheets = ss.getSheets();
+    let sheet = null;
+    for (let i = 0; i < sheets.length; i++) {
+      if (sheets[i].getSheetId() === CONFIG.BT_PEN_GID) { sheet = sheets[i]; break; }
+    }
+    if (!sheet) {
+      console.warn('[readPenMap_] No tab with gid ' + CONFIG.BT_PEN_GID + ' found.');
+      return map;
+    }
+
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {   // skip header
+      const name = data[i][0] ? data[i][0].toString().trim() : '';
+      const pen = data[i][1] ? data[i][1].toString().trim().toUpperCase() : '';
+      if (!name) continue;
+      if (pen === 'B') map[normName_(name)] = 'bottom';
+      else if (pen === 'T') map[normName_(name)] = 'top';
+      // blank / other → not mapped (skipped at lunch)
+    }
+  } catch (e) {
+    console.warn('[readPenMap_] Failed to read pen tab: ' + e.toString());
+  }
+  return map;
+}
+
+/**
+ * GET a URL and parse JSON. GAS web apps 302-redirect to googleusercontent;
+ * UrlFetchApp follows redirects by default. Returns null on any failure so callers
+ * default to an empty roster rather than throwing.
+ */
+function fetchJson_(url) {
+  try {
+    const response = UrlFetchApp.fetch(url, { method: 'get', muteHttpExceptions: true });
+    const code = response.getResponseCode();
+    if (code < 200 || code >= 300) {
+      console.warn('[fetchJson_] HTTP ' + code + ' for ' + url);
+      return null;
+    }
+    return safeJsonParse(response.getContentText(), null);
+  } catch (e) {
+    console.warn('[fetchJson_] fetch failed for ' + url + ': ' + e.toString());
+    return null;
+  }
+}
+
+/**
+ * Normalize a dog name for joining across data sources (whiteboard / B-T tab / Lookup):
+ * fold smart/curly apostrophes to ASCII, lowercase, trim, collapse internal whitespace.
+ * "Echo O’Malley" and "Echo O'Malley" both → "echo o'malley"; "Frida  walsh " → "frida walsh".
+ */
+function normName_(s) {
+  return s.toString()
+    .replace(/[‘’ʼ′`]/g, "'")   // curly/smart apostrophes → ASCII '
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ');
 }
 
 /**
