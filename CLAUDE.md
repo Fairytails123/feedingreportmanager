@@ -8,11 +8,13 @@ A **Feeding Report Manager** for a dog daycare/boarding operation. Staff use a t
 
 There is **no build, test, or lint tooling** — this repo is three hand-edited source files plus a changelog. Editing any file requires a manual deployment step (see below); nothing here runs locally as a server.
 
+**How changes get verified (the de-facto test step).** Because nothing runs locally, the established pattern before deploying is a *throwaway headless Node harness* that loads the **actual** source and replays acceptance scenarios — the inline `<script>` from `index.html` is extracted and evaluated with `new Function`, and `feeding_report_backend_v2.js` is loaded with the Apps Script globals (`SpreadsheetApp`, `UrlFetchApp`, `Utilities`, etc.) stubbed. Scenarios proven this way include offline-add-survives-reconnect, crash recovery, submit-gating on Telegram failure, delete-stays-deleted, and malformed-row normalization (see the 2026-06-02 `CHANGELOG.md` entry). Verify against real source this way **before** the live deploy — do not hand-deploy unverified edits.
+
 ## The four moving parts (most live outside this repo)
 
 1. **`index.html`** — the tablet UI. A single self-contained HTML file (inline CSS + JS, no framework, no bundler). Deployed via **GitHub Pages** (this repo). Committing to `main` publishes it.
 2. **`feeding_report_backend_v2.js`** — Google Apps Script (GAS) web app. **The deployed copy lives in the Apps Script project named "Feeding manager", NOT in this repo** (it is container-bound to the Sheet; its single live code file is `Code.js`). This file is a *source mirror*; deploy it with **`clasp`** (see Deployment below). The web-app `/exec` URL stays constant across versions.
-3. **`n8n_workflow_v2_corrected.json`** — the n8n automation ("Feeding Report - Send Command (v2 Real-Time Sync)"). Triggered by Telegram commands `/send`, `/cancel`, `/status`. Reads the Temp tab, submits to JotForm, clears tabs, replies to Telegram. Lives in n8n, not here.
+3. **`n8n_workflow_v2_corrected.json`** — the n8n automation ("Feeding Report - Send Command (v2 Real-Time Sync)"), **live workflow ID `yaBIrDOVbJTEMsH9`** on `ftmanager.app.n8n.cloud`. Triggered by Telegram commands `/send`, `/cancel`, `/status`. Reads the Temp tab, submits each row to JotForm, clears tabs, replies to Telegram. Lives in n8n, not here — this JSON is a *mirror*; edit the live workflow with the **n8n MCP** (`n8n_update_partial_workflow`). See **"n8n command handler"** below for the config gotchas that kept it silently broken until 2026-06-02.
 4. **Google Sheet** (`SHEET_ID` `1Ejjoo55BaoCPRaLdmFb9EdqtiAT9eNa52QRWjuVThyc`) with three tabs — the shared state bus between all parts:
    - **Lookup** (permanent): `Dog Name | Parent Email | Parent Name`. Source of truth for dogs and emails.
    - **Session** (real-time sync, 12 cols): live editing state shared across tablets. Schema in the GAS `CONFIG.SESSION_COLS`.
@@ -42,6 +44,15 @@ The 2026-06-02 `CHANGELOG.md` entry documents the rework and which review findin
 4. n8n reads the Temp tab, POSTs each row to JotForm, clears Temp (and Session on cancel), replies with a count.
 
 `finalName` resolution in `submitReport` is `dog.matchedName || dog.name || dog.inputName || ''` (prefers the tablet's resolved `name` over the raw typed `inputName`); `status` and `supplementTypes` are normalized at the top of the loop so a malformed row can't silently mis-map or throw after the Temp tab is cleared. Free-text names are Markdown-escaped (`escapeTelegramMarkdown`) before the Telegram send. The frontend (`confirmSubmit`) treats a submit as successful only when `result.success && result.telegramSent`, and preserves the queue/board otherwise.
+
+## n8n command handler (`/send` `/cancel` `/status`) — config gotchas
+
+The Telegram review commands are handled by the **live n8n workflow `yaBIrDOVbJTEMsH9`** (edit via the **n8n MCP** `n8n_update_partial_workflow`, not by hand; the repo JSON is a mirror — regenerate it from the live workflow after any change). `Telegram Trigger` → `Command Router` (Switch on `message.text`): `/send` reads the **Temp** tab and POSTs each row to JotForm, `/cancel` clears **Temp + Session**, `/status` reports pending counts. These were silently broken from launch until 2026-06-02 (every real command errored at the first Google Sheets node while non-command chatter "succeeded" by falling through to no branch). Preserve these invariants — each is a fix for a bug that shipped to production:
+
+- **Google Sheets nodes select the tab by gid, not name.** With the Sheet resource-locator in `mode:"list"`, `value` MUST be the numeric **gid** (`cachedResultName` is just a display label). Putting the tab *name* in `value` throws `Sheet with ID Temp not found`. Gids: **Temp `1965265218`, Session `1038940935`** (Lookup `0`, B/T pen `1567330092`). GAS, by contrast, addresses tabs by name (`getSheetByName`) — so a tab can exist and work for GAS yet be "missing" to a misconfigured n8n node.
+- **JotForm is in EU Safe mode → use `eu-api.jotform.com`.** Plain `api.jotform.com` 301-redirects and drops the POST body. The submit node sends `form-urlencoded` `submission[<qid>]=…` as a URL-encoded `bodyString` built in the *Prepare JotForm Data* code node (`specifyBody:"string"`, not `"json"`). Question IDs on form `240143730611039`: `3` date, `6` food, `7` supplements (multi), `9` meal, `10` has-medicine, `13` name, `14` email, `21` comments.
+- **Reply nodes use the "Feeding report bot" credential** (`QGWk6jRMWIlPH8Jz`, bot id `8436854999`, @YourDaycare_FeedingBot) — the same bot GAS posts the summary with and the only bot in group `-1003653235960`. Don't point replies at any other bot; set an explicit `operation: sendMessage`.
+- **Command match is `startsWith`** (still matches the group form `/send@Bot`), with a `fallbackOutput` → *Send Unknown Command* reply for unrecognised text. The **Temp tab is durable state** — GAS writes it, only n8n clears it; nothing is lost between posting the links and the human replying.
 
 ## "Add Dogs for Today" — Whiteboard integration (`getTodayPlan`)
 
@@ -75,10 +86,10 @@ When building any URL that a mobile Telegram user will tap, **emit zero `%XX` se
 
 ## Secrets currently in source
 
-`feeding_report_backend_v2.js` contains a live `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `JOTFORM_ID`, and `SHEET_ID` inline in `CONFIG`. They are committed. Don't add more, and flag if asked to rotate them (the bot token in particular is sensitive).
+`feeding_report_backend_v2.js` contains a live `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `JOTFORM_ID`, and `SHEET_ID` inline in `CONFIG`. They are committed. The `n8n_workflow_v2_corrected.json` mirror likewise carries the JotForm `apiKey` and the Telegram `chat_id` inline. Don't add more, and flag if asked to rotate them (the bot token in particular is sensitive).
 
 ## Deployment checklist when you change a file
 
 - **`index.html`** → `git push origin main`; GitHub Pages serves it (CDN cache ~1–2 min; cache-bust with `?cb=<ts>` when verifying). No other step.
 - **`feeding_report_backend_v2.js`** → deploy with **clasp** (already authenticated via `~/.clasprc.json`): in a throwaway temp dir run `clasp clone-script <scriptId>`, `cp` this file over the cloned `Code.js`, `clasp push -f`, then `clasp redeploy <deploymentId> -d "…"` to push a new version onto the **existing web-app deployment** (same `/exec` URL). Do **not** `clasp deploy` fresh — that mints a new URL the tablet doesn't use. The script ID + deployment ID are in Claude's private project memory (`feeding-manager-deploy`) and in Apps Script → Project Settings. Verify with `curl ".../exec?action=getSessionVersion"`. **Network ops (git push, clasp, curl) require the Bash tool's sandbox disabled.**
-- **`n8n_workflow_v2_corrected.json`** → import/update in n8n via the n8n MCP; the JSON here is a mirror.
+- **`n8n_workflow_v2_corrected.json`** → edit the **live workflow `yaBIrDOVbJTEMsH9`** in n8n via the **n8n MCP** (`n8n_update_partial_workflow`, surgical diff ops; run with `validateOnly:true` first), then regenerate this mirror from the live workflow (`n8n_get_workflow`). The JSON here is a mirror, not the source of truth. After editing, `n8n_validate_workflow` should report 0 errors; confirm a real command landed via the execution log (`n8n_executions`). See "n8n command handler" above before touching the Sheets/JotForm/Telegram nodes.

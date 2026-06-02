@@ -1,5 +1,50 @@
 # Changelog
 
+## 2026-06-02 — Fix Telegram `/send` and `/cancel` (n8n workflow)
+
+The Telegram review commands had **never** worked: staff would reply `/send` (to push the staged
+JotForm rows) or `/cancel` (to discard them) and nothing happened, despite many "fix" iterations.
+Investigation of the **live** n8n workflow `yaBIrDOVbJTEMsH9` ("Feeding Report - Send Command (v2
+Real-Time Sync)") — its execution history, the GAS contract, the Sheet, and the JotForm form —
+found the workflow was active and *receiving* the commands, but failing immediately downstream.
+
+### Root cause (proven from execution errors 6443 / 6514 / 6823 / 6824)
+
+Every Google Sheets node referenced its tab with `sheetName = { mode:"list", value:"Temp" }`. In
+n8n's Sheets node, `mode:"list"` treats `value` as the numeric **gid**, so it searched for a sheet
+whose *ID* was the string `"Temp"`, found none, and threw `Sheet with ID Temp not found`. This
+killed `/send` (at *Read Temp Tab*), `/cancel` (at *Clear Temp (Cancel)*), and `/status` (at *Read
+Temp (Status)*). The trigger, webhook, chat ID, and command parsing were all healthy; the only past
+"success" executions were non-command messages that fell through the Switch to no branch. State was
+never lost — the Temp tab is durable; n8n simply couldn't read it.
+
+### Fixes (applied to the live workflow via the n8n MCP; mirrored here)
+
+1. **Sheets tab references → gid.** All six Sheets nodes now use the real gids — Temp `1965265218`,
+   Session `1038940935` (Lookup `0`, B/T pen `1567330092`, confirmed via the gviz CSV headers).
+2. **JotForm EU endpoint.** The account is in **EU Safe mode**; `api.jotform.com` 301-redirects and
+   drops the POST body. *Submit to JotForm* now posts to `eu-api.jotform.com`.
+3. **JotForm body was empty.** The node had `specifyBody:"json"` (invalid for `form-urlencoded`)
+   and **no body at all**. *Prepare JotForm Data* now emits a URL-encoded `bodyString`
+   (`encodeURIComponent` over the `submission[...]` map) and the node sends `specifyBody:"string"`,
+   `body={{ $json.bodyString }}`. Field IDs validated against the live form (3=date, 6=food,
+   7=supplements, 9=meal, 10=has-medicine, 13=name, 14=email, 21=comments).
+4. **Reply bot.** The four reply nodes (+ new *Send Unknown Command*) were sending via a different
+   bot ("Route Planner Bot"); switched to **"Feeding report bot"** (the bot in the group / the
+   trigger bot) and given an explicit `operation: sendMessage`.
+5. **Command-match hardening.** The Switch rules changed from `contains` to `startsWith` (still
+   matches the group form `/send@Bot`, but stray text like "don't /cancel" no longer fires), and a
+   `fallbackOutput` now routes unrecognised commands to a *Send Unknown Command* hint reply.
+
+### Verification
+
+- Workflow validates clean (0 errors). The JotForm half was proven by replaying the node's exact
+  request (EU endpoint + URL-encoded `submission[...]` body) — it returned a `submissionID` and the
+  submission recorded every field correctly (test row used `k.singh3184@gmail.com`, deleted
+  afterward). Confirmed live: execution **6833** — a real `/send` from the group — read the Temp
+  tab, POSTed **12** JotForm submissions (12 × HTTP 200 on `eu-api`, 0 failures), cleared the Temp
+  tab, and posted the ✅ summary back from the Feeding report bot. First successful command run ever.
+
 ## 2026-06-02 — "Add Dogs for Today": one-press board setup from the Whiteboard
 
 Staff used to build each feeding session by hand (pick the meal, type every dog, drag each card into a pen). New **"Add Dogs for Today"** button on the tablet sidebar does it in one tap: it reads the meal period from the clock and pulls that meal's dogs from the **Whiteboard Display** project (a separate app on a different sheet), then merges them onto the board into pens.

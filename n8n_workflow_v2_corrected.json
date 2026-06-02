@@ -1,17 +1,21 @@
 {
   "name": "Feeding Report - Send Command (v2 Real-Time Sync)",
+  "active": true,
   "nodes": [
     {
       "parameters": {
         "updates": ["message"],
         "additionalFields": {}
       },
-      "id": "telegram-trigger-001",
+      "id": "011f73d2-cfe2-4eed-b356-79c8eb0d93cf",
       "name": "Telegram Trigger",
       "type": "n8n-nodes-base.telegramTrigger",
-      "position": [200, 300],
+      "position": [-2480, 400],
       "webhookId": "feeding-report-trigger",
-      "typeVersion": 1.2
+      "typeVersion": 1.2,
+      "credentials": {
+        "telegramApi": { "id": "QGWk6jRMWIlPH8Jz", "name": "Feeding report bot" }
+      }
     },
     {
       "parameters": {
@@ -19,19 +23,12 @@
           "values": [
             {
               "conditions": {
-                "options": {
-                  "caseSensitive": false,
-                  "leftValue": "",
-                  "typeValidation": "loose"
-                },
+                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.message.text }}",
                     "rightValue": "/send",
-                    "operator": {
-                      "type": "string",
-                      "operation": "contains"
-                    }
+                    "operator": { "type": "string", "operation": "startsWith" }
                   }
                 ],
                 "combinator": "and"
@@ -41,19 +38,12 @@
             },
             {
               "conditions": {
-                "options": {
-                  "caseSensitive": false,
-                  "leftValue": "",
-                  "typeValidation": "loose"
-                },
+                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.message.text }}",
                     "rightValue": "/cancel",
-                    "operator": {
-                      "type": "string",
-                      "operation": "contains"
-                    }
+                    "operator": { "type": "string", "operation": "startsWith" }
                   }
                 ],
                 "combinator": "and"
@@ -63,19 +53,12 @@
             },
             {
               "conditions": {
-                "options": {
-                  "caseSensitive": false,
-                  "leftValue": "",
-                  "typeValidation": "loose"
-                },
+                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.message.text }}",
                     "rightValue": "/status",
-                    "operator": {
-                      "type": "string",
-                      "operation": "contains"
-                    }
+                    "operator": { "type": "string", "operation": "startsWith" }
                   }
                 ],
                 "combinator": "and"
@@ -85,19 +68,16 @@
             }
           ]
         },
-        "options": {
-          "fallbackOutput": "none"
-        }
+        "options": { "fallbackOutput": "extra" }
       },
-      "id": "switch-router-001",
+      "id": "b25c710f-fe2e-4a9a-9b6a-9670cab0a473",
       "name": "Command Router",
       "type": "n8n-nodes-base.switch",
-      "position": [420, 300],
+      "position": [-2256, 400],
       "typeVersion": 3
     },
     {
       "parameters": {
-        "operation": "read",
         "documentId": {
           "__rl": true,
           "value": "1Ejjoo55BaoCPRaLdmFb9EdqtiAT9eNa52QRWjuVThyc",
@@ -106,87 +86,78 @@
         },
         "sheetName": {
           "__rl": true,
-          "value": "Temp",
+          "value": "1965265218",
           "mode": "list",
           "cachedResultName": "Temp"
         },
         "options": {}
       },
-      "id": "sheets-read-001",
+      "id": "367ff78b-c3a5-42c7-9542-ccd65c5550c6",
       "name": "Read Temp Tab",
       "type": "n8n-nodes-base.googleSheets",
-      "position": [640, 180],
+      "position": [-2048, 288],
       "typeVersion": 4.5,
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "DZAqFzkfKzaYA81D", "name": "Google Sheets account" }
+      }
     },
     {
       "parameters": {
         "conditions": {
-          "options": {
-            "version": 3,
-            "leftValue": "",
-            "caseSensitive": true,
-            "typeValidation": "strict"
-          },
+          "options": { "version": 3, "leftValue": "", "caseSensitive": true, "typeValidation": "strict" },
           "conditions": [
             {
               "id": "check-rows",
               "leftValue": "={{ $json['Dog Name'] }}",
               "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty",
-                "singleValue": true
-              }
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
             }
           ],
           "combinator": "and"
         },
         "options": {}
       },
-      "id": "if-has-data-001",
+      "id": "419b8b76-3b12-4a30-b09e-40a53d5f1de7",
       "name": "Has Data?",
       "type": "n8n-nodes-base.if",
-      "position": [860, 180],
+      "position": [-1824, 288],
       "typeVersion": 2.2
     },
     {
       "parameters": {
-        "jsCode": "// Process each row from Temp tab and prepare JotForm submission data\n// TEMP TAB COLUMNS (7 columns - NO Parent Name):\n// A: Dog Name | B: Parent Email | C: Meal | D: Food Consumed | E: Medicine Supplement | F: Supplement Types | G: Comments\n\nconst items = $input.all();\nconst results = [];\n\n// JotForm field IDs (from your form)\nconst FORM_ID = '240143730611039';\n\n// Get today's date\nconst today = new Date();\nconst day = today.getDate().toString();\nconst month = (today.getMonth() + 1).toString();\nconst year = today.getFullYear().toString();\n\nfor (const item of items) {\n  const row = item.json;\n  \n  // Skip empty rows\n  if (!row['Dog Name']) continue;\n  \n  // Build form data object for JotForm API\n  const formData = {};\n  \n  // Date (field 3)\n  formData['submission[3][day]'] = day;\n  formData['submission[3][month]'] = month;\n  formData['submission[3][year]'] = year;\n  \n  // Dog name (field 13)\n  formData['submission[13]'] = row['Dog Name'] || '';\n  \n  // Parent email (field 14)\n  formData['submission[14]'] = row['Parent Email'] || '';\n  \n  // Meal time (field 9)\n  formData['submission[9]'] = row['Meal'] || 'Lunch';\n  \n  // Food consumed (field 6)\n  formData['submission[6]'] = row['Food Consumed'] || 'All';\n  \n  // Has medicine/supplement (field 10)\n  formData['submission[10]'] = row['Medicine Supplement'] || 'No';\n  \n  // Medicine and supplements (field 7) - can be multiple\n  // Format in sheet: \"Calming Tablets, Hemp Oil\" -> split to array\n  const suppTypes = row['Supplement Types'] || '';\n  if (suppTypes) {\n    const supps = suppTypes.split(',').map(s => s.trim()).filter(s => s);\n    supps.forEach((supp, idx) => {\n      formData[`submission[7][${idx}]`] = supp;\n    });\n  }\n  \n  // Check if comments indicate prescription and add to supplements if needed\n  const comments = row['Comments'] || '';\n  if (row['Medicine Supplement'] === 'Yes' && comments.toLowerCase().includes('prescription')) {\n    // Check if Prescription Medicine not already in supplements\n    if (!suppTypes.includes('Prescription Medicine')) {\n      const currentSupps = suppTypes ? suppTypes.split(',').filter(s => s.trim()).length : 0;\n      formData[`submission[7][${currentSupps}]`] = 'Prescription Medicine';\n    }\n  }\n  \n  // Additional comments (field 21)\n  formData['submission[21]'] = comments;\n  \n  results.push({\n    json: {\n      dogName: row['Dog Name'],\n      parentEmail: row['Parent Email'],\n      formData: formData,\n      formId: FORM_ID\n    }\n  });\n}\n\nreturn results;"
+        "jsCode": "// Process each row from Temp tab and prepare JotForm submission data\n// TEMP TAB COLUMNS (7 columns - NO Parent Name):\n// A: Dog Name | B: Parent Email | C: Meal | D: Food Consumed | E: Medicine Supplement | F: Supplement Types | G: Comments\n\nconst items = $input.all();\nconst results = [];\n\n// JotForm field IDs (from your form)\nconst FORM_ID = '240143730611039';\n\n// Get today's date\nconst today = new Date();\nconst day = today.getDate().toString();\nconst month = (today.getMonth() + 1).toString();\nconst year = today.getFullYear().toString();\n\nfor (const item of items) {\n  const row = item.json;\n  \n  // Skip empty rows\n  if (!row['Dog Name']) continue;\n  \n  // Build form data object for JotForm API\n  const formData = {};\n  \n  // Date (field 3)\n  formData['submission[3][day]'] = day;\n  formData['submission[3][month]'] = month;\n  formData['submission[3][year]'] = year;\n  \n  // Dog name (field 13)\n  formData['submission[13]'] = row['Dog Name'] || '';\n  \n  // Parent email (field 14)\n  formData['submission[14]'] = row['Parent Email'] || '';\n  \n  // Meal time (field 9)\n  formData['submission[9]'] = row['Meal'] || 'Lunch';\n  \n  // Food consumed (field 6)\n  formData['submission[6]'] = row['Food Consumed'] || 'All';\n  \n  // Has medicine/supplement (field 10)\n  formData['submission[10]'] = row['Medicine Supplement'] || 'No';\n  \n  // Medicine and supplements (field 7) - can be multiple\n  // Format in sheet: \"Calming Tablets, Hemp Oil\" -> split to array\n  const suppTypes = row['Supplement Types'] || '';\n  if (suppTypes) {\n    const supps = suppTypes.split(',').map(s => s.trim()).filter(s => s);\n    supps.forEach((supp, idx) => {\n      formData[`submission[7][${idx}]`] = supp;\n    });\n  }\n  \n  // Check if comments indicate prescription and add to supplements if needed\n  const comments = row['Comments'] || '';\n  if (row['Medicine Supplement'] === 'Yes' && comments.toLowerCase().includes('prescription')) {\n    // Check if Prescription Medicine not already in supplements\n    if (!suppTypes.includes('Prescription Medicine')) {\n      const currentSupps = suppTypes ? suppTypes.split(',').filter(s => s.trim()).length : 0;\n      formData[`submission[7][${currentSupps}]`] = 'Prescription Medicine';\n    }\n  }\n  \n  // Additional comments (field 21)\n  formData['submission[21]'] = comments;\n  \n  results.push({\n    json: {\n      dogName: row['Dog Name'],\n      parentEmail: row['Parent Email'],\n      formData: formData,\n      bodyString: Object.keys(formData).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(formData[k])).join('&'),\n      formId: FORM_ID\n    }\n  });\n}\n\nreturn results;"
       },
-      "id": "code-prepare-001",
+      "id": "6a3034df-7622-42c1-9adb-92f96393d387",
       "name": "Prepare JotForm Data",
       "type": "n8n-nodes-base.code",
-      "position": [1080, 80],
+      "position": [-1600, 176],
       "typeVersion": 2
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://api.jotform.com/form/{{ $json.formId }}/submissions?apiKey=cc09d33db2d5a133da8ad05d796fcbc7",
+        "url": "=https://eu-api.jotform.com/form/{{ $json.formId }}/submissions?apiKey=cc09d33db2d5a133da8ad05d796fcbc7",
         "sendBody": true,
         "contentType": "form-urlencoded",
-        "bodyParameters": {
-          "parameters": []
-        },
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.formData) }}",
+        "specifyBody": "string",
+        "body": "={{ $json.bodyString }}",
         "options": {}
       },
-      "id": "http-jotform-001",
+      "id": "39f7ccef-aa88-459b-a458-4881433da7ce",
       "name": "Submit to JotForm",
       "type": "n8n-nodes-base.httpRequest",
-      "position": [1300, 80],
+      "position": [-1376, 176],
       "typeVersion": 4.2
     },
     {
       "parameters": {
         "jsCode": "// Count successful submissions\nconst items = $input.all();\nlet successCount = 0;\nlet failCount = 0;\nconst errors = [];\n\nfor (const item of items) {\n  const response = item.json;\n  if (response.responseCode === 200 || response.responseCode === '200' || response.content?.submissionID) {\n    successCount++;\n  } else {\n    failCount++;\n    errors.push(response.message || 'Unknown error');\n  }\n}\n\nreturn [{\n  json: {\n    successCount,\n    failCount,\n    totalProcessed: items.length,\n    errors: errors.slice(0, 5) // Limit error messages\n  }\n}];"
       },
-      "id": "code-count-001",
+      "id": "fc35b555-7f21-47de-9fa6-61218e3492b2",
       "name": "Count Results",
       "type": "n8n-nodes-base.code",
-      "position": [1520, 80],
+      "position": [-1168, 176],
       "typeVersion": 2
     },
     {
@@ -200,47 +171,55 @@
         },
         "sheetName": {
           "__rl": true,
-          "value": "Temp",
+          "value": "1965265218",
           "mode": "list",
           "cachedResultName": "Temp"
-        },
-        "options": {
-          "keepFirstRow": true
         }
       },
-      "id": "sheets-clear-001",
+      "id": "01dc7c47-69de-4a33-8df6-737f72791084",
       "name": "Clear Temp Tab",
       "type": "n8n-nodes-base.googleSheets",
-      "position": [1740, 80],
-      "typeVersion": 4.5
+      "position": [-944, 176],
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "DZAqFzkfKzaYA81D", "name": "Google Sheets account" }
+      }
     },
     {
       "parameters": {
         "chatId": "-1003653235960",
         "text": "=✅ *FEEDING REPORTS SUBMITTED*\n━━━━━━━━━━━━━━━━━━━━━━━━\n\n📊 *Results:*\n✓ Successful: {{ $('Count Results').item.json.successCount }}\n✗ Failed: {{ $('Count Results').item.json.failCount }}\n\n📧 JotForm will send emails to parents automatically.\n\n🗑️ Temp sheet cleared.",
-        "additionalFields": {
-          "parse_mode": "Markdown"
-        }
+        "additionalFields": { "parse_mode": "Markdown" },
+        "resource": "message",
+        "operation": "sendMessage"
       },
-      "id": "telegram-success-001",
+      "id": "43cf82e4-7026-430b-ae47-30354b47c353",
       "name": "Send Success Message",
       "type": "n8n-nodes-base.telegram",
-      "position": [1960, 80],
-      "typeVersion": 1.2
+      "position": [-720, 176],
+      "typeVersion": 1.2,
+      "webhookId": "75f9683e-17c4-461d-8dc7-639e1251d676",
+      "credentials": {
+        "telegramApi": { "id": "QGWk6jRMWIlPH8Jz", "name": "Feeding report bot" }
+      }
     },
     {
       "parameters": {
         "chatId": "-1003653235960",
         "text": "⚠️ *NO REPORTS TO SUBMIT*\n━━━━━━━━━━━━━━━━━━━━━━━━\n\nThe Temp sheet is empty.\n\nPlease submit a feeding report from the website first.",
-        "additionalFields": {
-          "parse_mode": "Markdown"
-        }
+        "additionalFields": { "parse_mode": "Markdown" },
+        "resource": "message",
+        "operation": "sendMessage"
       },
-      "id": "telegram-empty-001",
+      "id": "03f26228-db57-4f35-a0b5-10d35f9ba008",
       "name": "Send Empty Message",
       "type": "n8n-nodes-base.telegram",
-      "position": [1080, 280],
-      "typeVersion": 1.2
+      "position": [-1600, 384],
+      "typeVersion": 1.2,
+      "webhookId": "4579780b-7e74-4d97-a5bf-266a88b7ead4",
+      "credentials": {
+        "telegramApi": { "id": "QGWk6jRMWIlPH8Jz", "name": "Feeding report bot" }
+      }
     },
     {
       "parameters": {
@@ -253,19 +232,19 @@
         },
         "sheetName": {
           "__rl": true,
-          "value": "Temp",
+          "value": "1965265218",
           "mode": "list",
           "cachedResultName": "Temp"
-        },
-        "options": {
-          "keepFirstRow": true
         }
       },
-      "id": "sheets-clear-cancel-001",
+      "id": "645b2769-94a3-4cd6-a039-01692c944b6e",
       "name": "Clear Temp (Cancel)",
       "type": "n8n-nodes-base.googleSheets",
-      "position": [640, 420],
-      "typeVersion": 4.5
+      "position": [-2048, 528],
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "DZAqFzkfKzaYA81D", "name": "Google Sheets account" }
+      }
     },
     {
       "parameters": {
@@ -278,37 +257,40 @@
         },
         "sheetName": {
           "__rl": true,
-          "value": "Session",
+          "value": "1038940935",
           "mode": "list",
           "cachedResultName": "Session"
-        },
-        "options": {
-          "keepFirstRow": true
         }
       },
-      "id": "sheets-clear-session-cancel-001",
+      "id": "d90fd6ac-721e-4d3c-afb0-dd8207eb1311",
       "name": "Clear Session (Cancel)",
       "type": "n8n-nodes-base.googleSheets",
-      "position": [860, 420],
-      "typeVersion": 4.5
+      "position": [-1824, 528],
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "DZAqFzkfKzaYA81D", "name": "Google Sheets account" }
+      }
     },
     {
       "parameters": {
         "chatId": "-1003653235960",
         "text": "❌ *REPORTS CANCELLED*\n━━━━━━━━━━━━━━━━━━━━━━━━\n\n🗑️ All data cleared (Temp + Session).\n\n📱 Website will reset on next sync.\n\nNo reports were submitted to JotForm.",
-        "additionalFields": {
-          "parse_mode": "Markdown"
-        }
+        "additionalFields": { "parse_mode": "Markdown" },
+        "resource": "message",
+        "operation": "sendMessage"
       },
-      "id": "telegram-cancel-001",
+      "id": "63bf09bc-3146-4319-b836-7c09c276d814",
       "name": "Send Cancel Message",
       "type": "n8n-nodes-base.telegram",
-      "position": [1080, 420],
-      "typeVersion": 1.2
+      "position": [-1600, 528],
+      "typeVersion": 1.2,
+      "webhookId": "851545ec-5f82-4bfa-816d-6660c55765b3",
+      "credentials": {
+        "telegramApi": { "id": "QGWk6jRMWIlPH8Jz", "name": "Feeding report bot" }
+      }
     },
     {
       "parameters": {
-        "operation": "read",
         "documentId": {
           "__rl": true,
           "value": "1Ejjoo55BaoCPRaLdmFb9EdqtiAT9eNa52QRWjuVThyc",
@@ -317,22 +299,24 @@
         },
         "sheetName": {
           "__rl": true,
-          "value": "Temp",
+          "value": "1965265218",
           "mode": "list",
           "cachedResultName": "Temp"
         },
         "options": {}
       },
-      "id": "sheets-status-001",
+      "id": "19aa655f-1009-44c8-843a-0be6c3617362",
       "name": "Read Temp (Status)",
       "type": "n8n-nodes-base.googleSheets",
-      "position": [640, 620],
+      "position": [-2048, 720],
       "typeVersion": 4.5,
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "DZAqFzkfKzaYA81D", "name": "Google Sheets account" }
+      }
     },
     {
       "parameters": {
-        "operation": "read",
         "documentId": {
           "__rl": true,
           "value": "1Ejjoo55BaoCPRaLdmFb9EdqtiAT9eNa52QRWjuVThyc",
@@ -341,218 +325,122 @@
         },
         "sheetName": {
           "__rl": true,
-          "value": "Session",
+          "value": "1038940935",
           "mode": "list",
           "cachedResultName": "Session"
         },
         "options": {}
       },
-      "id": "sheets-status-session-001",
+      "id": "a2b522c8-d121-48c3-9e71-8e4c635e4598",
       "name": "Read Session (Status)",
       "type": "n8n-nodes-base.googleSheets",
-      "position": [640, 780],
+      "position": [-2048, 880],
       "typeVersion": 4.5,
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "DZAqFzkfKzaYA81D", "name": "Google Sheets account" }
+      }
     },
     {
       "parameters": {
         "jsCode": "// Count pending reports from both Temp and Session tabs\nconst tempItems = $('Read Temp (Status)').all();\nconst sessionItems = $('Read Session (Status)').all();\n\n// Count Temp tab (ready for JotForm submission)\nlet tempCount = 0;\nconst tempDogs = [];\nfor (const item of tempItems) {\n  if (item.json['Dog Name']) {\n    tempCount++;\n    tempDogs.push(item.json['Dog Name']);\n  }\n}\n\n// Count Session tab (in progress on website)\nlet sessionCount = 0;\nconst sessionDogs = [];\nfor (const item of sessionItems) {\n  if (item.json['Dog_ID']) {\n    sessionCount++;\n    sessionDogs.push(item.json['Matched_Name'] || item.json['Input_Name'] || 'Unknown');\n  }\n}\n\nreturn [{\n  json: {\n    tempCount,\n    tempDogs: tempDogs.slice(0, 10),\n    sessionCount,\n    sessionDogs: sessionDogs.slice(0, 10),\n    hasTempMore: tempDogs.length > 10,\n    hasSessionMore: sessionDogs.length > 10\n  }\n}];"
       },
-      "id": "code-status-001",
+      "id": "dca6021d-7c90-4d89-94df-2c04b0d0f971",
       "name": "Count Pending",
       "type": "n8n-nodes-base.code",
-      "position": [920, 700],
+      "position": [-1760, 800],
       "typeVersion": 2
     },
     {
       "parameters": {
         "chatId": "-1003653235960",
         "text": "=📋 *FEEDING REPORT STATUS*\n━━━━━━━━━━━━━━━━━━━━━━━━\n\n📤 *Ready for JotForm (Temp):* {{ $json.tempCount }}\n{{ $json.tempCount > 0 ? $json.tempDogs.map(d => '   • ' + d).join('\\n') + ($json.hasTempMore ? '\\n   ... and more' : '') : '   (none)' }}\n\n📱 *In Progress on Website (Session):* {{ $json.sessionCount }}\n{{ $json.sessionCount > 0 ? $json.sessionDogs.map(d => '   • ' + d).join('\\n') + ($json.hasSessionMore ? '\\n   ... and more' : '') : '   (none)' }}\n\n{{ $json.tempCount > 0 ? '\\n✅ Reply `/send` to submit to JotForm\\n❌ Reply `/cancel` to clear all' : ($json.sessionCount > 0 ? '\\n⏳ Dogs are being prepared on the website.\\nSubmit from website when ready.' : '\\n📝 No pending reports.') }}",
-        "additionalFields": {
-          "parse_mode": "Markdown"
-        }
+        "additionalFields": { "parse_mode": "Markdown" },
+        "resource": "message",
+        "operation": "sendMessage"
       },
-      "id": "telegram-status-001",
+      "id": "b62ddfe2-71d4-4812-b664-b2171e12a142",
       "name": "Send Status Message",
       "type": "n8n-nodes-base.telegram",
-      "position": [1140, 700],
-      "typeVersion": 1.2
+      "position": [-1536, 800],
+      "typeVersion": 1.2,
+      "webhookId": "75d15bc4-1c32-48bb-aa6b-5792b52e8459",
+      "credentials": {
+        "telegramApi": { "id": "QGWk6jRMWIlPH8Jz", "name": "Feeding report bot" }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "-1003653235960",
+        "text": "🤖 Unrecognised command. Reply /send to submit the pending feeding reports, /cancel to discard them, or /status to see what is pending.",
+        "additionalFields": {},
+        "resource": "message",
+        "operation": "sendMessage"
+      },
+      "id": "4cac64a4-7f43-4d43-b774-664954c720c3",
+      "name": "Send Unknown Command",
+      "type": "n8n-nodes-base.telegram",
+      "position": [-1536, 1000],
+      "typeVersion": 1.2,
+      "webhookId": "1ae883e6-cb43-40b3-b7aa-e366a48b6662",
+      "credentials": {
+        "telegramApi": { "id": "QGWk6jRMWIlPH8Jz", "name": "Feeding report bot" }
+      }
     }
   ],
-  "pinData": {},
   "connections": {
     "Telegram Trigger": {
-      "main": [
-        [
-          {
-            "node": "Command Router",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Command Router", "type": "main", "index": 0 }]]
     },
     "Command Router": {
       "main": [
+        [{ "node": "Read Temp Tab", "type": "main", "index": 0 }],
+        [{ "node": "Clear Temp (Cancel)", "type": "main", "index": 0 }],
         [
-          {
-            "node": "Read Temp Tab",
-            "type": "main",
-            "index": 0
-          }
+          { "node": "Read Temp (Status)", "type": "main", "index": 0 },
+          { "node": "Read Session (Status)", "type": "main", "index": 0 }
         ],
-        [
-          {
-            "node": "Clear Temp (Cancel)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Read Temp (Status)",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Read Session (Status)",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Send Unknown Command", "type": "main", "index": 0 }]
       ]
     },
     "Read Temp Tab": {
-      "main": [
-        [
-          {
-            "node": "Has Data?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Has Data?", "type": "main", "index": 0 }]]
     },
     "Has Data?": {
       "main": [
-        [
-          {
-            "node": "Prepare JotForm Data",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Send Empty Message",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Prepare JotForm Data", "type": "main", "index": 0 }],
+        [{ "node": "Send Empty Message", "type": "main", "index": 0 }]
       ]
     },
     "Prepare JotForm Data": {
-      "main": [
-        [
-          {
-            "node": "Submit to JotForm",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Submit to JotForm", "type": "main", "index": 0 }]]
     },
     "Submit to JotForm": {
-      "main": [
-        [
-          {
-            "node": "Count Results",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Count Results", "type": "main", "index": 0 }]]
     },
     "Count Results": {
-      "main": [
-        [
-          {
-            "node": "Clear Temp Tab",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Clear Temp Tab", "type": "main", "index": 0 }]]
     },
     "Clear Temp Tab": {
-      "main": [
-        [
-          {
-            "node": "Send Success Message",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Send Success Message", "type": "main", "index": 0 }]]
     },
     "Clear Temp (Cancel)": {
-      "main": [
-        [
-          {
-            "node": "Clear Session (Cancel)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Clear Session (Cancel)", "type": "main", "index": 0 }]]
     },
     "Clear Session (Cancel)": {
-      "main": [
-        [
-          {
-            "node": "Send Cancel Message",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Send Cancel Message", "type": "main", "index": 0 }]]
     },
     "Read Temp (Status)": {
-      "main": [
-        [
-          {
-            "node": "Count Pending",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Count Pending", "type": "main", "index": 0 }]]
     },
     "Read Session (Status)": {
-      "main": [
-        [
-          {
-            "node": "Count Pending",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Count Pending", "type": "main", "index": 0 }]]
     },
     "Count Pending": {
-      "main": [
-        [
-          {
-            "node": "Send Status Message",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Send Status Message", "type": "main", "index": 0 }]]
     }
   },
   "settings": {
     "executionOrder": "v1"
-  },
-  "active": false
+  }
 }
