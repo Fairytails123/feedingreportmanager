@@ -601,8 +601,11 @@ function submitReport(data) {
     };
     
     dogsInPens.forEach((dog, index) => {
-      // Tablet POST body sends a pre-resolved 'name'; Session-tab fallback has matchedName/inputName.
-      const finalName = dog.matchedName || dog.inputName || dog.name || '';
+      // Prefer the tablet's pre-resolved 'name' (e.g. the single fuzzy match) over the raw typed
+      // inputName, so a dog with matchedName='' but possibleMatches=['Bella'] reports as 'Bella' and
+      // its parent email resolves. The Session-tab fallback has no 'name' field, so it still resolves
+      // via matchedName -> inputName.
+      const finalName = dog.matchedName || dog.name || dog.inputName || '';
       if (!finalName) return; // skip malformed row rather than crash
       const lookupData = lookupMap[finalName.toLowerCase()];
       const parentEmail = lookupData ? lookupData.email : '';
