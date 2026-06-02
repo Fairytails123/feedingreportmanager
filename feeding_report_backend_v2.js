@@ -607,6 +607,15 @@ function submitReport(data) {
       // via matchedName -> inputName.
       const finalName = dog.matchedName || dog.name || dog.inputName || '';
       if (!finalName) return; // skip malformed row rather than crash
+
+      // Normalize possibly-malformed POST-body fields so a single bad row can't throw mid-loop
+      // (the Temp tab was already cleared above) or silently mis-map an unknown status to 'All'.
+      const supplementTypes = Array.isArray(dog.supplementTypes) ? dog.supplementTypes : [];
+      const foodConsumed = FEEDING_STATUS_MAP.hasOwnProperty(dog.status) ? FEEDING_STATUS_MAP[dog.status] : 'All';
+      if (dog.status && !FEEDING_STATUS_MAP.hasOwnProperty(dog.status)) {
+        console.warn('[submitReport] Unknown feeding status "' + dog.status + '" for ' + finalName + ' — defaulting to All');
+      }
+
       const lookupData = lookupMap[finalName.toLowerCase()];
       const parentEmail = lookupData ? lookupData.email : '';
       
@@ -615,7 +624,7 @@ function submitReport(data) {
       }
       
       // Build supplement types string
-      const supplementTypesStr = dog.supplementTypes ? dog.supplementTypes.join(', ') : '';
+      const supplementTypesStr = supplementTypes.join(', ');
       
       // Build comments (prescription medicine name)
       const comments = dog.prescriptionComment ? 'Prescription: ' + dog.prescriptionComment : '';
@@ -626,7 +635,7 @@ function submitReport(data) {
         finalName,
         parentEmail,
         mealType,
-        FEEDING_STATUS_MAP[dog.status] || 'All',
+        foodConsumed,
         (dog.prescription || dog.supplements) ? 'Yes' : 'No',
         supplementTypesStr,
         comments
@@ -635,7 +644,7 @@ function submitReport(data) {
       // Build dog data for JotForm URL
       const dogForJotform = {
         name: finalName,
-        foodConsumed: FEEDING_STATUS_MAP[dog.status] || 'All',
+        foodConsumed: foodConsumed,
         hasMedicineOrSupplement: (dog.prescription || dog.supplements) ? 'Yes' : 'No',
         medicineSupplements: [],
         prescriptionMedicine: dog.prescriptionComment || ''
@@ -645,8 +654,8 @@ function submitReport(data) {
       if (dog.prescription) {
         dogForJotform.medicineSupplements.push('Prescription Medicine');
       }
-      if (dog.supplementTypes) {
-        dog.supplementTypes.forEach(st => {
+      if (supplementTypes.length > 0) {
+        supplementTypes.forEach(st => {
           // Map supplement IDs to JotForm values
           const suppMap = {
             'calming': 'Calming Tablets',
@@ -665,7 +674,7 @@ function submitReport(data) {
       jotformLinks.push({
         name: finalName,
         pen: dog.penId,
-        foodConsumed: FEEDING_STATUS_MAP[dog.status] || 'All',
+        foodConsumed: foodConsumed,
         hasMedicine: dog.prescription || dog.supplements,
         url: jotformUrl
       });

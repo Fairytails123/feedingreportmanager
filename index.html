@@ -1134,7 +1134,7 @@
         const LONG_PRESS_DURATION = 300;  // Longer for reliable detection
         const SCROLL_THRESHOLD = 8;       // Balance between scroll detection and finger squish
         
-        let isOnline = false;
+        let isOnline = true;   // optimistic; flipped false only after OFFLINE_THRESHOLD consecutive failures
         let currentMealType = 'Lunch';
         
         let lastSyncVersion = 0;
@@ -1160,11 +1160,27 @@
 
         const HEARTBEAT_INTERVAL = 7000;       // Independent ping every 7s — runs even mid-edit
         const QUEUE_KEY = 'feedingManager.queue.v1';   // durable outbound mutation queue
+        const FETCH_TIMEOUT_MS = 12000;        // abort any GAS call that hangs longer than this
+        const OFFLINE_THRESHOLD = 2;           // consecutive failures before declaring offline (debounces flaky wifi blips)
 
         let heartbeatInterval = null;
+        let heartbeatInFlight = false;         // skip a heartbeat if the previous ping hasn't returned (no stacking)
+        let consecutiveFailures = 0;           // reset by any success; offline only at OFFLINE_THRESHOLD
         let mutationQueue = [];   // [{op:'add'|'update'|'delete'|'mealType', dogId, payload, ts}]
         let isFlushing = false;
         let lastHealthy = true;   // tracks the offline/syncing -> fully-synced transition for the toast
+
+        // Grab the platform fetch once so gasFetch can wrap it without recursing.
+        const _rawFetch = (typeof window !== 'undefined' && window.fetch) ? window.fetch.bind(window) : fetch;
+
+        // Every GAS call goes through this: an AbortController aborts a request that hangs past
+        // FETCH_TIMEOUT_MS, so slow/dead requests can't pile up on flaky tablet wifi.
+        function gasFetch(url, opts) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+            return _rawFetch(url, Object.assign({}, opts || {}, { signal: controller.signal }))
+                .finally(() => clearTimeout(timer));
+        }
 
         function showOfflineBanner(message) {
             const banner = document.getElementById('offlineBanner');
@@ -1223,12 +1239,19 @@
             lastHealthy = healthy;
         }
 
+        // Debounced: a single transient blip won't raise the banner / block Submit. The connection
+        // is only declared offline after OFFLINE_THRESHOLD consecutive failures. Until then isOnline
+        // stays true so the queue keeps retrying and a one-off slow request just shows "syncing".
         function markSyncFailure(source) {
-            isOnline = false;
+            consecutiveFailures++;
+            if (consecutiveFailures >= OFFLINE_THRESHOLD) {
+                isOnline = false;
+            }
             updateConnectionUI();
         }
 
         function markSyncSuccess() {
+            consecutiveFailures = 0;
             isOnline = true;     // server reachable
             updateConnectionUI();
             flushQueue();        // ...so drain any queued local edits (this is what clears "syncing")
@@ -1237,7 +1260,7 @@
         async function retryConnection() {
             updateStatus('Retrying...', 'syncing');
             try {
-                const r = await fetch(APPS_SCRIPT_URL + '?action=getSessionVersion', { method: 'GET', redirect: 'follow' });
+                const r = await gasFetch(APPS_SCRIPT_URL + '?action=getSessionVersion', { method: 'GET', redirect: 'follow' });
                 const j = await r.json();
                 if (j && j.success) {
                     markSyncSuccess();
@@ -1253,13 +1276,17 @@
         function startHeartbeat() {
             if (heartbeatInterval) clearInterval(heartbeatInterval);
             heartbeatInterval = setInterval(async () => {
+                if (heartbeatInFlight) return;   // previous ping still outstanding — don't stack
+                heartbeatInFlight = true;
                 try {
-                    const r = await fetch(APPS_SCRIPT_URL + '?action=getSessionVersion', { method: 'GET', redirect: 'follow' });
+                    const r = await gasFetch(APPS_SCRIPT_URL + '?action=getSessionVersion', { method: 'GET', redirect: 'follow' });
                     const j = await r.json();
                     if (j && j.success) markSyncSuccess();
                     else markSyncFailure('heartbeat');
                 } catch (e) {
                     markSyncFailure('heartbeat');
+                } finally {
+                    heartbeatInFlight = false;
                 }
             }, HEARTBEAT_INTERVAL);
         }
@@ -1347,7 +1374,7 @@
                     if (!body) { mutationQueue.shift(); persistQueue(); continue; }
                     let result;
                     try {
-                        const response = await fetch(APPS_SCRIPT_URL, {
+                        const response = await gasFetch(APPS_SCRIPT_URL, {
                             method: 'POST', redirect: 'follow', body: JSON.stringify(body)
                         });
                         result = await response.json();
@@ -1409,10 +1436,10 @@
             loadQueue();
 
             await loadDogList();
-            await loadSessionState();   // applyRemoteState merges the queue, so pending ops survive
+            const loaded = await loadSessionState();   // applyRemoteState merges the queue, so pending ops survive
 
-            if (!isOnline) {
-                // Couldn't reach the server. Render whatever is queued locally so the staff
+            if (!loaded) {
+                // Couldn't load server state. Render whatever is queued locally so the staff
                 // still see (and don't re-add) their unsynced dogs.
                 applyRemoteState({ dogs: [], mealType: currentMealType });
             }
@@ -1848,7 +1875,7 @@
             }
 
             try {
-                const response = await fetch(APPS_SCRIPT_URL + '?action=getSession', {
+                const response = await gasFetch(APPS_SCRIPT_URL + '?action=getSession', {
                     method: 'GET',
                     redirect: 'follow'
                 });
@@ -1997,7 +2024,7 @@
 
         async function loadSessionState() {
             try {
-                const response = await fetch(APPS_SCRIPT_URL + '?action=getSession', {
+                const response = await gasFetch(APPS_SCRIPT_URL + '?action=getSession', {
                     method: 'GET',
                     redirect: 'follow'
                 });
@@ -2009,13 +2036,16 @@
                     lastSyncVersion = result.version;
                     markSyncSuccess();
                     updateStatus(`✓ Connected (${result.count} dogs)`, 'connected');
+                    return true;
                 } else {
                     markSyncFailure('loadSession-bad-response');
+                    return false;
                 }
             } catch (error) {
                 console.error('Load session error:', error);
                 markSyncFailure('loadSession');
                 updateStatus('⚠ Offline mode', 'offline');
+                return false;
             }
         }
 
@@ -2026,7 +2056,7 @@
         async function loadDogList() {
             try {
                 const url = APPS_SCRIPT_URL + '?action=getDogList';
-                const response = await fetch(url, { method: 'GET', redirect: 'follow' });
+                const response = await gasFetch(url, { method: 'GET', redirect: 'follow' });
                 const result = await response.json();
 
                 if (result && result.success) {
@@ -2097,7 +2127,7 @@
             if (!isOnline) return { success: false, offline: true };
 
             try {
-                const response = await fetch(APPS_SCRIPT_URL, {
+                const response = await gasFetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     redirect: 'follow',
                     body: JSON.stringify({ action: 'clearSession' })
@@ -2125,7 +2155,7 @@
             }
 
             try {
-                const response = await fetch(APPS_SCRIPT_URL, {
+                const response = await gasFetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     redirect: 'follow',
                     body: JSON.stringify({ action: 'submitReport', ...reportData })
