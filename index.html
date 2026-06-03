@@ -608,6 +608,11 @@
             box-shadow: 0 0 20px rgba(0, 172, 238, 0.4);
         }
 
+        /* Within-pen drop indicator. Inset box-shadow (not border/margin) so it never reflows the
+           column or shifts the card midpoints computeDropIndex reads mid-drag. */
+        .pen-dog.drop-before { box-shadow: inset 0 3px 0 0 var(--fairy-tails-blue); }
+        .pen-dogs.drop-at-end > .pen-dog:last-child { box-shadow: inset 0 -3px 0 0 var(--fairy-tails-blue); }
+
         .pen-header {
             font-size: 0.8rem;
             font-weight: 700;
@@ -1582,7 +1587,8 @@
             removeGhostElement();
             document.querySelectorAll('.drag-ghost').forEach(el => el.remove());
             document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
-            
+            clearDropIndicator();
+
             document.removeEventListener('touchmove', checkTouchScroll);
             document.removeEventListener('touchend', cancelTouchDrag);
             document.removeEventListener('touchcancel', cancelTouchDrag);
@@ -1716,7 +1722,8 @@
             removeGhostElement();
             document.querySelectorAll('.drag-ghost').forEach(el => el.remove());
             document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
-            
+            clearDropIndicator();
+
             document.removeEventListener('mousemove', checkMouseScroll);
             document.removeEventListener('mouseup', cancelMouseDrag);
         }
@@ -1780,22 +1787,57 @@
             
             // Clear all highlights
             document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-            
+            clearDropIndicator();
+
             if (elemBelow) {
                 const pen = elemBelow.closest('.pen');
                 const bin = elemBelow.closest('#deleteBin') || elemBelow.closest('.bin');
                 const staging = elemBelow.closest('#stagingArea') || elemBelow.closest('.staging-section');
-                
+
                 if (bin) {
                     document.getElementById('deleteBin').classList.add('drag-over');
                 } else if (pen) {
                     pen.classList.add('drag-over');
+                    showDropIndicator(pen, y);
                 } else if (staging) {
                     document.getElementById('stagingArea').classList.add('drag-over');
                 }
             }
         }
+
+        // Show/hide the within-pen insertion line, reusing computeDropIndex so the cue and the
+        // actual drop slot are always the same single source of truth.
+        function clearDropIndicator() {
+            document.querySelectorAll('.pen-dog.drop-before').forEach(el => el.classList.remove('drop-before'));
+            document.querySelectorAll('.pen-dogs.drop-at-end').forEach(el => el.classList.remove('drop-at-end'));
+        }
+
+        function showDropIndicator(penEl, y) {
+            const container = penEl.querySelector('.pen-dogs');
+            if (!container) return;
+            const cards = Array.from(container.children).filter(el =>
+                el.classList && el.classList.contains('pen-dog') && el.dataset.dogId !== draggedDogId);
+            if (cards.length === 0) return;                 // empty / single-dog pen: no line needed
+            const idx = computeDropIndex(penEl, draggedDogId, y);
+            if (idx >= cards.length) container.classList.add('drop-at-end');
+            else cards[idx].classList.add('drop-before');
+        }
         
+        // Within-pen insertion index for a drop at finalY. Returns the index in the pen's array
+        // AFTER the dragged dog is removed (we exclude the dragged card), so it's correct for both a
+        // same-pen reorder and a cross-pen drop-at-position. undefined => caller appends.
+        function computeDropIndex(penEl, draggedId, finalY) {
+            const container = penEl.querySelector('.pen-dogs');
+            if (!container) return undefined;
+            const cards = Array.from(container.children).filter(el =>
+                el.classList && el.classList.contains('pen-dog') && el.dataset.dogId !== draggedId);
+            for (let i = 0; i < cards.length; i++) {
+                const r = cards[i].getBoundingClientRect();
+                if (finalY < r.top + r.height / 2) return i;   // above this card's midpoint -> insert before it
+            }
+            return cards.length;                               // below all cards -> append
+        }
+
         async function finishDrag(finalX, finalY) {
             // Unlock body
             document.body.classList.remove('is-dragging');
@@ -1803,6 +1845,7 @@
             // Clean up visuals
             document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
             document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            clearDropIndicator();
             hideDropZones();
             removeGhostElement();
             // GHOST FIX: Sweep any orphaned ghost elements from the DOM
@@ -1826,8 +1869,9 @@
                 } else if (elemBelow.closest('.pen')) {
                     const pen = elemBelow.closest('.pen');
                     const penId = pen.dataset.penId;
+                    const dropIndex = computeDropIndex(pen, draggedDogId, finalY);
                     triggerHaptic('success');
-                    await moveDogToPen(draggedDogId, penId);
+                    await moveDogToPen(draggedDogId, penId, dropIndex);
                     showToast(`Moved to ${penId.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}`, 'success');
                 } else if (elemBelow.closest('#stagingArea') || elemBelow.closest('.staging-section')) {
                     if (draggedFromPen) {
@@ -1949,7 +1993,8 @@
                     prescriptionComment: d.prescriptionComment || '',
                     supplements: d.supplements || false,
                     supplementTypes: d.supplementTypes || [],
-                    penId: d.penId || null
+                    penId: d.penId || null,
+                    position: (typeof d.position === 'number' ? d.position : 0)
                 });
             });
 
@@ -1966,7 +2011,8 @@
                     prescriptionComment: p.prescriptionComment || '',
                     supplements: p.supplements || false,
                     supplementTypes: p.supplementTypes || [],
-                    penId: p.penId || null
+                    penId: p.penId || null,
+                    position: (typeof p.position === 'number' ? p.position : 0)
                 });
             });
 
@@ -1982,6 +2028,7 @@
                 if (u.supplements !== undefined) m.supplements = u.supplements;
                 if (u.supplementTypes !== undefined) m.supplementTypes = u.supplementTypes;
                 if (u.penId !== undefined) m.penId = u.penId || null;
+                if (u.position !== undefined) m.position = u.position;
             });
 
             // Derive dogs[] (strip the transient penId) and rebuild pens{} from the merged view.
@@ -1995,12 +2042,22 @@
                 prescription: m.prescription,
                 prescriptionComment: m.prescriptionComment,
                 supplements: m.supplements,
-                supplementTypes: m.supplementTypes
+                supplementTypes: m.supplementTypes,
+                // REQUIRED: reindexPen/moveDogToPen read dogs[].position; the merge must repopulate it
+                // (overlay-corrected) or change-detection runs off a stale base after a poll.
+                position: (typeof m.position === 'number' ? m.position : 0)
             }));
+            // Rebuild pens by membership (penId), then sort each pen by the merged position. Stable
+            // sort => ties keep byId/merged insertion order (= server-row order for already-synced
+            // dogs, pending-adds last) — identical to the old rebuild before any reorder happens.
+            const posById = new Map(merged.map(m => [m.id, (typeof m.position === 'number' ? m.position : 0)]));
             for (const penId of Object.keys(pens)) pens[penId] = [];
             merged.forEach(m => {
                 if (m.penId && pens[m.penId]) pens[m.penId].push(m.id);
             });
+            for (const penId of Object.keys(pens)) {
+                pens[penId].sort((a, b) => posById.get(a) - posById.get(b));
+            }
 
             // RE-MATCH FIX: repair dogs that arrived with no match, but ONLY those with no pending
             // op (so we never fight the user's own in-flight edit). Repairs are queued like any edit.
@@ -2108,6 +2165,7 @@
                 supplements: dog.supplements,
                 supplementTypes: dog.supplementTypes,
                 penId: getDogPen(dog.id) || '',
+                position: (typeof dog.position === 'number' ? dog.position : 0),
                 mealType: currentMealType
             });
             flushQueue();
@@ -2261,7 +2319,8 @@
                 prescription: false,
                 prescriptionComment: '',
                 supplements: false,
-                supplementTypes: []
+                supplementTypes: [],
+                position: 0
             };
             
             if (matches.length === 0) {
@@ -2398,7 +2457,8 @@
                     prescription: false,
                     prescriptionComment: '',
                     supplements: false,
-                    supplementTypes: []
+                    supplementTypes: [],
+                    position: 0
                 };
                 if (!dog.matchedName) unmatched.push(name);
 
@@ -2407,6 +2467,9 @@
                     // Set the pen BEFORE syncAddDog so the queued 'add' carries the penId
                     // (syncAddDog reads getDogPen) — avoids a second update round-trip.
                     pens[targetPen].push(dog.id);
+                    // ...and seed its within-pen position (dense, post-push length) so the queued
+                    // 'add' also carries position and the dog sorts where it was placed.
+                    dog.position = pens[targetPen].length * 1000;
                     counts[targetPen] = (counts[targetPen] || 0) + 1;
                 }
                 await syncAddDog(dog);
@@ -2447,21 +2510,56 @@
             return null;
         }
 
-        async function moveDogToPen(dogId, newPenId) {
+        // Reindex a pen's dogs to dense positions (1000, 2000, ...) so within-pen order is durable
+        // and cross-tablet. Returns the ids whose position actually changed (so we sync only those).
+        // Membership-scoped: iterates pens[penId] only, so a dog removed by a move/delete is never
+        // touched here and no stray position write can race a delete.
+        function reindexPen(penId) {
+            const STEP = 1000;
+            const arr = pens[penId] || [];
+            const changed = [];
+            arr.forEach((dogId, i) => {
+                const d = dogs.find(x => x.id === dogId);
+                const want = (i + 1) * STEP;
+                if (d && d.position !== want) { d.position = want; changed.push(dogId); }
+            });
+            return changed;
+        }
+
+        async function moveDogToPen(dogId, newPenId, index) {
             pauseSync();
-            
+
+            const fromPen = getDogPen(dogId);
+
             for (const penId of Object.keys(pens)) {
                 pens[penId] = pens[penId].filter(id => id !== dogId);
             }
-            
+
             if (newPenId && pens[newPenId]) {
-                pens[newPenId].push(dogId);
+                const arr = pens[newPenId];
+                // Insert at the drop position; a bad/absent index falls back to append (back-compat
+                // for the 2-arg staging->pen and staging-return callers).
+                const at = (Number.isInteger(index) && index >= 0 && index <= arr.length) ? index : arr.length;
+                arr.splice(at, 0, dogId);
             }
-            
+
             renderAllPens();
             renderStagingArea();
-            
-            await syncUpdateDog(dogId, { penId: newPenId || '' });
+
+            // Durable order: dense-reindex the affected pen(s) and sync every dog whose position moved.
+            const changed = new Set();
+            if (newPenId && pens[newPenId]) reindexPen(newPenId).forEach(id => changed.add(id));
+            if (fromPen && fromPen !== newPenId) reindexPen(fromPen).forEach(id => changed.add(id));
+
+            // The dragged dog always needs its pen written; include its new position only if it
+            // actually landed in a pen (a return-to-staging move carries no meaningful position).
+            const updates = { penId: newPenId || '' };
+            if (newPenId && pens[newPenId]) updates.position = (dogs.find(d => d.id === dogId) || {}).position;
+            await syncUpdateDog(dogId, updates);
+
+            // Shifted dogs only need their position written.
+            changed.delete(dogId);
+            changed.forEach(id => syncUpdateDog(id, { position: (dogs.find(d => d.id === id) || {}).position }));
         }
 
         async function updateMealType() {

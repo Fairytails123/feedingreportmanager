@@ -8,9 +8,9 @@
  * TEMP TAB COLUMNS (7 columns):
  * Dog Name | Parent Email | Meal | Food Consumed | Medicine Supplement | Supplement Types | Comments
  * 
- * SESSION TAB COLUMNS (12 columns):
- * Dog_ID | Input_Name | Matched_Name | Possible_Matches | Status | Prescription | 
- * Prescription_Comment | Supplements | Supplement_Types | Pen_ID | Last_Updated | Meal_Type
+ * SESSION TAB COLUMNS (13 columns):
+ * Dog_ID | Input_Name | Matched_Name | Possible_Matches | Status | Prescription |
+ * Prescription_Comment | Supplements | Supplement_Types | Pen_ID | Last_Updated | Meal_Type | Position
  * 
  * SETUP:
  * 1. Go to Google Sheet → Extensions → Apps Script
@@ -72,7 +72,8 @@ const CONFIG = {
     SUPPLEMENT_TYPES: 8,
     PEN_ID: 9,
     LAST_UPDATED: 10,
-    MEAL_TYPE: 11
+    MEAL_TYPE: 11,
+    POSITION: 12   // within-pen feeding order (numeric, dense index*1000)
   },
   
   // Temp tab has 7 columns (no Parent Name)
@@ -202,11 +203,15 @@ function ensureSessionTab() {
     sheet.appendRow([
       'Dog_ID', 'Input_Name', 'Matched_Name', 'Possible_Matches', 'Status',
       'Prescription', 'Prescription_Comment', 'Supplements', 'Supplement_Types', 'Pen_ID',
-      'Last_Updated', 'Meal_Type'
+      'Last_Updated', 'Meal_Type', 'Position'
     ]);
     sheet.setFrozenRows(1);
+  } else if (sheet.getRange(1, CONFIG.SESSION_COLS.POSITION + 1).getValue() !== 'Position') {
+    // Self-heal: the Position column (M) was added after this tab already existed. Mirrors
+    // ensureTempHeader_ — set the header so getSessionState/updateDogInSession map column 13 cleanly.
+    sheet.getRange(1, CONFIG.SESSION_COLS.POSITION + 1).setValue('Position');
   }
-  
+
   return sheet;
 }
 
@@ -271,7 +276,10 @@ function getSessionState() {
         // DEFENSIVE PARSE FIX: Same protection for supplementTypes
         supplementTypes: safeJsonParse(row[CONFIG.SESSION_COLS.SUPPLEMENT_TYPES], []),
         penId: row[CONFIG.SESSION_COLS.PEN_ID] || null,
-        lastUpdated: row[CONFIG.SESSION_COLS.LAST_UPDATED]
+        lastUpdated: row[CONFIG.SESSION_COLS.LAST_UPDATED],
+        // Within-pen feeding order. Legacy rows have no column M -> undefined -> 0 (all tie, so the
+        // client's stable sort preserves server-row order until the first reorder backfills positions).
+        position: Number(row[CONFIG.SESSION_COLS.POSITION]) || 0
       });
     }
     
@@ -339,7 +347,8 @@ function addDogToSession(dog) {
       JSON.stringify(dog.supplementTypes || []),
       dog.penId || '',
       timestamp,
-      dog.mealType || 'Lunch'
+      dog.mealType || 'Lunch',
+      (typeof dog.position === 'number' ? dog.position : 0)
     ];
     
     sheet.appendRow(row);
@@ -400,7 +409,10 @@ function updateDogInSession(dogId, updates) {
     if (updates.penId !== undefined) {
       sheet.getRange(rowIndex, CONFIG.SESSION_COLS.PEN_ID + 1).setValue(updates.penId || '');
     }
-    
+    if (updates.position !== undefined) {
+      sheet.getRange(rowIndex, CONFIG.SESSION_COLS.POSITION + 1).setValue(updates.position);
+    }
+
     // Always update timestamp
     sheet.getRange(rowIndex, CONFIG.SESSION_COLS.LAST_UPDATED + 1).setValue(timestamp);
     
@@ -779,6 +791,17 @@ function submitReport(data) {
         return { success: false, error: 'Failed to get session: ' + sessionResult.error };
       }
       dogsInPens = sessionResult.dogs.filter(d => d.penId && d.penId !== '');
+      // Fallback path only: getSessionState returns dogs in raw Session-row order, which ignores the
+      // within-pen feeding order. Order by [pen, position] so the fallback matches what the tablet's
+      // POST-body path already sends (the normal submit path uses data.dogs and is unaffected).
+      const penRank = {};
+      ['top-1','top-2','top-3','top-4','top-5','bottom-1','bottom-2','bottom-3','bottom-4','bottom-5']
+        .forEach((p, i) => { penRank[p] = i; });
+      dogsInPens.sort((a, b) => {
+        const pa = penRank[a.penId] === undefined ? 99 : penRank[a.penId];
+        const pb = penRank[b.penId] === undefined ? 99 : penRank[b.penId];
+        return pa !== pb ? pa - pb : (a.position || 0) - (b.position || 0);
+      });
       mealType = (data && data.mealType) || sessionResult.mealType;
     }
 
