@@ -76,7 +76,12 @@ const CONFIG = {
   },
   
   // Temp tab has 7 columns (no Parent Name)
-  TEMP_COLUMNS: 7
+  TEMP_COLUMNS: 7,
+
+  // Canonical Temp-tab header (row 1). Single source of truth — n8n's "Read Temp Tab"
+  // node keys each row by row 1, so this row MUST exist or n8n promotes the first dog
+  // row to headers and `Has Data?` ($json['Dog Name']) fails for every row.
+  TEMP_HEADER: ['Dog Name', 'Parent Email', 'Meal', 'Food Consumed', 'Medicine Supplement', 'Supplement Types', 'Comments']
 };
 
 // ============================================
@@ -104,6 +109,9 @@ function doGet(e) {
         break;
       case 'getTodayPlan':
         result = getTodayPlan(e.parameter.mealPeriod);
+        break;
+      case 'repairTemp':
+        result = repairTemp();
         break;
       default:
         result = { success: true, status: 'ok', message: 'Feeding Report API v2.0 - Real-Time Sync' };
@@ -798,7 +806,11 @@ function submitReport(data) {
     // Open Temp sheet
     const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
     const tempSheet = ss.getSheetByName(CONFIG.TEMP_TAB);
-    
+
+    // Self-heal the header first: n8n's whole-sheet clear can wipe row 1, and we write data at
+    // row 2 below — without a header row n8n mis-reads every row. ensureTempHeader_ rebuilds it.
+    ensureTempHeader_(tempSheet);
+
     // Clear existing data (keep header)
     const lastRow = tempSheet.getLastRow();
     if (lastRow > 1) {
@@ -1111,20 +1123,73 @@ function getTempData() {
 }
 
 /**
+ * Guarantee the Temp tab's header lives in row 1, self-healing if it was wiped.
+ *
+ * n8n's "Read Temp Tab" node keys every row by row 1, so if row 1 is blank (e.g. n8n's
+ * whole-sheet `clear` deleted it) the read promotes the first DOG row to column headers and
+ * `Has Data?` ($json['Dog Name']) is undefined for every row → all reports misroute to the
+ * "no reports to submit" branch. submitReport() writes data at row 2 and never recreated the
+ * header, so a single wiped header poisoned every later cycle. This makes the writer robust:
+ *  - Fast path: row 1 already says "Dog Name" → return (cheap single-cell read).
+ *  - Repair: rebuild the tab as [header row 1] + [every real dog row], dropping blank/leftover
+ *    rows. Idempotent and rectangular-safe (each row padded to TEMP_COLUMNS).
+ * Returns the number of data (dog) rows present after the call.
+ */
+function ensureTempHeader_(sheet) {
+  if (String(sheet.getRange(1, 1).getValue()).trim() === CONFIG.TEMP_HEADER[0]) {
+    return Math.max(0, sheet.getLastRow() - 1);
+  }
+
+  const values = sheet.getDataRange().getValues();
+  const dogs = values
+    .filter(r => String(r[0]).trim() && String(r[0]).trim() !== CONFIG.TEMP_HEADER[0])
+    .map(r => {
+      const row = r.slice(0, CONFIG.TEMP_COLUMNS);
+      while (row.length < CONFIG.TEMP_COLUMNS) row.push('');
+      return row;
+    });
+
+  sheet.clearContents();
+  sheet.getRange(1, 1, 1, CONFIG.TEMP_COLUMNS).setValues([CONFIG.TEMP_HEADER]);
+  if (dogs.length > 0) {
+    sheet.getRange(2, 1, dogs.length, CONFIG.TEMP_COLUMNS).setValues(dogs);
+  }
+  return dogs.length;
+}
+
+/**
+ * One-off / safe recovery: normalize the live Temp tab so row 1 is the header and all staged
+ * dog rows sit at row 2+. Exposed via doGet(?action=repairTemp). Idempotent — running it on an
+ * already-healthy tab is a no-op fast path.
+ */
+function repairTemp() {
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+    const sheet = ss.getSheetByName(CONFIG.TEMP_TAB);
+    const dogRows = ensureTempHeader_(sheet);
+    return { success: true, dogRows: dogRows, message: 'Temp header ensured; ' + dogRows + ' data row(s) present' };
+  } catch (error) {
+    return { success: false, error: error.toString() };
+  }
+}
+
+/**
  * Clear Temp tab (keep header row)
  */
 function clearTempTab() {
   try {
     const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
     const sheet = ss.getSheetByName(CONFIG.TEMP_TAB);
-    
+
+    ensureTempHeader_(sheet);  // guarantee row 1 header survives even if it had been wiped
+
     const lastRow = sheet.getLastRow();
     if (lastRow > 1) {
       sheet.getRange(2, 1, lastRow - 1, CONFIG.TEMP_COLUMNS).clear();
     }
-    
+
     return { success: true, message: 'Temp tab cleared' };
-    
+
   } catch (error) {
     return { success: false, error: error.toString() };
   }

@@ -174,7 +174,9 @@
           "value": "1965265218",
           "mode": "list",
           "cachedResultName": "Temp"
-        }
+        },
+        "clear": "specificRange",
+        "range": "A2:G1000"
       },
       "id": "01dc7c47-69de-4a33-8df6-737f72791084",
       "name": "Clear Temp Tab",
@@ -235,7 +237,9 @@
           "value": "1965265218",
           "mode": "list",
           "cachedResultName": "Temp"
-        }
+        },
+        "clear": "specificRange",
+        "range": "A2:G1000"
       },
       "id": "645b2769-94a3-4cd6-a039-01692c944b6e",
       "name": "Clear Temp (Cancel)",

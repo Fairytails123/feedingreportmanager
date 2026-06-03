@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-06-03 — Fix `/send` falsely reporting "NO REPORTS TO SUBMIT" (wiped Temp header)
+
+The day after the 2026-06-02 gid fix made `/send` work end-to-end for the first time, a `/send`
+(exec `6916`) answered **"⚠️ NO REPORTS TO SUBMIT — The Temp sheet is empty"** even though a report
+had just been submitted from the tablet. The data was never lost — it was still staged in Temp.
+
+### Root cause (proven from live exec 6916)
+
+Path: `Read Temp Tab` → **returned 25 rows** → `Has Data?` (IF) → all routed to `Send Empty Message`
+→ false "empty" reply, then a Telegram **429**. The 25 rows came out keyed by **dog data values**
+(`"Holly Brett"`, `"lucycbrett@…"`, `"Lunch"`…) with `row_number` starting at **3** — n8n had
+promoted the first *dog* row to column headers because **Temp row 1 (the header) was blank**. With no
+`Dog Name` key on any row, the IF test `={{ $json['Dog Name'] }}` `notEmpty` was false for every row.
+
+Why the header was gone: n8n's `Clear Temp Tab` / `Clear Temp (Cancel)` nodes used `operation:"clear"`
+with the **default `clear:"wholeSheet"`**, which deletes row 1 too. Before the gid fix `/send` always
+died at the read, so this clear had never actually run; the first successful run (exec `6833`,
+2026-06-02 17:23) wiped the header. The next tablet submit then wrote dog rows at `getRange(2,1,…)`
+(`submitReport`) **without recreating the header** (it assumed row 1 was permanent), leaving row 1
+blank → n8n mis-read every subsequent cycle.
+
+### Fixes (defense in depth)
+
+1. **GAS self-heals the Temp header (primary).** New `ensureTempHeader_(sheet)` rebuilds row 1 (and
+   re-seats stray dog rows) whenever it's missing; called at the top of `submitReport` and in
+   `clearTempTab`. So even a whole-sheet wipe can't poison the next read. New `?action=repairTemp`
+   doGet action runs it on demand. Header constant centralised as `CONFIG.TEMP_HEADER`. Verified with
+   a Node harness against the real source (15 assertions: wiped-header, fast-path, empty tab, ragged
+   rows, clear-then-heal). Deployed via clasp at **@17**.
+2. **n8n clears stop deleting the header.** `Clear Temp Tab` (`01dc7c47…`) and `Clear Temp (Cancel)`
+   (`645b2769…`) switched from `clear:"wholeSheet"` to `clear:"specificRange"`, range `A2:G1000`
+   (live workflow updated via n8n MCP; `n8n_validate_workflow` 0 errors; this mirror regenerated).
+3. **Recovery.** `?action=repairTemp` restored the header to the live Temp tab with today's 26 staged
+   rows intact (incl. the first dog that had been eaten as the header), ready to re-`/send`.
+
 ## 2026-06-02 — Fix Telegram `/send` and `/cancel` (n8n workflow)
 
 The Telegram review commands had **never** worked: staff would reply `/send` (to push the staged
