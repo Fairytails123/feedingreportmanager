@@ -1,5 +1,54 @@
 # Changelog
 
+## 2026-06-03 — Drag-to-reorder dogs within a pen (durable, cross-tablet)
+
+Staff could already drag a dog between pens; they asked to also set the **feeding order within** a
+pen (e.g. move the 4th dog to the top so it's fed first). Within-pen order is the array order of
+`pens[penId]`, which already flowed into the submit/Telegram order — but two things blocked it:
+`moveDogToPen` always **appended** (no drop position), and `applyRemoteState` rebuilt each pen from
+the server snapshot every ~5s poll, so a local reorder was clobbered within seconds. Made durable and
+cross-tablet by persisting a per-dog `Position` in the Session sheet.
+
+### Frontend (`index.html`)
+
+- `computeDropIndex(penEl, draggedId, finalY)` hit-tests sibling `.pen-dog` card midpoints (excluding
+  the dragged card, so the index matches the array *after* removal) for the insertion slot;
+  `finishDrag` passes it to `moveDogToPen`. Dropping above the first card = move to the top.
+- `moveDogToPen(dogId, penId, index)` splices at `index` (append fallback keeps the 2-arg staging
+  callers working); `reindexPen()` assigns dense positions (`(i+1)*1000`) and syncs only the dogs
+  whose position changed (dragged → `{penId, position}`, shifted → `{position}`). No new queue op —
+  `position` rides in the existing `add`/`update` payloads.
+- `applyRemoteState` carries `position` through the server / pending-add / pending-update merge layers
+  and **sorts each pen by the merged position** (stable; legacy/0 ties keep server-row order). This is
+  what stops the ~5s poll from clobbering a reorder; render still draws array order, so the UI can't
+  show a half-sorted state.
+- Cross-pen drops now land at the drop position (previously always appended). A blue insertion line
+  (`.drop-before` / `.pen-dogs.drop-at-end`, inset `box-shadow` so it never reflows the column) shows
+  where the drop lands.
+
+### Backend (`feeding_report_backend_v2.js`, deployed via clasp at @20)
+
+- New `SESSION_COLS.POSITION` (col 13 / "M"). `ensureSessionTab` self-heals the header on the existing
+  live tab. `getSessionState` returns `position` (legacy rows → 0). `addDogToSession` /
+  `updateDogInSession` persist it. `submitReport`'s `getSessionState` *fallback* path orders dogs by
+  `[pen, position]` (the normal POST-body path is already ordered by the frontend).
+- No data migration: existing rows read `position = 0`, all tie, and the stable sort preserves today's
+  order until the first reorder backfills real positions.
+
+### TV display (separate repo `Fairytails123/frmdisplay`)
+
+- `applyData` sorts each pen by `position` (same logic), so the read-only TV mirrors the tablet's
+  feeding order within its ~10s adaptive poll. Depends on `getSession` returning `position`.
+
+### Verified
+
+- Throwaway Node harness against the real source — 26 assertions for tablet + backend (column
+  read/write/self-heal/fallback-sort; `computeDropIndex`; `moveDogToPen` reindex + sync payloads;
+  `applyRemoteState` sort / pending-overlay-wins / legacy-tie stability) and 2 for the display.
+- Deploy slip worth noting: a stray temp `.js` left in the clasp clone dir got pushed (duplicate
+  `const CONFIG`), 500-ing the web app for ~3 min until the post-deploy `curl` caught it and a clean
+  redeploy (@20) fixed it. Lesson recorded in deploy notes — never leave extra files in the clone dir.
+
 ## 2026-06-03 — Fix `/send` falsely reporting "NO REPORTS TO SUBMIT" (wiped Temp header)
 
 The day after the 2026-06-02 gid fix made `/send` work end-to-end for the first time, a `/send`
