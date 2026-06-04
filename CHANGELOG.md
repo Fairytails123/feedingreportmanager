@@ -1,5 +1,53 @@
 # Changelog
 
+## 2026-06-04 — Move leaked secrets out of source (JotForm key + Telegram bot token; no rotation)
+
+JotForm emailed that API key `…cbc7` was publicly exposed in this repo (`Fairytails123/feedingreportmanager`).
+Investigation found it inline in the *Submit to JotForm* node URL (live workflow **and** the
+`n8n_workflow_v2_corrected.json` mirror), and turned up a **second** committed secret in the same public
+repo: the **Telegram bot token** in `feeding_report_backend_v2.js` `CONFIG`. The owner chose to **move both
+secrets out of the tracked files without rotating** — so the working tree / HEAD no longer carry them while
+the values stay valid. Honest limit (documented, not glossed): moving a key that's already been pushed to a
+public repo does **not** un-leak it — both were scraped and remain in git history (commit `b5e6e68`).
+Rotation is the only complete fix and was deferred; history was deliberately **not** rewritten.
+
+### JotForm API key → n8n credential
+
+- Created an n8n **`httpQueryAuth`** credential "JotForm API key (eu-api)" (id `XT7arES7w7GdlpOm`),
+  domain-restricted to `eu-api.jotform.com`, holding the same key value (no rotation).
+- Repointed the live *Submit to JotForm* node (workflow `yaBIrDOVbJTEMsH9`): URL is now just
+  `…/submissions` (no `?apiKey=`), `authentication: genericCredentialType` / `genericAuthType: httpQueryAuth`;
+  the credential appends `?apiKey=…` at runtime. `n8n_validate_workflow` → 0 errors.
+- Scrubbed `n8n_workflow_v2_corrected.json` to the credential reference (kept **tracked** — now secret-free,
+  so workflow version history is preserved).
+
+### Telegram bot token → Apps Script Script Properties (`feeding_report_backend_v2.js`, deployed @22)
+
+- Added a `_secret_()` resolver; `CONFIG.TELEGRAM_BOT_TOKEN = _secret_('TELEGRAM_BOT_TOKEN')` (reads the
+  `TELEGRAM_BOT_TOKEN` Script Property). Returns `''` if unset, so `sendTelegramSummary` / `testTelegram`
+  **fail loud** instead of building a malformed `…/bot/sendMessage` URL.
+- Migrated with **no manual GAS-UI step** via a self-seeding two-deploy: v1 (@21) seeded the property from
+  the existing literal on first request (verified by a temporary boolean-only `__secretsStatus` action);
+  v2 (@22) removed the literal **and** the debug action, so the committed source carries no token.
+- `TELEGRAM_CHAT_ID`, `JOTFORM_ID`, `SHEET_ID`, `CHECKINOUT_TOKEN` left inline — group id / public form id /
+  sheet id / already-public token; not secrets.
+
+### Docs
+
+- `CLAUDE.md`: rewrote "Secrets currently in source" (new storage + residual-exposure warning + how to
+  rotate later) and noted the credential in the "JotForm is in EU Safe mode" bullet. (Also landed earlier
+  today from the `/init` pass: a "Commands / quick reference" section and a `doPost` action-list correction.)
+
+### Verified
+
+- Throwaway Node harness against the real backend with Apps Script globals stubbed: v1 (7 assertions —
+  seed-on-absent, property-wins-over-legacy, URL carries token) and v2 (10 — token literal absent from
+  source, property-read, fail-loud guard blocks the send when unset + no auto-seed, debug action gone).
+- Live: GAS @22 `?action=getSessionVersion` compiles; `__secretsStatus` confirmed the property seeded (v1)
+  then confirmed its own removal (v2). `git grep` on the pushed commit (`4fc39c4`) finds neither secret in HEAD.
+- **Not** exercised live: a real `/send` JotForm submission (would email parents). The change is mechanical
+  (same key/param via n8n query-auth) and validates clean; the next genuine `/send` is the final confirmation.
+
 ## 2026-06-03 — Drag-to-reorder dogs within a pen (durable, cross-tablet)
 
 Staff could already drag a dog between pens; they asked to also set the **feeding order within** a
