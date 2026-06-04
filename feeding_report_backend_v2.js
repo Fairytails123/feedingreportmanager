@@ -25,14 +25,24 @@
 // CONFIGURATION
 // ============================================
 
+// ── Secrets via Script Properties (see CLAUDE.md "Secrets currently in source") ──
+// The bot token is NOT stored inline. It lives in Apps Script → Project Settings →
+// Script Properties (key TELEGRAM_BOT_TOKEN). _secret_() returns '' if the property is
+// unset — the Telegram send sites then fail loud rather than building a malformed URL.
+// To set/rotate: Project Settings → Script Properties (or PropertiesService.setProperty).
+var _SCRIPT_PROPS = PropertiesService.getScriptProperties();
+function _secret_(key) {
+  return _SCRIPT_PROPS.getProperty(key) || '';
+}
+
 const CONFIG = {
   SHEET_ID: '1Ejjoo55BaoCPRaLdmFb9EdqtiAT9eNa52QRWjuVThyc',
   LOOKUP_TAB: 'Lookup',
   SESSION_TAB: 'Session',
   TEMP_TAB: 'Temp',
   
-  TELEGRAM_BOT_TOKEN: '8436854999:AAGk4PDevCMCJu76tIuraI-MjW0tH94sjek',
-  TELEGRAM_CHAT_ID: '-1003653235960',
+  TELEGRAM_BOT_TOKEN: _secret_('TELEGRAM_BOT_TOKEN'),   // from Script Properties (not inline)
+  TELEGRAM_CHAT_ID: '-1003653235960',                   // group id — not a secret, left inline
 
   JOTFORM_ID: '240143730611039',
 
@@ -1081,8 +1091,12 @@ function sendTelegramSummary(mealType, reportDate, jotformLinks, missingEmails) 
     message += '❌ Reply `/cancel` to clear without submitting';
     
     // Send to Telegram
+    if (!CONFIG.TELEGRAM_BOT_TOKEN) {
+      Logger.log('[sendTelegramSummary] TELEGRAM_BOT_TOKEN missing — set it in Script Properties');
+      return { success: false, error: 'TELEGRAM_BOT_TOKEN not configured' };
+    }
     const telegramUrl = 'https://api.telegram.org/bot' + CONFIG.TELEGRAM_BOT_TOKEN + '/sendMessage';
-    
+
     const payload = {
       chat_id: CONFIG.TELEGRAM_CHAT_ID,
       text: message,
@@ -1270,6 +1284,7 @@ function testGetDogList() {
  * Test: Send Telegram message
  */
 function testTelegram() {
+  if (!CONFIG.TELEGRAM_BOT_TOKEN) { Logger.log('TELEGRAM_BOT_TOKEN not configured (set it in Script Properties)'); return; }
   const telegramUrl = 'https://api.telegram.org/bot' + CONFIG.TELEGRAM_BOT_TOKEN + '/sendMessage';
   
   const payload = {

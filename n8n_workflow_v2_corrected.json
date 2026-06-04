@@ -137,7 +137,9 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://eu-api.jotform.com/form/{{ $json.formId }}/submissions?apiKey=cc09d33db2d5a133da8ad05d796fcbc7",
+        "url": "=https://eu-api.jotform.com/form/{{ $json.formId }}/submissions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
         "sendBody": true,
         "contentType": "form-urlencoded",
         "specifyBody": "string",
@@ -148,7 +150,10 @@
       "name": "Submit to JotForm",
       "type": "n8n-nodes-base.httpRequest",
       "position": [-1376, 176],
-      "typeVersion": 4.2
+      "typeVersion": 4.2,
+      "credentials": {
+        "httpQueryAuth": { "id": "XT7arES7w7GdlpOm", "name": "JotForm API key (eu-api)" }
+      }
     },
     {
       "parameters": {
