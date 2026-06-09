@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-06-09 — Lunch pen assignment now reads the master "Jot form Dog Details" sheet (col K), deployed @23
+
+Switched the **lunch Top/Bottom** source from a dedicated B/T tab inside the feeding sheet
+(`1Ejjoo55…`, gid `1567330092`, col B) to the shared master **"Jot form Dog Details"** sheet
+(`1OD8SQR2WxgO0nncXwBKYAkNv-qAhw018CXaH4kWgTDU`, Master tab gid `0`, **col K** =
+`Feeding Pen Top (T) OR Bottom (B)`). Goal: one fewer tab to maintain — pen data now lives beside the
+rest of each dog's details (email, parent, van, address) in the single master sheet. `T`/`B`/blank
+semantics are unchanged, so this is a source-and-column swap, not a behaviour change. Lunch only;
+breakfast/dinner (check-in/out feed), manual board edits, submit, n8n, and the display are untouched.
+
+### Code (`feeding_report_backend_v2.js`, deployed @23)
+
+- **CONFIG:** dropped `BT_PEN_GID`; added `PEN_SHEET_ID` (`1OD8SQR2…`), `PEN_TAB_GID` (`0`),
+  `PEN_COL_FALLBACK_INDEX` (`10` = col K).
+- **`readPenMap_`** now `SpreadsheetApp.openById(CONFIG.PEN_SHEET_ID)` (we own the sheet, so no sharing
+  change needed), finds `PEN_TAB_GID`, and **resolves the pen column by header** (matches `"feeding pen"`),
+  falling back to index `10` with a **loud warning** if the header is gone. This is the project-standard
+  hardening (global memory #27) against a *shared* master sheet — other workflows edit it (van assignment is
+  col J), so an inserted/renamed column must not silently re-key the read. Dog name stays col A;
+  `B`→`bottom`, `T`→`top`, blank/unknown → skipped; failures return `{}` + warn (never throw).
+
+### Verification
+
+- **Headless Node harness** against the real source: 16/16 assertions — correct top/bottom, blanks &
+  unknown letters skipped, curly-apostrophe name folding, **header-moved still resolved**, **header-renamed
+  → fallback to col K + warn**, missing-tab → empty map + warn (no throw).
+- **Live new sheet** (gviz CSV) cross-check: 12 cols, `A`=Dog Name, `K`=`Feeding Pen Top (T) OR Bottom (B)`,
+  values strictly `B`/`T` (97/189 populated).
+- **Live end-to-end** after redeploy `@23`: `getSessionVersion` → `success:true` (compiled);
+  `getTodayPlan?mealPeriod=Lunch` → `success:true`, **21 eligible** dogs with correct `penGroup` (e.g.
+  April Neve-Jones→bottom, Betty McEwan→top), proving the GAS identity can read the new sheet.
+
+### Follow-up (manual, optional)
+
+- The old B/T tab (gid `1567330092`) in the feeding sheet is now unused and can be deleted to finish the
+  consolidation.
+
 ## 2026-06-04 — Move leaked secrets out of source (JotForm key + Telegram bot token; no rotation)
 
 JotForm emailed that API key `…cbc7` was publicly exposed in this repo (`Fairytails123/feedingreportmanager`).

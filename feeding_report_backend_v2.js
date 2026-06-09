@@ -53,7 +53,15 @@ const CONFIG = {
   WHITEBOARD_TODAY_URL: 'https://script.google.com/macros/s/AKfycbzqXD9OCM5oSNFdy3OF7pOG0PRcpy4dgkEYWJBVh40CFHJgjvSpPn6SE-mNjloo-GKw/exec', // ?action=loadToday → today's daycare/boarding roster (lunch source)
   CHECKINOUT_URL: 'https://script.google.com/macros/s/AKfycbz2kc3lJbrGk7lw9jVcZMdUrPWjRx4qBARM8YVAIARhYAlQwCzlhHBbKswyOcVHytmB7Q/exec', // ?mode=checkinout&token=… → boarding stays w/ reliable dates (breakfast/dinner source)
   CHECKINOUT_TOKEN: 'ft-k9-board-2024-sec',
-  BT_PEN_GID: 1567330092,   // tab in THIS feeding sheet: Dog Name | Pen Number (B/T/blank) | Size of Dog
+
+  // ── Pen-assignment source (master "Jot form Dog Details" sheet) ──
+  // Lunch Top/Bottom side now lives in the shared master sheet, column K, NOT in a
+  // dedicated tab of the feeding sheet (the old BT_PEN_GID tab is retired). We own
+  // this sheet, so SpreadsheetApp.openById works directly. readPenMap_ resolves the
+  // pen column by header text ("feeding pen"), falling back to PEN_COL_FALLBACK_INDEX.
+  PEN_SHEET_ID: '1OD8SQR2WxgO0nncXwBKYAkNv-qAhw018CXaH4kWgTDU',  // "Jot form Dog Details"
+  PEN_TAB_GID: 0,               // Master tab
+  PEN_COL_FALLBACK_INDEX: 10,   // column K = "Feeding Pen Top (T) OR Bottom (B)" (A=0 … K=10)
   
   // JotForm Unique Names (required for URL pre-fill)
   JOTFORM_FIELDS: {
@@ -708,35 +716,54 @@ function getLunchPlan_(today) {
 }
 
 /**
- * Read the B/T pen-assignment tab (gid CONFIG.BT_PEN_GID) in THIS feeding sheet.
- * Columns: Dog Name | Pen Number (B/T/blank) | Size of Dog.
+ * Read the lunch pen-assignment (Top/Bottom) from the master "Jot form Dog Details"
+ * sheet (CONFIG.PEN_SHEET_ID, tab gid CONFIG.PEN_TAB_GID). Column A = Dog Name;
+ * the pen column ("Feeding Pen Top (T) OR Bottom (B)") holds B / T / blank.
  * Returns { normalizedDogName: 'top' | 'bottom' } — only rows with B or T; blanks skipped.
+ *
+ * The pen column is resolved by HEADER text, not a fixed position: this master sheet is
+ * shared and edited by other workflows (e.g. col J van assignments), so a column inserted
+ * ahead of it must not silently re-key the read. If the header isn't found it falls back
+ * to CONFIG.PEN_COL_FALLBACK_INDEX (column K) and warns loudly.
  */
 function readPenMap_() {
   const map = {};
   try {
-    const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+    const ss = SpreadsheetApp.openById(CONFIG.PEN_SHEET_ID);
     const sheets = ss.getSheets();
     let sheet = null;
     for (let i = 0; i < sheets.length; i++) {
-      if (sheets[i].getSheetId() === CONFIG.BT_PEN_GID) { sheet = sheets[i]; break; }
+      if (sheets[i].getSheetId() === CONFIG.PEN_TAB_GID) { sheet = sheets[i]; break; }
     }
     if (!sheet) {
-      console.warn('[readPenMap_] No tab with gid ' + CONFIG.BT_PEN_GID + ' found.');
+      console.warn('[readPenMap_] No tab gid ' + CONFIG.PEN_TAB_GID + ' in sheet ' + CONFIG.PEN_SHEET_ID);
       return map;
     }
 
     const data = sheet.getDataRange().getValues();
-    for (let i = 1; i < data.length; i++) {   // skip header
+    if (data.length < 2) { console.warn('[readPenMap_] pen sheet has no data rows'); return map; }
+
+    // Resolve the pen column by header (shared master sheet → column order not guaranteed).
+    const header = data[0].map(function (h) { return (h || '').toString().toLowerCase().trim(); });
+    let penCol = -1;
+    for (let c = 0; c < header.length; c++) {
+      if (header[c].indexOf('feeding pen') !== -1) { penCol = c; break; }
+    }
+    if (penCol === -1) {
+      penCol = CONFIG.PEN_COL_FALLBACK_INDEX;   // column K
+      console.warn('[readPenMap_] "Feeding Pen" header not found; using fallback col index ' + penCol);
+    }
+
+    for (let i = 1; i < data.length; i++) {   // skip header; col A (index 0) = Dog Name
       const name = data[i][0] ? data[i][0].toString().trim() : '';
-      const pen = data[i][1] ? data[i][1].toString().trim().toUpperCase() : '';
+      const pen = data[i][penCol] ? data[i][penCol].toString().trim().toUpperCase() : '';
       if (!name) continue;
       if (pen === 'B') map[normName_(name)] = 'bottom';
       else if (pen === 'T') map[normName_(name)] = 'top';
       // blank / other → not mapped (skipped at lunch)
     }
   } catch (e) {
-    console.warn('[readPenMap_] Failed to read pen tab: ' + e.toString());
+    console.warn('[readPenMap_] Failed to read pen sheet: ' + e.toString());
   }
   return map;
 }
