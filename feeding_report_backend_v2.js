@@ -666,16 +666,20 @@ function getBoardingPlan_(mealPeriod, today) {
 }
 
 /**
- * Lunch roster: today's full-day / half-day dogs from the whiteboard, kept only if
- * present in the B/T pen tab with B (bottom) or T (top). Boarding dogs do not get a
- * lunch report; dogs with a blank/absent pen are returned in `skipped` for visibility.
+ * Lunch roster: today's full-day / half-day dogs from the whiteboard, kept only if the
+ * master pen sheet gives them B (bottom) or T (top). The name join is exact (`normName_`)
+ * with a first+last-token fallback for middle/maiden-name or nickname spellings the roster
+ * carries but the pen sheet omits (see `readPenMap_`). Boarding dogs do not get a lunch
+ * report; dogs with a blank/absent pen are returned in `skipped` for visibility.
  */
 function getLunchPlan_(today) {
   const DAYCARE = { 'Full Day': true, 'Half Day AM': true, 'Half Day PM': true };
 
   const board = fetchJson_(CONFIG.WHITEBOARD_TODAY_URL + '?action=loadToday');
   const roster = (board && Array.isArray(board.dogs)) ? board.dogs : [];
-  const penMap = readPenMap_();   // { normName: 'top' | 'bottom' }
+  const penData = readPenMap_();          // { map: {normName:'top'|'bottom'}, firstLast: {...} }
+  const penMap = penData.map;
+  const firstLast = penData.firstLast;
 
   const seen = {};
   const dogs = [];
@@ -691,9 +695,20 @@ function getLunchPlan_(today) {
     if (seen[key]) continue;
     seen[key] = true;
 
-    const penGroup = penMap[key];   // 'top' | 'bottom' | undefined
+    let penGroup = penMap[key];   // 'top' | 'bottom' | undefined
     if (penGroup !== 'top' && penGroup !== 'bottom') {
-      skipped.push(name);           // not in the B/T tab, or blank pen
+      // Tolerant fallback: match on first + last name token, for a middle/maiden name or
+      // nickname the roster carries but the pen sheet omits (e.g. roster "Branko Rubi
+      // Steene" vs pen sheet "Branko Steene"). Used ONLY when first+last resolves to exactly
+      // one pen-bearing master dog (firstLast.count === 1), so it can never mis-assign.
+      const tk = key.split(' ');
+      if (tk.length >= 2) {
+        const fl = firstLast[tk[0] + '|' + tk[tk.length - 1]];
+        if (fl && fl.count === 1 && (fl.side === 'top' || fl.side === 'bottom')) penGroup = fl.side;
+      }
+    }
+    if (penGroup !== 'top' && penGroup !== 'bottom') {
+      skipped.push(name);           // no pen in the master sheet (exact or fallback)
       continue;
     }
     dogs.push({ name: name, penGroup: penGroup });
@@ -719,7 +734,14 @@ function getLunchPlan_(today) {
  * Read the lunch pen-assignment (Top/Bottom) from the master "Jot form Dog Details"
  * sheet (CONFIG.PEN_SHEET_ID, tab gid CONFIG.PEN_TAB_GID). Column A = Dog Name;
  * the pen column ("Feeding Pen Top (T) OR Bottom (B)") holds B / T / blank.
- * Returns { normalizedDogName: 'top' | 'bottom' } — only rows with B or T; blanks skipped.
+ *
+ * Returns { map, firstLast }:
+ *   map        – { normalizedDogName: 'top' | 'bottom' } for rows with B/T (the exact join).
+ *   firstLast  – { "first|last": { side, count } } over EVERY named row, powering
+ *                getLunchPlan_'s tolerant fallback: a roster name with an extra middle/maiden
+ *                name or nickname (e.g. "Branko Rubi Steene" vs the sheet's "Branko Steene")
+ *                still resolves when its first+last tokens uniquely (count === 1) hit one
+ *                pen-bearing master dog. count > 1 ⇒ ambiguous ⇒ fallback declines.
  *
  * The pen column is resolved by HEADER text, not a fixed position: this master sheet is
  * shared and edited by other workflows (e.g. col J van assignments), so a column inserted
@@ -727,7 +749,9 @@ function getLunchPlan_(today) {
  * to CONFIG.PEN_COL_FALLBACK_INDEX (column K) and warns loudly.
  */
 function readPenMap_() {
-  const map = {};
+  const map = {};         // normName -> 'top' | 'bottom'  (exact join key)
+  const firstLast = {};   // "first|last" -> { side: 'top'|'bottom'|null, count } over all named rows
+  const out = { map: map, firstLast: firstLast };
   try {
     const ss = SpreadsheetApp.openById(CONFIG.PEN_SHEET_ID);
     const sheets = ss.getSheets();
@@ -737,11 +761,11 @@ function readPenMap_() {
     }
     if (!sheet) {
       console.warn('[readPenMap_] No tab gid ' + CONFIG.PEN_TAB_GID + ' in sheet ' + CONFIG.PEN_SHEET_ID);
-      return map;
+      return out;
     }
 
     const data = sheet.getDataRange().getValues();
-    if (data.length < 2) { console.warn('[readPenMap_] pen sheet has no data rows'); return map; }
+    if (data.length < 2) { console.warn('[readPenMap_] pen sheet has no data rows'); return out; }
 
     // Resolve the pen column by header (shared master sheet → column order not guaranteed).
     const header = data[0].map(function (h) { return (h || '').toString().toLowerCase().trim(); });
@@ -758,14 +782,19 @@ function readPenMap_() {
       const name = data[i][0] ? data[i][0].toString().trim() : '';
       const pen = data[i][penCol] ? data[i][penCol].toString().trim().toUpperCase() : '';
       if (!name) continue;
-      if (pen === 'B') map[normName_(name)] = 'bottom';
-      else if (pen === 'T') map[normName_(name)] = 'top';
-      // blank / other → not mapped (skipped at lunch)
+      const side = (pen === 'B') ? 'bottom' : (pen === 'T') ? 'top' : null;
+      const nn = normName_(name);
+      if (side) map[nn] = side;   // blank / other → not in exact map (skipped unless fallback hits)
+      // First+last index over every named row → tolerant fallback with an ambiguity guard.
+      const tk = nn.split(' ');
+      const fl = tk[0] + '|' + tk[tk.length - 1];
+      if (!firstLast[fl]) firstLast[fl] = { side: side, count: 1 };
+      else { firstLast[fl].count++; if (side) firstLast[fl].side = side; }
     }
   } catch (e) {
     console.warn('[readPenMap_] Failed to read pen sheet: ' + e.toString());
   }
-  return map;
+  return out;
 }
 
 /**

@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-06-09 — Lunch pen join: tolerant first+last name fallback, deployed @24
+
+`Branko Rubi Steene` (booked Full Day, pen `B` in the master sheet) was being **skipped** at lunch.
+Root cause: a pure name mismatch on the join key — the whiteboard roster carries his owner's
+middle/maiden name (`Branko Rubi Steene`) while the master pen sheet stores `Branko Steene`, so the
+exact `normName_` join missed and his pen `B` was never found. An audit of today's 7 skips confirmed
+this was the **only** real miss (the other 6 are genuinely blank-pen, correctly skipped).
+
+- **`readPenMap_`** now also returns a `firstLast` index (`"first|last" → {side, count}` over every
+  named row). **`getLunchPlan_`** falls back to a first-name+last-name-token match when the exact join
+  fails — used **only** when first+last resolves to exactly one pen-bearing master dog (`count === 1`),
+  so an ambiguous collision declines rather than mis-assigning. Handles a middle/maiden name or nickname
+  on **either** side; exact matches and blank-pen skips are unchanged.
+- **Verified:** Node harness (16/16 — Branko fixed both directions, exact still works, blank stays
+  skipped, ambiguity guard declines, boarding filtered). Live after redeploy `@24`:
+  `getTodayPlan?mealPeriod=Lunch` eligible **21 → 22**, `Branko Rubi Steene → bottom`, no longer skipped.
+  (First smoke-check hit the pre-propagation @23 for a few seconds; the retest confirmed @24.)
+- No sheet edits — the fix is contained to this app, so it doesn't touch the master shared with the
+  routes/van projects.
+
 ## 2026-06-09 — Lunch pen assignment now reads the master "Jot form Dog Details" sheet (col K), deployed @23
 
 Switched the **lunch Top/Bottom** source from a dedicated B/T tab inside the feeding sheet
