@@ -1,0 +1,224 @@
+# Feeding Manager — System Data Flow & Architecture
+
+A plain-English, engineer-grade map of how the whole system works: the logic, the
+sequence, and **where data flows from and to**. Grounded in the actual source
+(`index.html`, `feeding_report_backend_v2.js`, `n8n_workflow_v2_corrected.json`).
+
+> Companion docs: `CLAUDE.md` (instructions written for the AI assistant) and
+> `CHANGELOG.md` (history). This file is the human-facing architecture overview.
+
+---
+
+## 1. What it does, in one sentence
+
+Staff log a feeding session on a **tablet** → the data is staged in a **Google Sheet**
+→ Apps Script posts a **review summary to a Telegram group** → a human replies **`/send`**
+→ **n8n** pushes each dog's record into **JotForm** → JotForm **emails the parents**.
+
+## 2. The one idea that explains everything
+
+**Nothing talks device-to-device.** The tablet, the TV display, and the n8n automation
+never connect to each other. They are all independent **clients of a single Google Apps
+Script (GAS) web app**, and GAS is the *only* thing that reads or writes the **Google
+Sheet**. The Sheet is a shared whiteboard — the entire "nervous system" of the app.
+
+So when staff report "it lost connection," it means **GAS calls are failing
+intermittently**, not that a live socket dropped.
+
+## 3. The components (and where each lives)
+
+| Part | What it is | Where it lives |
+|------|-----------|----------------|
+| **Tablet UI** | `index.html` — one self-contained HTML file (inline CSS + JS, no framework) | GitHub Pages (this repo) |
+| **GAS backend** | `feeding_report_backend_v2.js` — a `/exec` web app | Apps Script project "Feeding manager" (this file is a mirror) |
+| **Google Sheet** | 3 tabs: Lookup / Session / Temp | `1Ejjoo55BaoCPRaLdmFb9EdqtiAT9eNa52QRWjuVThyc` — the **shared state bus** |
+| **Telegram group** | review + command channel | chat `-1003653235960`, bot "Feeding report bot" (id 8436854999) |
+| **n8n workflow** | handles `/send` `/cancel` `/status` | n8n cloud, workflow `yaBIrDOVbJTEMsH9` (this JSON is a mirror) |
+| **JotForm** | per-dog form that emails parents | form `240143730611039`, EU instance |
+| **TV display** | read-only board mirror | separate repo `Fairytails123/frmdisplay` |
+| **White Board project** | roster source for "Add Dogs for Today" | a *separate* GAS app + sheet `1kQsNXee…` |
+
+## 4. The map
+
+```
+                        ┌──────────────────────────────────────────────┐
+                        │      GOOGLE SHEET  (the shared state bus)      │
+                        │   Lookup   │   Session (live)   │   Temp        │
+                        └──────────────────────────────────────────────┘
+                                        ▲    ▲    ▲
+                    only Apps Script reads/writes the Sheet
+                                        │    │    │
+                        ┌───────────────┴────┴────┴───────────────┐
+                        │       GAS Web App   (single /exec URL)   │
+                        │   doGet(?action=) / doPost(data.action)  │
+                        └──┬──────────────┬───────────────┬────────┘
+        poll + POST edits  │              │ posts review  │ server-side reads
+     ┌─────────────────────┘              │ summary       │ (White Board project:
+     │                     │              ▼               │  check-in/out + loadToday)
+┌────┴─────┐       ┌───────┴─────┐  ┌──────────┐          ▼
+│ Tablet UI│       │ TV Display  │  │ Telegram │   ┌──────────────────┐
+│index.html│       │  frmdisplay │  │  group   │   │  White Board app │
+└──────────┘       └─────────────┘  └────┬─────┘   └──────────────────┘
+ staff EDIT         read-only             │ human reads + replies /send
+                                          ▼
+                                    ┌──────────┐  reads Temp tab   ┌──────────┐
+                                    │   n8n    │─────────────────▶ │ JotForm  │─▶ emails
+                                    │ workflow │  POST submission  │ (eu-api) │   parents
+                                    └──────────┘                   └──────────┘
+```
+
+Every arrow into GAS hits one endpoint (`/exec`). GAS chooses what to do by switching on
+`?action=` for reads (`doGet`) and `data.action` for writes (`doPost`). Every handler
+returns `{success, …}` — it never throws an error back to the client.
+
+## 5. The three Sheet tabs (the state bus)
+
+| Tab | gid | Role |
+|-----|-----|------|
+| **Lookup** | `0` | Permanent. `Dog Name \| Parent Email \| Parent Name`. Source of truth for emails. |
+| **Session** | `1038940935` | Live editing state (13 columns) shared across tablets + TV. Re-synced ~every 5s. Column 13 = `Position` (within-pen feeding order). |
+| **Temp** | `1965265218` | Submission staging (7 columns) that n8n reads on `/send`. Row 1 is a load-bearing header. |
+
+(Lunch pen side is **no longer** in this sheet — as of 2026-06-09 it comes from the **external** master "Jot form Dog Details" sheet `1OD8SQR2…`, col K; see Phase 2. The old B/T pen tab `1567330092` here is retired/deleted.)
+
+---
+
+## 6. The sequence, phase by phase
+
+### Phase 0 — Boot (tablet load)
+`initialLoad()` runs, in order:
+1. `loadQueue()` — restore the **durable edit queue** from localStorage (`feedingManager.queue.v1`), so unsynced edits survive a refresh.
+2. **GET `?action=getDogList`** → GAS reads **Lookup** → names + parent emails.
+3. **GET `?action=getSession`** → GAS reads **Session** → `applyRemoteState()` paints the board.
+4. `flushQueue()` — push up anything queued while offline.
+5. Start the **5-second poll** (`pollForUpdates`) and a lighter **7-second heartbeat** (`getSessionVersion`).
+
+### Phase 1 — Every local edit (add dog, set amount, medicine, drag, change meal)
+Edits do **not** POST directly. They go through a durable queue:
+
+```
+edit → syncAddDog/UpdateDog/DeleteDog/MealType → enqueue {op, dogId, payload}
+     → save queue to localStorage → flushQueue() → POST to GAS → GAS writes Session tab
+```
+
+- The **queue owns ordering and retry**, not the call site. It drains in order, removes an
+  item only after its POST succeeds, **stops on the first failure** and retries next cycle,
+  and **drops an item after 5 rejections** so one bad edit can't jam the whole queue.
+- The **5s poll** GETs `?action=getSession`, and `applyRemoteState()` **merges** the server
+  snapshot with your pending queue. The rule: **the server wins only for dogs you have no
+  pending change on** — pending adds are kept, edits re-applied, deletes suppressed. Then it
+  **sorts each pen by the `Position` column**. This merge is exactly why a ~5s poll never
+  wipes an edit you just made, and why a second tablet / the TV sees your change in seconds.
+- **Connection state:** all calls go through `gasFetch()` (12s timeout). `isOnline` flips
+  false only after **2 consecutive failures** (debounces wifi blips). **Submit is enabled
+  only when `isOnline && queue is empty`** — i.e. only when the screen truly matches the server.
+
+### Phase 2 — "Add Dogs for Today" (cross-project read)
+`addDogsForToday()` picks the meal from the tablet clock (`<10:30` Morning, `<14:00` Lunch,
+else Evening), then **GET `?action=getTodayPlan`**. GAS (computing "today" in `Europe/London`)
+reads your **separate White Board project**:
+- **Morning/Evening** → the check-in/out feed (who's boarding tonight / slept here last night).
+- **Lunch** → the `loadToday` roster + the master **"Jot form Dog Details"** sheet's pen column (`1OD8SQR2…`, col K), joined by dog name (exact `normName_` with a first+last-token fallback for middle/nickname spellings).
+
+It returns the dogs; the tablet skips any already on the board and drops each new dog into
+the **least-occupied eligible pen** (`pickLeastOccupiedPen`).
+
+### Phase 3 — Submit (the critical safety handshake)
+`confirmSubmit()` first **guards**: if offline or the queue isn't empty, it blocks and warns.
+Otherwise it **POSTs `submitReport` with the dogs from the tablet's own memory** (not the
+Sheet — your latest edits may not have synced yet). Then GAS `submitReport()`:
+
+```
+GAS submitReport():
+  1. Trust dogs[] from the POST body (fall back to Session only if body is empty)
+  2. Load Lookup → parent emails
+  3. Rebuild/repair the Temp header, clear old Temp rows
+  4. Write Temp tab — one row per dog
+  5. Build a prefilled JotForm review link per dog
+  6. sendTelegramSummary()  ← grouped by pen, with review links
+        │
+   Telegram delivered?
+   ├─ NO  → return {success:false, telegramSent:false}   (Temp + Session KEPT — safe retry)
+   └─ YES → clearSession() → return {success:true, telegramSent:true}
+```
+
+The tablet counts it done only if **both** `success` **and** `telegramSent` are true; on any
+failure it **keeps the board and the queue** for a safe retry. **The board is wiped only
+after Telegram has confirmed the review message went out** — that is the key data-safety rule.
+
+### Phase 4 — A human reviews on Telegram
+The group sees the summary with a review link per dog. Someone replies **`/send`** (approve),
+**`/cancel`** (discard), or **`/status`** (what's pending). The Temp tab sits there durably
+until they do — nothing is lost between posting the links and the human replying.
+
+### Phase 5 — `/send` → n8n → JotForm → parents emailed
+n8n's `Telegram Trigger` catches the message; `Command Router` (matching with `startsWith`,
+so `/send@BotName` works in the group) branches:
+
+- **`/send`** → `Read Temp Tab` → `Has Data?` → `Prepare JotForm Data` (builds the
+  `submission[<qid>]=…` body) → `Submit to JotForm` (one POST per dog to **`eu-api.jotform.com`**)
+  → `Count Results` → `Clear Temp Tab` (clears rows **but keeps the header**) → `Send Success Message`.
+  **JotForm then emails the parents automatically.**
+- empty Temp → "No reports to submit."
+- **`/cancel`** → clears Temp + Session → "Cancelled."
+- **`/status`** → counts pending rows in both tabs → reports back.
+
+> **Two-stage JotForm:** the links GAS posts to Telegram are *prefilled previews* for the
+> human. The **real submissions** that email parents are the ones n8n POSTs from the Temp
+> tab on `/send`. The Temp tab is the bridge: GAS writes it, n8n reads + clears it.
+
+**JotForm question-ID map:** `3` date · `6` food · `7` supplements · `9` meal ·
+`10` has-medicine · `13` name · `14` email · `21` comments.
+
+---
+
+## 7. GAS endpoint quick reference
+
+| Action | Method | Reads | Writes | Returns |
+|--------|--------|-------|--------|---------|
+| `getDogList` | GET/POST | Lookup | — | `{success, dogs:[{name,email,parentName}]}` |
+| `getSession` | GET/POST | Session | — | `{success, dogs:[…], mealType, version}` |
+| `getSessionVersion` | GET | Session | — | `{success, version}` (lightweight heartbeat) |
+| `getTodayPlan` | GET/POST | White Board feeds + master pen sheet (col K) | — | `{success, mealPeriod, today, dogs, skipped, counts}` |
+| `addDog` | POST | — | Session (append) | `{success, dogId, version}` |
+| `updateDog` | POST | Session | Session (one row) | `{success, dogId, version}` |
+| `deleteDog` | POST | Session | Session (delete row) | `{success, dogId, version}` |
+| `setMealType` | POST | Session | Session (all rows) | `{success, mealType, version}` |
+| `submitReport` | POST | POST body / Lookup / Temp | Temp → Telegram → (cond.) clearSession | `{success, telegramSent, dogsProcessed}` |
+| `clearSession` | POST | — | Session (delete dogs, keep header) | `{success, version}` |
+| `repairTemp` | GET | Temp | Temp (rebuild header) | `{success, dogRows}` |
+
+## 8. Why it's built this way (the decisions that matter)
+
+- **Durable edit queue** → wifi can die mid-session with zero data loss; edits replay on reconnect.
+- **Submit trusts the tablet's memory, not the Sheet** → your latest taps count even if they haven't synced.
+- **Wipe only after Telegram confirms** → a failed notification never destroys a report.
+- **n8n addresses Sheet tabs by numeric `gid`, not name** → using the name throws `Sheet with ID Temp not found`; this silently broke `/send` for months.
+- **The Temp header is load-bearing and self-healing** → n8n keys columns by the row-1 header; a blank header makes every report read as empty, so GAS rebuilds it and n8n clears around it (`specificRange`, not whole-sheet).
+- **EU JotForm endpoint** → plain `api.jotform.com` 301-redirects and drops the POST body.
+- **iOS-safe URL encoding** → links are built with `+` (no `%XX`) because iOS Telegram double-encodes percent sequences and breaks the target app.
+- **Defensive JSON parsing** → one corrupt Session cell can't break `getSession` for every device.
+
+## 9. Failure modes the design survives
+
+| Failure | What happens |
+|---------|--------------|
+| Wifi drops mid-edit | Edits queue locally, replay on reconnect; Submit disabled until synced |
+| GAS unreachable at submit | Submit blocked; board + queue preserved |
+| Telegram send fails | `submitReport` returns failure, keeps Temp + Session, retry is safe |
+| `/send` on an empty Temp | `Has Data?` routes to "No reports to submit" |
+| Temp header deleted | GAS `ensureTempHeader_` rebuilds it; n8n clear preserves it |
+| Corrupt JSON cell in Session | `safeJsonParse` falls back so one cell can't break all devices |
+
+## 10. Key IDs (canonical source: `CONFIG` in `feeding_report_backend_v2.js`)
+
+- **Sheet:** `1Ejjoo55BaoCPRaLdmFb9EdqtiAT9eNa52QRWjuVThyc`
+- **Tab gids:** Lookup `0` · Session `1038940935` · Temp `1965265218`
+- **Lunch pen source (separate sheet):** master "Jot form Dog Details" `1OD8SQR2WxgO0nncXwBKYAkNv-qAhw018CXaH4kWgTDU`, Master tab gid `0`, col K (header-resolved). Old in-sheet B/T pen tab `1567330092` retired 2026-06-09.
+- **Telegram:** chat `-1003653235960`, bot id `8436854999`
+- **JotForm:** form `240143730611039`, EU instance (`eu-api.jotform.com`)
+- **n8n workflow:** `yaBIrDOVbJTEMsH9`
+
+> The `CONFIG` object at the top of `feeding_report_backend_v2.js` is the single source of
+> truth for every ID, gid, and field map. If anything here disagrees with `CONFIG`, trust
+> `CONFIG`.
