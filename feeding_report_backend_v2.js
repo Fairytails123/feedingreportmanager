@@ -62,6 +62,7 @@ const CONFIG = {
   PEN_SHEET_ID: '1OD8SQR2WxgO0nncXwBKYAkNv-qAhw018CXaH4kWgTDU',  // "Jot form Dog Details"
   PEN_TAB_GID: 0,               // Master tab
   PEN_COL_FALLBACK_INDEX: 10,   // column K = "Feeding Pen Top (T) OR Bottom (B)" (A=0 … K=10)
+  LUNCH_COL_FALLBACK_INDEX: 11, // column L = "Lunch Y?"  (Y ⇒ a BOARDING dog opts into a lunch report)
   
   // JotForm Unique Names (required for URL pre-fill)
   JOTFORM_FIELDS: {
@@ -666,19 +667,28 @@ function getBoardingPlan_(mealPeriod, today) {
 }
 
 /**
- * Lunch roster: today's full-day / half-day dogs from the whiteboard, kept only if the
- * master pen sheet gives them B (bottom) or T (top). The name join is exact (`normName_`)
- * with a first+last-token fallback for middle/maiden-name or nickname spellings the roster
- * carries but the pen sheet omits (see `readPenMap_`). Boarding dogs do not get a lunch
- * report; dogs with a blank/absent pen are returned in `skipped` for visibility.
+ * Lunch roster from the whiteboard:
+ *   • DAY-CARE dogs (Full Day / Half Day AM / Half Day PM): kept if the master pen sheet
+ *     gives them B (bottom) or T (top). "Lunch Y?" is NOT consulted for them (unchanged).
+ *   • BOARDING / BOARDING SCHOOL dogs: a boarding guest is fed lunch ONLY when the master
+ *     sheet's "Lunch Y?" column = Y (opt-in) AND it gives a B/T pen. Without the flag a
+ *     boarding dog is silently excluded — its default meals are breakfast + dinner via
+ *     getBoardingPlan_, a separate feed. (Added 2026-06-16 after a boarding guest flagged
+ *     Lunch Y, e.g. Millie Cartwright, was dropped by the day-care-only filter.)
+ * The name join is exact (`normName_`) with a first+last-token fallback for middle/maiden-name
+ * or nickname spellings the roster carries but the pen sheet omits (see `readPenMap_`).
+ * Day-care dogs on the roster with no pen — and boarding dogs flagged Lunch Y but lacking a
+ * pen — are returned in `skipped` for visibility.
  */
 function getLunchPlan_(today) {
   const DAYCARE = { 'Full Day': true, 'Half Day AM': true, 'Half Day PM': true };
+  const BOARDING = { 'Boarding': true, 'Boarding School': true };
 
   const board = fetchJson_(CONFIG.WHITEBOARD_TODAY_URL + '?action=loadToday');
   const roster = (board && Array.isArray(board.dogs)) ? board.dogs : [];
-  const penData = readPenMap_();          // { map: {normName:'top'|'bottom'}, firstLast: {...} }
+  const penData = readPenMap_();          // { map:{normName:'top'|'bottom'}, lunchY:{normName:true}, firstLast:{...} }
   const penMap = penData.map;
+  const lunchYMap = penData.lunchY;
   const firstLast = penData.firstLast;
 
   const seen = {};
@@ -689,13 +699,16 @@ function getLunchPlan_(today) {
     const entry = roster[i] || {};
     const name = entry.name ? entry.name.toString().trim() : '';
     const serviceType = entry.serviceType ? entry.serviceType.toString().trim() : '';
-    if (!name || !DAYCARE[serviceType]) continue;
+    const isDaycare = !!DAYCARE[serviceType];
+    const isBoarding = !!BOARDING[serviceType];
+    if (!name || (!isDaycare && !isBoarding)) continue;
 
     const key = normName_(name);
     if (seen[key]) continue;
     seen[key] = true;
 
-    let penGroup = penMap[key];   // 'top' | 'bottom' | undefined
+    let penGroup = penMap[key];          // 'top' | 'bottom' | undefined
+    let wantsLunch = !!lunchYMap[key];   // master "Lunch Y?" = Y (exact-name hit)
     if (penGroup !== 'top' && penGroup !== 'bottom') {
       // Tolerant fallback: match on first + last name token, for a middle/maiden name or
       // nickname the roster carries but the pen sheet omits (e.g. roster "Branko Rubi
@@ -704,14 +717,25 @@ function getLunchPlan_(today) {
       const tk = key.split(' ');
       if (tk.length >= 2) {
         const fl = firstLast[tk[0] + '|' + tk[tk.length - 1]];
-        if (fl && fl.count === 1 && (fl.side === 'top' || fl.side === 'bottom')) penGroup = fl.side;
+        if (fl && fl.count === 1 && (fl.side === 'top' || fl.side === 'bottom')) {
+          penGroup = fl.side;
+          wantsLunch = !!fl.lunchY;       // exact name missed → adopt the uniquely-matched row's lunch flag
+        }
       }
     }
-    if (penGroup !== 'top' && penGroup !== 'bottom') {
-      skipped.push(name);           // no pen in the master sheet (exact or fallback)
+    const hasPen = (penGroup === 'top' || penGroup === 'bottom');
+
+    if (isDaycare) {
+      // Day-care lunch eligibility is pen alone (unchanged) — "Lunch Y?" not consulted here.
+      if (hasPen) dogs.push({ name: name, penGroup: penGroup });
+      else skipped.push(name);            // on the lunch roster but no pen → surface for visibility
       continue;
     }
-    dogs.push({ name: name, penGroup: penGroup });
+
+    // Boarding / Boarding School: opt-in via the master sheet's "Lunch Y?" flag only.
+    if (!wantsLunch) continue;             // boarding default = no lunch report (silent; gets breakfast+dinner)
+    if (hasPen) dogs.push({ name: name, penGroup: penGroup });
+    else skipped.push(name);              // flagged for lunch but no T/B pen → surface the data gap
   }
 
   // Top group first, alphabetical within each group (frontend fills top-1.. / bottom-1..).
@@ -749,9 +773,10 @@ function getLunchPlan_(today) {
  * to CONFIG.PEN_COL_FALLBACK_INDEX (column K) and warns loudly.
  */
 function readPenMap_() {
-  const map = {};         // normName -> 'top' | 'bottom'  (exact join key)
-  const firstLast = {};   // "first|last" -> { side: 'top'|'bottom'|null, count } over all named rows
-  const out = { map: map, firstLast: firstLast };
+  const map = {};         // normName -> 'top' | 'bottom'  (exact pen-side join key)
+  const lunchY = {};      // normName -> true  (master "Lunch Y?" = Y → a BOARDING dog opts into a lunch report)
+  const firstLast = {};   // "first|last" -> { side:'top'|'bottom'|null, lunchY:bool, count } over all named rows
+  const out = { map: map, lunchY: lunchY, firstLast: firstLast };
   try {
     const ss = SpreadsheetApp.openById(CONFIG.PEN_SHEET_ID);
     const sheets = ss.getSheets();
@@ -767,29 +792,37 @@ function readPenMap_() {
     const data = sheet.getDataRange().getValues();
     if (data.length < 2) { console.warn('[readPenMap_] pen sheet has no data rows'); return out; }
 
-    // Resolve the pen column by header (shared master sheet → column order not guaranteed).
+    // Resolve the pen + lunch columns by header (shared master sheet → column order not guaranteed).
     const header = data[0].map(function (h) { return (h || '').toString().toLowerCase().trim(); });
-    let penCol = -1;
+    let penCol = -1, lunchCol = -1;
     for (let c = 0; c < header.length; c++) {
-      if (header[c].indexOf('feeding pen') !== -1) { penCol = c; break; }
+      if (penCol === -1 && header[c].indexOf('feeding pen') !== -1) penCol = c;
+      if (lunchCol === -1 && header[c].indexOf('lunch') !== -1) lunchCol = c;
     }
     if (penCol === -1) {
       penCol = CONFIG.PEN_COL_FALLBACK_INDEX;   // column K
       console.warn('[readPenMap_] "Feeding Pen" header not found; using fallback col index ' + penCol);
     }
+    if (lunchCol === -1) {
+      lunchCol = CONFIG.LUNCH_COL_FALLBACK_INDEX;   // column L
+      console.warn('[readPenMap_] "Lunch Y?" header not found; using fallback col index ' + lunchCol);
+    }
 
     for (let i = 1; i < data.length; i++) {   // skip header; col A (index 0) = Dog Name
       const name = data[i][0] ? data[i][0].toString().trim() : '';
-      const pen = data[i][penCol] ? data[i][penCol].toString().trim().toUpperCase() : '';
       if (!name) continue;
+      const pen = data[i][penCol] ? data[i][penCol].toString().trim().toUpperCase() : '';
       const side = (pen === 'B') ? 'bottom' : (pen === 'T') ? 'top' : null;
+      const lf = data[i][lunchCol] ? data[i][lunchCol].toString().trim().toUpperCase() : '';
+      const wantsLunch = (lf === 'Y' || lf === 'YES');
       const nn = normName_(name);
-      if (side) map[nn] = side;   // blank / other → not in exact map (skipped unless fallback hits)
+      if (side) map[nn] = side;       // blank / other → not in exact map (skipped unless fallback hits)
+      if (wantsLunch) lunchY[nn] = true;
       // First+last index over every named row → tolerant fallback with an ambiguity guard.
       const tk = nn.split(' ');
       const fl = tk[0] + '|' + tk[tk.length - 1];
-      if (!firstLast[fl]) firstLast[fl] = { side: side, count: 1 };
-      else { firstLast[fl].count++; if (side) firstLast[fl].side = side; }
+      if (!firstLast[fl]) firstLast[fl] = { side: side, lunchY: wantsLunch, count: 1 };
+      else { firstLast[fl].count++; if (side) firstLast[fl].side = side; if (wantsLunch) firstLast[fl].lunchY = true; }
     }
   } catch (e) {
     console.warn('[readPenMap_] Failed to read pen sheet: ' + e.toString());
