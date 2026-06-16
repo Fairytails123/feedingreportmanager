@@ -1,5 +1,46 @@
 # Changelog
 
+## 2026-06-16 — Lunch now includes boarding guests flagged "Lunch Y", deployed @25
+
+`Millie Cartwright` was **dropped from lunch** in "Add Dogs for Today" even though the master
+"Jot form Dog Details" sheet gives her a **Top** pen and marks **Lunch Y = Y**. Root cause: she's a
+**boarding** guest today (whiteboard `serviceType: "Boarding"`), and `getLunchPlan_` kept **only**
+day-care service types (`Full Day` / `Half Day AM` / `Half Day PM`) — so boarding dogs were filtered
+out **before** the pen lookup and weren't even surfaced in `skipped` (which only collects *penless
+day-care* dogs). Every boarding/boarding-school dog (Winnie, Poppy, Rocco, Millie, Rolo) was excluded
+the same way. Confirmed across all three live sources (roster `serviceType`, master sheet pen+flag,
+and the live `getTodayPlan('Lunch')` showing her in neither `dogs` nor `skipped`).
+
+Boarding / Boarding School dogs are now added at lunch **only when** the master sheet's **"Lunch Y?"**
+column = `Y` (opt-in) **AND** the row gives a `B`/`T` pen. Without the flag a boarding dog stays
+excluded (its meals remain breakfast + dinner via the check-in/out feed); flagged-but-penless →
+`skipped` for visibility. **Day-care lunch is unchanged — "Lunch Y?" is NOT consulted for day-care
+dogs (pen alone decides), so there's no regression.**
+
+### Code (`feeding_report_backend_v2.js`, deployed @25)
+
+- **CONFIG:** added `LUNCH_COL_FALLBACK_INDEX` (`11` = col L = `Lunch Y?`).
+- **`readPenMap_`** now resolves the **"Lunch Y?"** column by header (matches `"lunch"`, falls back to
+  col L / index 11 with a loud warning) and returns a `lunchY` map (`normName → true` for `Y`/`YES`),
+  plus a `lunchY` flag on each `firstLast` fallback entry so the tolerant name join carries it too.
+- **`getLunchPlan_`** adds a `BOARDING` set (`Boarding`, `Boarding School`); the loop now keeps
+  day-care **or** boarding rows. Day-care path is byte-equivalent (pen → `dogs`, else `skipped`).
+  Boarding path: no `Lunch Y` flag → silent `continue`; flag + pen → `dogs`; flag + no pen → `skipped`.
+
+### Verification
+
+- **Headless Node harness** against the real source, replaying today's **live** roster + master sheet
+  plus synthetic edge cases — **26/26 checks**: `Millie Cartwright → top`; a boarding dog with a pen
+  but **no** flag (`Rolo Barnwell`) stays excluded; flagged-but-penless boarding dog → `skipped`; a
+  day-care dog with `Lunch Y` but no pen (`April Neve-Jones`) **still skips** (flag ignored for
+  day-care); counts, dedup, and top-before-bottom sort all correct.
+- **Live after redeploy `@25`:** `getTodayPlan?mealPeriod=Lunch` eligible **13 → 14**,
+  `Millie Cartwright → top`, `skipped` unchanged at 13 (no boarding dog wrongly surfaced).
+- No sheet edits — fix is contained to this app; the master shared with the routes/van projects is untouched.
+
+**Operational note:** the master sheet's **"Lunch Y?" column now controls whether a *boarding* dog gets
+a lunch report.** To add another boarding guest at lunch, set their `Lunch Y? = Y` + a `T`/`B` pen.
+
 ## 2026-06-16 — Lunch cutoff moved 10:30 → 10:00
 
 "Add Dogs for Today" now treats **10:00** (was 10:30) as the Morning→Lunch boundary, so pressing

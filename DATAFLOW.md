@@ -118,7 +118,7 @@ edit → syncAddDog/UpdateDog/DeleteDog/MealType → enqueue {op, dogId, payload
 else Evening), then **GET `?action=getTodayPlan`**. GAS (computing "today" in `Europe/London`)
 reads your **separate White Board project**:
 - **Morning/Evening** → the check-in/out feed (who's boarding tonight / slept here last night).
-- **Lunch** → the `loadToday` roster + the master **"Jot form Dog Details"** sheet's pen column (`1OD8SQR2…`, col K), joined by dog name (exact `normName_` with a first+last-token fallback for middle/nickname spellings).
+- **Lunch** → the `loadToday` roster + the master **"Jot form Dog Details"** sheet's pen column (`1OD8SQR2…`, col K), joined by dog name (exact `normName_` with a first+last-token fallback for middle/nickname spellings). **Day-care** dogs (`Full Day`/`Half Day AM`/`Half Day PM`) are kept on pen alone. **Boarding/Boarding School** dogs are kept **only if** the master sheet's **"Lunch Y?"** column (col L) = `Y` **and** they have a `B`/`T` pen (opt-in, added 2026-06-16 / @25) — otherwise they're fed via breakfast+dinner only. Penless day-care dogs, and flagged-but-penless boarding dogs, are returned in `skipped`.
 
 It returns the dogs; the tablet skips any already on the board and drops each new dog into
 the **least-occupied eligible pen** (`pickLeastOccupiedPen`).
@@ -214,7 +214,7 @@ so `/send@BotName` works in the group) branches:
 
 - **Sheet:** `1Ejjoo55BaoCPRaLdmFb9EdqtiAT9eNa52QRWjuVThyc`
 - **Tab gids:** Lookup `0` · Session `1038940935` · Temp `1965265218`
-- **Lunch pen source (separate sheet):** master "Jot form Dog Details" `1OD8SQR2WxgO0nncXwBKYAkNv-qAhw018CXaH4kWgTDU`, Master tab gid `0`, col K (header-resolved). Old in-sheet B/T pen tab `1567330092` retired 2026-06-09.
+- **Lunch pen source (separate sheet):** master "Jot form Dog Details" `1OD8SQR2WxgO0nncXwBKYAkNv-qAhw018CXaH4kWgTDU`, Master tab gid `0`, col K = `Feeding Pen` (header-resolved, fallback index 10); col L = `Lunch Y?` (header-resolved, fallback index 11) — `Y` opts a **boarding** dog into lunch (added 2026-06-16 / @25). Old in-sheet B/T pen tab `1567330092` retired 2026-06-09.
 - **Telegram:** chat `-1003653235960`, bot id `8436854999`
 - **JotForm:** form `240143730611039`, EU instance (`eu-api.jotform.com`)
 - **n8n workflow:** `yaBIrDOVbJTEMsH9`
