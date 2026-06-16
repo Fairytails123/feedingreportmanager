@@ -2356,10 +2356,10 @@
         const PEN_ORDER = ['top-1', 'top-2', 'top-3', 'top-4', 'top-5',
                            'bottom-1', 'bottom-2', 'bottom-3', 'bottom-4', 'bottom-5'];
 
-        // Meal period from the tablet clock: <10:30 → Breakfast, 10:30–<14:00 → Lunch, ≥14:00 → Dinner.
+        // Meal period from the tablet clock: <10:00 → Breakfast, 10:00–<14:00 → Lunch, ≥14:00 → Dinner.
         function computeMealPeriod(date) {
             const mins = date.getHours() * 60 + date.getMinutes();
-            if (mins < 10 * 60 + 30) return 'Morning Meal';
+            if (mins < 10 * 60) return 'Morning Meal';
             if (mins < 14 * 60) return 'Lunch';
             return 'Evening Meal';
         }

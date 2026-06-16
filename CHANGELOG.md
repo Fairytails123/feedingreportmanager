@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-06-16 — Lunch cutoff moved 10:30 → 10:00
+
+"Add Dogs for Today" now treats **10:00** (was 10:30) as the Morning→Lunch boundary, so pressing
+**Add Dogs** at/after 10:00 adds the **lunch** roster instead of breakfast/boarding dogs.
+
+- **`index.html` `computeMealPeriod()`** — boundary changed from `mins < 10*60+30` to `mins < 10*60`
+  (`<10:00` → `Morning Meal`, `10:00–<14:00` → `Lunch`, `≥14:00` → `Evening Meal`). 14:00 dinner
+  boundary unchanged. The backend (`getTodayPlan`) just acts on the meal string the tablet sends —
+  no backend change. Verified against real source: 09:59 → Morning, 10:00/10:01/13:59 → Lunch,
+  14:00 → Evening. Frontend-only → deploys via `git push` (GitHub Pages).
+
 ## 2026-06-09 — Lunch pen join: tolerant first+last name fallback, deployed @24
 
 `Branko Rubi Steene` (booked Full Day, pen `B` in the master sheet) was being **skipped** at lunch.

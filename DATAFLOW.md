@@ -114,7 +114,7 @@ edit → syncAddDog/UpdateDog/DeleteDog/MealType → enqueue {op, dogId, payload
   only when `isOnline && queue is empty`** — i.e. only when the screen truly matches the server.
 
 ### Phase 2 — "Add Dogs for Today" (cross-project read)
-`addDogsForToday()` picks the meal from the tablet clock (`<10:30` Morning, `<14:00` Lunch,
+`addDogsForToday()` picks the meal from the tablet clock (`<10:00` Morning, `<14:00` Lunch,
 else Evening), then **GET `?action=getTodayPlan`**. GAS (computing "today" in `Europe/London`)
 reads your **separate White Board project**:
 - **Morning/Evening** → the check-in/out feed (who's boarding tonight / slept here last night).
