@@ -54,6 +54,7 @@ column = `Y` (opt-in) **AND** the row gives a `B`/`T` pen. Without the flag a bo
 excluded (its meals remain breakfast + dinner via the check-in/out feed); flagged-but-penless →
 `skipped` for visibility. **Day-care lunch is unchanged — "Lunch Y?" is NOT consulted for day-care
 dogs (pen alone decides), so there's no regression.**
+_(Superseded 2026-06-19 / @26: "Lunch Y?" now gates **all** dogs incl. day-care — see the top entry.)_
 
 ### Code (`feeding_report_backend_v2.js`, deployed @25)
 
