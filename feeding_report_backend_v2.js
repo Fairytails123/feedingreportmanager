@@ -62,7 +62,8 @@ const CONFIG = {
   PEN_SHEET_ID: '1OD8SQR2WxgO0nncXwBKYAkNv-qAhw018CXaH4kWgTDU',  // "Jot form Dog Details"
   PEN_TAB_GID: 0,               // Master tab
   PEN_COL_FALLBACK_INDEX: 10,   // column K = "Feeding Pen Top (T) OR Bottom (B)" (A=0 … K=10)
-  LUNCH_COL_FALLBACK_INDEX: 11, // column L = "Lunch Y?"  (Y ⇒ a BOARDING dog opts into a lunch report)
+  LUNCH_COL_FALLBACK_INDEX: 11, // column L = "Lunch Y?"  (Y ⇒ this dog is added to a lunch pen)
+  LASTNAME_COL_FALLBACK_INDEX: 7, // column H = "Last Name (Excel)" (owner surname; used by the name-join fallback)
   
   // JotForm Unique Names (required for URL pre-fill)
   JOTFORM_FIELDS: {
@@ -667,18 +668,18 @@ function getBoardingPlan_(mealPeriod, today) {
 }
 
 /**
- * Lunch roster from the whiteboard:
- *   • DAY-CARE dogs (Full Day / Half Day AM / Half Day PM): kept if the master pen sheet
- *     gives them B (bottom) or T (top). "Lunch Y?" is NOT consulted for them (unchanged).
- *   • BOARDING / BOARDING SCHOOL dogs: a boarding guest is fed lunch ONLY when the master
- *     sheet's "Lunch Y?" column = Y (opt-in) AND it gives a B/T pen. Without the flag a
- *     boarding dog is silently excluded — its default meals are breakfast + dinner via
- *     getBoardingPlan_, a separate feed. (Added 2026-06-16 after a boarding guest flagged
- *     Lunch Y, e.g. Millie Cartwright, was dropped by the day-care-only filter.)
- * The name join is exact (`normName_`) with a first+last-token fallback for middle/maiden-name
- * or nickname spellings the roster carries but the pen sheet omits (see `readPenMap_`).
- * Day-care dogs on the roster with no pen — and boarding dogs flagged Lunch Y but lacking a
- * pen — are returned in `skipped` for visibility.
+ * Lunch roster from the whiteboard. A dog present today (day-care OR boarding) is added to a
+ * lunch pen ONLY when the master "Jot form Dog Details" sheet flags it "Lunch Y?" = Y AND
+ * gives it a B (bottom) / T (top) pen:
+ *   • "Lunch Y?" is the staff opt-in for the LUNCH PEN-FILL window — it controls who appears
+ *     on the board at lunch, NOT whether a report is sent (that happens later on submit).
+ *   • No Y → not added, for day-care and boarding alike (since 2026-06-19; before that
+ *     day-care was pen-only and "Lunch Y?" gated boarding guests alone).
+ *   • Y but no T/B pen → can't be placed → returned in `skipped` as a data gap.
+ * The name join is exact (`normName_`) with a first+last-token fallback (ambiguity-guarded,
+ * count === 1) that also bridges roster names carrying the owner surname the master dog-name
+ * cell omits (roster "Oliver / Ollie Reed" ↔ master "Oliver", owner surname "Reed") — see
+ * `readPenMap_`.
  */
 function getLunchPlan_(today) {
   const DAYCARE = { 'Full Day': true, 'Half Day AM': true, 'Half Day PM': true };
@@ -725,17 +726,13 @@ function getLunchPlan_(today) {
     }
     const hasPen = (penGroup === 'top' || penGroup === 'bottom');
 
-    if (isDaycare) {
-      // Day-care lunch eligibility is pen alone (unchanged) — "Lunch Y?" not consulted here.
-      if (hasPen) dogs.push({ name: name, penGroup: penGroup });
-      else skipped.push(name);            // on the lunch roster but no pen → surface for visibility
-      continue;
-    }
-
-    // Boarding / Boarding School: opt-in via the master sheet's "Lunch Y?" flag only.
-    if (!wantsLunch) continue;             // boarding default = no lunch report (silent; gets breakfast+dinner)
+    // Lunch pen-fill eligibility (day-care AND boarding alike, since 2026-06-19): a dog is added
+    // to a lunch pen ONLY when the master sheet's "Lunch Y?" = Y. This is the staff opt-in for the
+    // lunch board — NOT the lunch report (that's sent later when staff submit). A pen letter
+    // without the Y flag is NOT added; the Y flag without a T/B pen can't be placed → `skipped`.
+    if (!wantsLunch) continue;             // not flagged Lunch Y → not added to a lunch pen
     if (hasPen) dogs.push({ name: name, penGroup: penGroup });
-    else skipped.push(name);              // flagged for lunch but no T/B pen → surface the data gap
+    else skipped.push(name);               // flagged Lunch Y but no T/B pen → surface the data gap
   }
 
   // Top group first, alphabetical within each group (frontend fills top-1.. / bottom-1..).
@@ -759,13 +756,17 @@ function getLunchPlan_(today) {
  * sheet (CONFIG.PEN_SHEET_ID, tab gid CONFIG.PEN_TAB_GID). Column A = Dog Name;
  * the pen column ("Feeding Pen Top (T) OR Bottom (B)") holds B / T / blank.
  *
- * Returns { map, firstLast }:
+ * Returns { map, lunchY, firstLast }:
  *   map        – { normalizedDogName: 'top' | 'bottom' } for rows with B/T (the exact join).
- *   firstLast  – { "first|last": { side, count } } over EVERY named row, powering
+ *   lunchY     – { normalizedDogName: true } for rows flagged "Lunch Y?" = Y (the lunch opt-in).
+ *   firstLast  – { "first|last": { side, lunchY, count } } over EVERY named row, powering
  *                getLunchPlan_'s tolerant fallback: a roster name with an extra middle/maiden
  *                name or nickname (e.g. "Branko Rubi Steene" vs the sheet's "Branko Steene")
  *                still resolves when its first+last tokens uniquely (count === 1) hit one
- *                pen-bearing master dog. count > 1 ⇒ ambiguous ⇒ fallback declines.
+ *                master dog. Each row is also indexed under first-name | OWNER surname (the
+ *                "Last Name (Excel)" column), because the roster frequently appends the owner
+ *                surname to a dog whose master name cell omits it (roster "Oliver / Ollie Reed"
+ *                ↔ master "Oliver", owner "Reed"). count > 1 ⇒ ambiguous ⇒ fallback declines.
  *
  * The pen column is resolved by HEADER text, not a fixed position: this master sheet is
  * shared and edited by other workflows (e.g. col J van assignments), so a column inserted
@@ -794,10 +795,11 @@ function readPenMap_() {
 
     // Resolve the pen + lunch columns by header (shared master sheet → column order not guaranteed).
     const header = data[0].map(function (h) { return (h || '').toString().toLowerCase().trim(); });
-    let penCol = -1, lunchCol = -1;
+    let penCol = -1, lunchCol = -1, lastCol = -1;
     for (let c = 0; c < header.length; c++) {
       if (penCol === -1 && header[c].indexOf('feeding pen') !== -1) penCol = c;
       if (lunchCol === -1 && header[c].indexOf('lunch') !== -1) lunchCol = c;
+      if (lastCol === -1 && header[c].indexOf('last name') !== -1) lastCol = c;
     }
     if (penCol === -1) {
       penCol = CONFIG.PEN_COL_FALLBACK_INDEX;   // column K
@@ -806,6 +808,10 @@ function readPenMap_() {
     if (lunchCol === -1) {
       lunchCol = CONFIG.LUNCH_COL_FALLBACK_INDEX;   // column L
       console.warn('[readPenMap_] "Lunch Y?" header not found; using fallback col index ' + lunchCol);
+    }
+    if (lastCol === -1) {
+      lastCol = CONFIG.LASTNAME_COL_FALLBACK_INDEX;   // column H = "Last Name (Excel)"
+      console.warn('[readPenMap_] "Last Name" header not found; using fallback col index ' + lastCol);
     }
 
     for (let i = 1; i < data.length; i++) {   // skip header; col A (index 0) = Dog Name
@@ -819,10 +825,22 @@ function readPenMap_() {
       if (side) map[nn] = side;       // blank / other → not in exact map (skipped unless fallback hits)
       if (wantsLunch) lunchY[nn] = true;
       // First+last index over every named row → tolerant fallback with an ambiguity guard.
+      // Index under BOTH the dog-name's own first|last tokens AND first-name | owner-surname
+      // (the "Last Name (Excel)" column), because the roster often appends the owner surname
+      // to a dog whose master name cell omits it (roster "Oliver / Ollie Reed" ↔ master
+      // "Oliver", owner "Reed"). Each row counts ONCE per distinct key, so the count===1
+      // ambiguity guard in getLunchPlan_ stays honest.
       const tk = nn.split(' ');
-      const fl = tk[0] + '|' + tk[tk.length - 1];
-      if (!firstLast[fl]) firstLast[fl] = { side: side, lunchY: wantsLunch, count: 1 };
-      else { firstLast[fl].count++; if (side) firstLast[fl].side = side; if (wantsLunch) firstLast[fl].lunchY = true; }
+      const ownerNN = (lastCol >= 0 && data[i][lastCol]) ? normName_(data[i][lastCol]) : '';
+      const ownerTk = ownerNN ? ownerNN.split(' ') : [];
+      const ownerLast = ownerTk.length ? ownerTk[ownerTk.length - 1] : '';
+      const flKeys = {};
+      flKeys[tk[0] + '|' + tk[tk.length - 1]] = true;        // dog-name first|last
+      if (ownerLast) flKeys[tk[0] + '|' + ownerLast] = true;  // dog first-name | owner surname
+      Object.keys(flKeys).forEach(function (fl) {
+        if (!firstLast[fl]) firstLast[fl] = { side: side, lunchY: wantsLunch, count: 1 };
+        else { firstLast[fl].count++; if (side) firstLast[fl].side = side; if (wantsLunch) firstLast[fl].lunchY = true; }
+      });
     }
   } catch (e) {
     console.warn('[readPenMap_] Failed to read pen sheet: ' + e.toString());

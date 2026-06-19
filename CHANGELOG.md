@@ -1,5 +1,43 @@
 # Changelog
 
+## 2026-06-19 — Lunch "Add Dogs" gates ALL dogs on "Lunch Y?" + owner-surname name-join, deployed @26
+
+**Reported:** at lunch, `Oliver` was missing from the pens even though the master "Jot form Dog
+Details" sheet gives him pen **B** and **Lunch Y = Y**; meanwhile `Ruby Jones`, `Ziggy Jones`,
+`Rocco`, `Barney Homewood`, `Dolly` were added despite having **no** `Y` in the Lunch column.
+
+**Two root causes** (verified against the live master sheet + `getTodayPlan('Lunch')`):
+1. **Day-care ignored "Lunch Y?".** Before today, day-care lunch eligibility was *pen alone* —
+   "Lunch Y?" only gated boarding guests (@25). So the five day-care dogs with a pen but no `Y` were
+   added by design; the owner expects `Y` to control the lunch board for everyone.
+2. **Name-join mismatch dropped Oliver.** The whiteboard roster lists him as `Oliver / Ollie Reed`
+   (Full Day) but the master dog-name cell is just `Oliver` (owner surname `Reed` lives in the
+   "Last Name (Excel)" column). Exact `normName_` missed, and the first+last fallback indexed the
+   master row as `oliver|oliver` (single-token name), so roster `oliver|reed` never matched → no pen
+   → `skipped`, not added. The same bug silently dropped `Alan Jones` (master `Alan`, pen T + Lunch Y).
+
+**Clarified intent: "Lunch Y?" is the staff opt-in for the lunch PEN-FILL window (who appears on the
+board at lunch) — NOT the report, which is still sent later on submit.**
+
+### Code (`feeding_report_backend_v2.js`, deployed @26)
+- **`getLunchPlan_`** — lunch pen-fill now requires `Lunch Y = Y` **AND** a B/T pen for **every**
+  roster dog (day-care and boarding alike). No `Y` → not added; `Y` + no pen → `skipped`. The
+  day-care-vs-boarding eligibility split is gone (service type still only filters *presence* today).
+- **`readPenMap_`** — now also resolves the **owner surname** ("Last Name (Excel)") column by header
+  (`"last name"`, fallback `LASTNAME_COL_FALLBACK_INDEX` = 7 / col H) and indexes every row under
+  **both** dog-name first|last **and** dog-first-name|owner-surname keys (deduped per row so the
+  `count === 1` ambiguity guard stays honest). Bridges `Oliver / Ollie Reed` ↔ `Oliver`, `Alan
+  Jones` ↔ `Alan`.
+- **CONFIG:** added `LASTNAME_COL_FALLBACK_INDEX: 7`.
+
+### Verification
+A headless harness loaded the actual edited source with GAS globals stubbed, fed the **live** master
+CSV + whiteboard roster, and ran `getTodayPlan('Lunch')`: 18 eligible / 0 skipped — Oliver added
+(bottom), the five named dogs excluded, Alan Jones recovered (top). Confirmed identical on the
+**live** deployment after redeploy @26 (`getSessionVersion` → `success:true`; live `getTodayPlan('Lunch')`
+matched the harness exactly). Note this also now excludes `Sonny Jalal` + `Rita Crocker` (day-care,
+pen, no `Y`) — set their "Lunch Y?" if they should appear at lunch.
+
 ## 2026-06-16 — Lunch now includes boarding guests flagged "Lunch Y", deployed @25
 
 `Millie Cartwright` was **dropped from lunch** in "Add Dogs for Today" even though the master
