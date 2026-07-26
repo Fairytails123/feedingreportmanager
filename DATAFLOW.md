@@ -31,20 +31,20 @@ intermittently**, not that a live socket dropped.
 |------|-----------|----------------|
 | **Tablet UI** | `index.html` — one self-contained HTML file (inline CSS + JS, no framework) | GitHub Pages (this repo) |
 | **GAS backend** | `feeding_report_backend_v2.js` — a `/exec` web app | Apps Script project "Feeding manager" (this file is a mirror) |
-| **Google Sheet** | 3 tabs: Lookup / Session / Temp | `1Ejjoo55BaoCPRaLdmFb9EdqtiAT9eNa52QRWjuVThyc` — the **shared state bus** |
+| **Google Sheet** | 4 tabs: Lookup / Session / Temp / Meta (hidden, GAS-owned: real session version + count, added 2026-07-26) | `1Ejjoo55BaoCPRaLdmFb9EdqtiAT9eNa52QRWjuVThyc` — the **shared state bus** |
 | **Telegram group** | review + command channel | chat `-1003653235960`, bot "Feeding report bot" (id 8436854999) |
-| **n8n workflow** | handles `/send` `/cancel` `/status` | n8n cloud, workflow `yaBIrDOVbJTEMsH9` (this JSON is a mirror) |
+| **n8n workflow** | handles `/send` `/cancel` `/status` | self-hosted VPS `auto.thefairytails.co.uk`, workflow `yaBIrDOVbJTEMsH9` (this JSON is a mirror) |
 | **JotForm** | per-dog form that emails parents | form `240143730611039`, EU instance |
-| **TV display** | read-only board mirror | separate repo `Fairytails123/frmdisplay` |
+| **TV display** | read-only board mirror | source **in this repo** (`display/display.html` + `shared/contract.js`, since 2026-07-26); published via `scripts/publish_display.sh` to the Pages repo `Fairytails123/frmdisplay` (the TV's URL) |
 | **White Board project** | roster source for "Add Dogs for Today" | a *separate* GAS app + sheet `1kQsNXee…` |
 
 ## 4. The map
 
 ```
-                        ┌──────────────────────────────────────────────┐
-                        │      GOOGLE SHEET  (the shared state bus)      │
-                        │   Lookup   │   Session (live)   │   Temp        │
-                        └──────────────────────────────────────────────┘
+                        ┌──────────────────────────────────────────────────────┐
+                        │          GOOGLE SHEET  (the shared state bus)          │
+                        │  Lookup │ Session (live) │ Temp │ Meta (version+count) │
+                        └──────────────────────────────────────────────────────┘
                                         ▲    ▲    ▲
                     only Apps Script reads/writes the Sheet
                                         │    │    │
@@ -174,23 +174,32 @@ so `/send@BotName` works in the group) branches:
 
 ## 7. GAS endpoint quick reference
 
+Since 2026-07-26 (@29): `version` is the **real monotonic Meta-tab version** (identical from both read
+endpoints; bumped by every mutation inside its script lock — deletes and clears included). Write
+responses deliberately carry **no `version`** except `clearSession` (the tablet assigns that one
+unguarded). All mutators are serialized under `LockService` (see CLAUDE.md "Session versioning is
+REAL now" for the full contract — preserve it).
+
 | Action | Method | Reads | Writes | Returns |
 |--------|--------|-------|--------|---------|
 | `getDogList` | GET/POST | Lookup | — | `{success, dogs:[{name,email,parentName}]}` |
-| `getSession` | GET/POST | Session | — | `{success, dogs:[…], mealType, version}` |
-| `getSessionVersion` | GET | Session | — | `{success, version}` (lightweight heartbeat) |
+| `getSession` | GET/POST | Session + Meta | (self-heal only) | `{success, dogs:[…], mealType, version, count}` |
+| `getSessionVersion` | GET | Session + Meta | (self-heal only) | `{success, version, count}` (lightweight heartbeat) |
 | `getTodayPlan` | GET/POST | White Board feeds + master pen sheet (col K) | — | `{success, mealPeriod, today, dogs, skipped, counts}` |
-| `addDog` | POST | — | Session (append) | `{success, dogId, version}` |
-| `updateDog` | POST | Session | Session (one row) | `{success, dogId, version}` |
-| `deleteDog` | POST | Session | Session (delete row) | `{success, dogId, version}` |
-| `setMealType` | POST | Session | Session (all rows) | `{success, mealType, version}` |
-| `submitReport` | POST | POST body / Lookup / Temp | Temp → Telegram → (cond.) clearSession | `{success, telegramSent, dogsProcessed}` |
-| `clearSession` | POST | — | Session (delete dogs, keep header) | `{success, version}` |
-| `repairTemp` | GET | Temp | Temp (rebuild header) | `{success, dogRows}` |
+| `addDog` | POST | — | Session (append) + Meta bump | `{success, dogId}` — **no version** |
+| `updateDog` | POST | Session | Session (one row) + Meta bump | `{success, dogId}` — **no version** |
+| `deleteDog` | POST | Session | Session (delete row) + Meta bump | `{success, dogId}` — **no version** (20s lock wait) |
+| `setMealType` | POST | Session | Session (all rows) + Meta bump | `{success, mealType}` — **no version** |
+| `submitReport` | POST | POST body / Lookup / Temp | Temp (locked) → Telegram → (cond.) clear + Meta bump | `{success, telegramSent, sessionCleared, dogsProcessed}` |
+| `clearSession` | POST | — | Session (delete dogs, keep header) + Meta bump | `{success, version}` — the ONE write that keeps `version` |
+| `repairTemp` | GET | Temp | Temp (rebuild header, locked) | `{success, dogRows}` |
 
 ## 8. Why it's built this way (the decisions that matter)
 
 - **Durable edit queue** → wifi can die mid-session with zero data loss; edits replay on reconnect.
+- **Real change-gated versioning (Meta tab, 2026-07-26)** → clients fetch full state only when something actually changed; the TV's adaptive refresh stopped oscillating (~26k → ~9k requests/day) and the tablet stopped re-applying state every 5s.
+- **Secrets are read lazily, never at global scope** → GAS re-evaluates globals per request, and a global Script-Properties read burned 1 of a 50k/day quota per poll — enough to fail the whole fleet mid-day.
+- **Writes are lock-serialized** → concurrent edits from two tablets can no longer land on the wrong dog's row.
 - **Submit trusts the tablet's memory, not the Sheet** → your latest taps count even if they haven't synced.
 - **Wipe only after Telegram confirms** → a failed notification never destroys a report.
 - **n8n addresses Sheet tabs by numeric `gid`, not name** → using the name throws `Sheet with ID Temp not found`; this silently broke `/send` for months.
