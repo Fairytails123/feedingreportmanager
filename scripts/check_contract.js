@@ -1,0 +1,63 @@
+/**
+ * Contract drift-check — fails (exit 1) when any surface's inline copy of a
+ * shared value diverges from shared/contract.js. Run by scripts/publish_display.sh
+ * before every display publish; run it manually after editing the tablet or the
+ * backend too:  node scripts/check_contract.js
+ *
+ * The tablet (index.html) deliberately keeps INLINE copies (it is a single
+ * self-contained, live-proven file) — this script is the tripwire that keeps
+ * those copies honest. The display defines NO copies (enforced below).
+ */
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+const root = path.join(__dirname, '..');
+const read = f => fs.readFileSync(path.join(root, f), 'utf8');
+
+const contractSrc = read('shared/contract.js');
+const tablet = read('index.html');
+const backend = read('feeding_report_backend_v2.js');
+const display = read('display/display.html');
+
+// Evaluate the contract to get canonical values
+const ctx = vm.createContext({});
+vm.runInContext(contractSrc, ctx, { filename: 'shared/contract.js' });
+const C = ctx.FRM_CONTRACT;
+
+let failures = 0;
+function check(cond, label) {
+  if (cond) { console.log('  OK    ' + label); }
+  else { failures++; console.log('  DRIFT ' + label); }
+}
+
+console.log('== contract sanity ==');
+check(C && typeof C.APPS_SCRIPT_URL === 'string' && /\/exec$/.test(C.APPS_SCRIPT_URL), 'contract exposes APPS_SCRIPT_URL (/exec)');
+check(Array.isArray(C.PEN_ORDER) && C.PEN_ORDER.length === 10, 'contract PEN_ORDER has 10 pens');
+check(Array.isArray(C.STATUS_VALUES) && C.STATUS_VALUES.length === 5, 'contract STATUS_VALUES has 5 values');
+check(typeof ctx.frmMakeGasFetch === 'function' && typeof ctx.frmSortPenByPosition === 'function', 'contract helpers present');
+
+console.log('== tablet (index.html) matches contract ==');
+check(tablet.includes(`const APPS_SCRIPT_URL = '${C.APPS_SCRIPT_URL}'`), 'tablet APPS_SCRIPT_URL identical');
+check(tablet.includes(`const FETCH_TIMEOUT_MS = ${C.FETCH_TIMEOUT_MS}`), `tablet FETCH_TIMEOUT_MS = ${C.FETCH_TIMEOUT_MS}`);
+const penListSingleLine = C.PEN_ORDER.map(p => `'${p}'`).join(', ');
+check(tablet.includes(penListSingleLine), 'tablet submit-preview penOrder identical (single-line form)');
+const penListWrapped = C.PEN_ORDER.slice(0, 5).map(p => `'${p}'`).join(', ');
+check(tablet.includes(`const PEN_ORDER = [${penListWrapped},`), 'tablet PEN_ORDER starts with the canonical top row');
+C.STATUS_VALUES.forEach(v => check(tablet.includes(`'${v}'`), `tablet knows status '${v}'`));
+
+console.log('== backend (feeding_report_backend_v2.js) matches contract ==');
+check(backend.includes(penListSingleLine) || backend.includes(C.PEN_ORDER.map(p => `'${p}'`).join(',')), 'backend penOrder/penRank identical');
+C.STATUS_VALUES.forEach(v => check(backend.includes(`'${v}'`), `backend maps status '${v}'`));
+
+console.log('== display (display/display.html) defines NO copies ==');
+check(display.includes('// @@CONTRACT@@'), 'display has the @@CONTRACT@@ injection marker');
+check(!display.includes('const APPS_SCRIPT_URL'), 'display does not define its own APPS_SCRIPT_URL');
+check(!display.includes(C.APPS_SCRIPT_URL), 'display does not hardcode the exec URL');
+check(!/pens\s*=\s*\{\s*'top-1'/.test(display), 'display builds pens from FRM_CONTRACT.PEN_ORDER, not a literal');
+check(display.includes('FRM_CONTRACT.PEN_ORDER') && display.includes('frmSortPenByPosition') && display.includes('frmMakeGasFetch(FRM_CONTRACT.FETCH_TIMEOUT_MS)'), 'display consumes the contract helpers');
+C.STATUS_VALUES.forEach(v => check(display.includes(`'${v}'`), `display STATUS_LABELS covers '${v}'`));
+
+console.log(failures === 0 ? '\nCONTRACT OK' : `\nCONTRACT DRIFT: ${failures} failure(s)`);
+process.exit(failures === 0 ? 0 : 1);

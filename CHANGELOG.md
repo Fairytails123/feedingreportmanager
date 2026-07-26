@@ -1,5 +1,45 @@
 # Changelog
 
+## 2026-07-26 — TV display consolidated into this repo (phase 2): hardened display v2 + shared contract + one-command publish
+
+**What.** The TV Feeding Display's source moved from the un-tracked OneDrive file
+(`..\Feeding report display\Feedingreport_display.html`, now renamed `.RETIRED-2026-07-26.bak` with a
+redirect-stub CLAUDE.md) into this repo as `display/display.html`, rebuilt on the tablet's hardened
+connection patterns. New `shared/contract.js` single-sources the exec URL, pen IDs, status value set,
+fetch timeout, the AbortController-wrapped `frmMakeGasFetch` (with old-TV-browser fallbacks: no
+AbortController → plain fetch; no `.finally`/`globalThis` used), and the per-pen `Position` sort. The
+tablet stays **byte-identical** (its inline copies are asserted by the new `scripts/check_contract.js`
+tripwire, which also checks the backend's penOrder/penRank and status map).
+
+**Display v2 behaviour changes** (all connection-facing; rendering/CSS/branding preserved):
+- 12s fetch abort (a hung request no longer dangles for minutes) + in-flight guards (overlapping
+  fast-mode loads can no longer apply out of order).
+- **TV-readable staleness banner**: "CONNECTION LOST / NOT LIVE — showing data from HH:MM" after 2
+  consecutive failures or >60s without a confirmed-current board; the stale pen grid stays visible
+  behind it. A change-detected probe deliberately does NOT count as confirmation — only the successful
+  full load does (prevents banner flap under partial outage).
+- A `success:false` version check is counted as a failure (was silently swallowed, dot stayed green);
+  a failed FIRST load drops to the board + banner instead of an infinite loading overlay; outages no
+  longer trigger the old "full reload every 10s" fallback (the display used to poll HARDER while down).
+- Change gating: `lastKnownVersion/Count` advance only after a successful full load, so a failed load
+  is re-detected on the next 10s probe instead of lost. Works because backend @29 serves the identical
+  Meta version from both endpoints.
+
+**Deploy pipeline** (replaces the manual 4-step clone-overwrite-push dance from an un-tracked file):
+`bash scripts/publish_display.sh "msg"` = contract drift-check → `scripts/assemble_display.js` (injects
+the contract at the `// @@CONTRACT@@` marker, LF-normalised, sanity-asserts the artifact) → clone
+`Fairytails123/frmdisplay` → commit + push. `--dry-run` stops before the clone. The TV's URL is
+unchanged (https://fairytails123.github.io/frmdisplay/); **the TV picks the new page up on its next
+browser refresh/restart**, so publishing is never an instant change to the live screen.
+
+**Verification.** 30-assertion headless harness driving the ACTUAL assembled page against the ACTUAL
+v2.1 backend (boot, idle stability, change-render-once, failed-load re-detection, in-flight guard,
+offline banner show/clear, silent-staleness banner, first-load failure recovery, swallowed-error fix,
+position sort) — 30/30. Independent adversarial review of the assembled artifact (traced every DOM id,
+timer state machine, change gate, browser-compat inventory): OK_TO_PUBLISH, 1 minor (banner flap —
+fixed pre-publish) + nits (dead `lastRenderAt` removed, "(1 min ago)" overstatement → "moments ago").
+Published to frmdisplay `9b42d7c`; served page verified via cache-busted fetch.
+
 ## 2026-07-26 — Backend v2.1 (@29): lazy token read, Meta-tab real versions, write locks (phase 1 of the tablet+TV consolidation)
 
 **Why.** An audit of "connection issues / sync delays" (prep for merging this app with the TV Feeding

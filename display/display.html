@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Feeding Report - TV Display</title>
+    <!--
+      SOURCE FILE — do not deploy this file directly.
+      The "// @@CONTRACT@@" marker below is replaced with shared/contract.js by
+      scripts/publish_display.ps1, which pushes the assembled page to the
+      Fairytails123/frmdisplay Pages repo (the TV's URL). Opening this raw source
+      in a browser will fail (FRM_CONTRACT undefined) — that is expected.
+      History: reworked 2026-07-26 (phase 2 of the tablet+TV consolidation) from
+      the original OneDrive Feedingreport_display.html: hardened fetch (12s abort),
+      in-flight guards, offline detection + TV-readable staleness banner, single
+      version source. CSS/branding preserved from the original.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-pen: #0f3460;
+            --fairy-tails-blue: #00acee;
+            --accent-secondary: #f39c12;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --status-all: #2ecc71;
+            --status-three-quarter: #9acd32;
+            --status-half: #f1c40f;
+            --status-quarter: #e67e22;
+            --status-none: #e74c3c;
+
+            /* Enhanced TV display colours for 32" Bush HD Ready */
+            --dog-name-color: #FFF8E7;
+            --dog-card-bg: #1c2a4a;
+            --status-text-color: #d0d8e8;
+            --pen-header-color: #e8c547;
+            --text-secondary-bright: #b8c0d0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Nunito', sans-serif;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+            color: var(--text-primary);
+        }
+
+        .tv-container {
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        /* Staleness / connection banner — must be readable from across the room.
+           Shown when the display has NOT confirmed the board is current recently
+           (connection lost, or polling silently failing). The stale board stays
+           visible behind it: data + explicit warning beats a blank screen. */
+        .stale-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+            padding: 14px 20px;
+            background: #c0392b;
+            color: #fff;
+            font-size: 1.6rem;
+            font-weight: 800;
+            letter-spacing: 1px;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+            box-shadow: 0 3px 12px rgba(0,0,0,0.5);
+            animation: stalePulse 1.6s infinite;
+        }
+
+        .stale-banner.visible { display: flex; }
+
+        @keyframes stalePulse {
+            0%, 100% { background: #c0392b; }
+            50% { background: #922b21; }
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-bottom: 15px;
+            border-bottom: 2px solid var(--bg-pen);
+            flex-shrink: 0;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .logo {
+            width: 60px;
+            height: 60px;
+            border-radius: 10px;
+            object-fit: cover;
+        }
+
+        .title {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--fairy-tails-blue);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        .header-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+        }
+
+        .meal-display {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--accent-secondary);
+            background: var(--bg-pen);
+            padding: 8px 20px;
+            border-radius: 8px;
+        }
+
+        .status-display {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .refresh-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .refresh-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--status-all);
+            animation: pulse 2s infinite;
+        }
+
+        .refresh-dot.syncing {
+            background: var(--fairy-tails-blue);
+            animation: pulse 0.5s infinite;
+        }
+
+        .refresh-dot.error {
+            background: var(--status-none);
+            animation: none;
+        }
+
+        .refresh-dot.fast-mode {
+            background: var(--accent-secondary);
+            animation: fastPulse 0.8s infinite;
+        }
+
+        @keyframes fastPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.4); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(1.2); }
+        }
+
+        /* Pens Grid */
+        .pens-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding-top: 15px;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .pen-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .pen-section-label {
+            font-weight: 700;
+            color: var(--accent-secondary);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 10px;
+            flex-shrink: 0;
+            font-size: 1.1rem;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+
+        .pen-row {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 15px;
+            min-height: 0;
+        }
+
+        .pen {
+            background: var(--bg-pen);
+            border-radius: 12px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .pen-header {
+            font-weight: 700;
+            text-align: center;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 8px;
+            flex-shrink: 0;
+            color: var(--pen-header-color);
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .pen-dogs {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            overflow: hidden;
+        }
+
+        .pen-empty {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-style: italic;
+            color: var(--text-secondary-bright);
+            opacity: 0.4;
+        }
+
+        /* Dog Cards */
+        .dog-card {
+            border-radius: 8px;
+            padding: 8px 10px;
+            border-left: 4px solid var(--status-all);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            flex-shrink: 0;
+            background: var(--dog-card-bg);
+            border-left-width: 5px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .dog-card.status-all { border-left-color: var(--status-all); }
+        .dog-card.status-three-quarter { border-left-color: var(--status-three-quarter); }
+        .dog-card.status-half { border-left-color: var(--status-half); }
+        .dog-card.status-quarter { border-left-color: var(--status-quarter); }
+        .dog-card.status-none { border-left-color: var(--status-none); }
+
+        .dog-name {
+            font-size: 0.85rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+            color: var(--dog-name-color);
+            font-weight: 800;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+            letter-spacing: 0.3px;
+        }
+
+        .dog-indicators {
+            display: flex;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+
+        .indicator {
+            font-size: 0.6rem;
+            padding: 2px 5px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+
+        .indicator-p {
+            background: var(--fairy-tails-blue);
+            color: white;
+        }
+
+        .indicator-s {
+            background: var(--accent-secondary);
+            color: white;
+        }
+
+        .dog-status {
+            font-size: 0.7rem;
+            flex-shrink: 0;
+            color: var(--status-text-color);
+            font-weight: 700;
+        }
+
+        /* Footer Stats */
+        .footer {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            padding-top: 15px;
+            border-top: 2px solid var(--bg-pen);
+            flex-shrink: 0;
+            margin-top: 10px;
+        }
+
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 1rem;
+        }
+
+        .stat-value {
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: var(--fairy-tails-blue);
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+        }
+
+        /* Dynamic Scaling Based on Dog Count — tiers tuned for a 32" HD Ready TV */
+        .scale-xl .dog-card { padding: 14px 18px; }
+        .scale-xl .dog-name { font-size: 1.6rem; }
+        .scale-xl .indicator { font-size: 0.85rem; padding: 4px 8px; }
+        .scale-xl .dog-status { font-size: 1.1rem; }
+        .scale-xl .pen-dogs { gap: 12px; }
+
+        .scale-lg .dog-card { padding: 12px 15px; }
+        .scale-lg .dog-name { font-size: 1.35rem; }
+        .scale-lg .indicator { font-size: 0.75rem; padding: 3px 7px; }
+        .scale-lg .dog-status { font-size: 0.95rem; }
+        .scale-lg .pen-dogs { gap: 10px; }
+
+        .scale-md .dog-card { padding: 10px 13px; }
+        .scale-md .dog-name { font-size: 1.15rem; }
+        .scale-md .indicator { font-size: 0.7rem; padding: 3px 6px; }
+        .scale-md .dog-status { font-size: 0.85rem; }
+        .scale-md .pen-dogs { gap: 8px; }
+
+        .scale-sm .dog-card { padding: 8px 10px; }
+        .scale-sm .dog-name { font-size: 0.95rem; }
+        .scale-sm .indicator { font-size: 0.6rem; padding: 2px 5px; }
+        .scale-sm .dog-status { font-size: 0.75rem; }
+        .scale-sm .pen-dogs { gap: 6px; }
+
+        .scale-xs .dog-card { padding: 6px 8px; }
+        .scale-xs .dog-name { font-size: 0.8rem; }
+        .scale-xs .indicator { font-size: 0.55rem; padding: 2px 4px; }
+        .scale-xs .dog-status { font-size: 0.65rem; }
+        .scale-xs .pen-dogs { gap: 4px; }
+
+        /* Loading State */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--bg-primary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            z-index: 1000;
+            transition: opacity 0.5s ease;
+        }
+
+        .loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loading-logo {
+            width: 120px;
+            height: 120px;
+            border-radius: 20px;
+            animation: pulse 1.5s infinite;
+        }
+
+        .loading-text {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--fairy-tails-blue);
+        }
+    </style>
+</head>
+<body>
+    <!-- Staleness / connection banner (hidden while confirmed live) -->
+    <div class="stale-banner" id="staleBanner">
+        <span>⚠</span>
+        <span id="staleBannerText">NOT LIVE</span>
+        <span>⚠</span>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <img src="https://i.ibb.co/whdBKp0L/Logo-1.jpg" alt="Fairy Tails" class="loading-logo">
+        <div class="loading-text">Loading Feeding Report...</div>
+    </div>
+
+    <div class="tv-container" id="tvContainer">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <img src="https://i.ibb.co/whdBKp0L/Logo-1.jpg" alt="Fairy Tails" class="logo">
+                <div class="title">🍽️ Feeding Report</div>
+            </div>
+            <div class="header-right">
+                <div class="meal-display" id="mealDisplay">Loading...</div>
+                <div class="status-display">
+                    <div class="refresh-indicator">
+                        <div class="refresh-dot" id="refreshDot"></div>
+                        <span id="statusText">Connecting...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pens Container -->
+        <div class="pens-container" id="pensContainer">
+            <!-- Populated by JavaScript -->
+        </div>
+
+        <!-- Footer Stats -->
+        <div class="footer">
+            <div class="stat">
+                <span class="stat-value" id="totalDogs">0</span>
+                <span class="stat-label">Dogs Today</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value" id="pensUsed">0</span>
+                <span class="stat-label">Pens Used</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value" id="lastUpdate">--:--</span>
+                <span class="stat-label">Last Update</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+// @@CONTRACT@@
+    </script>
+    <script>
+        // ============================================
+        // CONFIGURATION (display-local: presentation + cadence)
+        // ============================================
+        // Endpoint, pen scheme, status value set, fetch timeout and the position
+        // sort all come from the injected FRM_CONTRACT block above — this file
+        // must not define its own copies (scripts/check_contract.js enforces it).
+
+        const VERSION_CHECK_INTERVAL = 10000; // normal mode: lightweight version probe
+        const FAST_REFRESH_INTERVAL = 3000;   // fast mode: full reload cadence
+        const FAST_MODE_DURATION = 30000;     // fast mode auto-reverts after this
+        const STALE_AFTER_MS = 60000;         // banner when nothing confirmed for this long
+        const OFFLINE_THRESHOLD = 2;          // consecutive failures before "connection lost"
+        const BANNER_TICK_MS = 5000;          // staleness banner refresh cadence
+        const REFRESH_MODE_NORMAL = 'normal';
+        const REFRESH_MODE_FAST = 'fast';
+
+        // Per-surface presentation of the contract's status VALUES (tablet shows
+        // ASCII fractions, the TV shows glyphs — only the value set is shared).
+        const STATUS_LABELS = {
+            'all': 'All',
+            'three-quarter': '¾',
+            'half': '½',
+            'quarter': '¼',
+            'none': 'None'
+        };
+
+        const gasFetch = frmMakeGasFetch(FRM_CONTRACT.FETCH_TIMEOUT_MS);
+
+        // ============================================
+        // STATE
+        // ============================================
+
+        let dogs = [];
+        const pens = {};
+        FRM_CONTRACT.PEN_ORDER.forEach(penId => { pens[penId] = []; });
+
+        let currentMealType = 'Loading...';
+        let isFirstLoad = true;
+
+        // Change gating: advanced ONLY after a successful full load, so a failed
+        // load is re-detected on the next version check instead of lost.
+        let lastKnownVersion = 0;
+        let lastKnownCount = -1;
+
+        // Connection health
+        let consecutiveFailures = 0;
+        let lastSuccessAt = Date.now();   // last successful fetch of ANY kind (boot grace)
+
+        // In-flight guards — slow GAS responses must not stack overlapping
+        // requests (the pre-2026-07-26 display had none and could apply
+        // out-of-order responses).
+        let loadInFlight = false;
+        let versionCheckInFlight = false;
+
+        let currentRefreshMode = REFRESH_MODE_NORMAL;
+        let refreshTimer = null;
+        let versionCheckTimer = null;
+        let fastModeTimer = null;
+
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderPensStructure();
+            loadData();
+            startAutoRefresh();
+            setInterval(updateStaleBanner, BANNER_TICK_MS);
+        });
+
+        function renderPensStructure() {
+            const container = document.getElementById('pensContainer');
+            const penCell = penId => {
+                const label = penId.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                return `
+                    <div class="pen" id="pen-${penId}">
+                        <div class="pen-header">${label}</div>
+                        <div class="pen-dogs" id="dogs-${penId}"></div>
+                    </div>
+                `;
+            };
+            const top = FRM_CONTRACT.PEN_ORDER.filter(p => p.indexOf('top-') === 0);
+            const bottom = FRM_CONTRACT.PEN_ORDER.filter(p => p.indexOf('bottom-') === 0);
+            container.innerHTML = `
+                <div class="pen-section">
+                    <div class="pen-section-label">Top Pens</div>
+                    <div class="pen-row" id="topPensRow">${top.map(penCell).join('')}</div>
+                </div>
+                <div class="pen-section">
+                    <div class="pen-section-label">Bottom Pens</div>
+                    <div class="pen-row" id="bottomPensRow">${bottom.map(penCell).join('')}</div>
+                </div>
+            `;
+        }
+
+        // ============================================
+        // CONNECTION HEALTH
+        // ============================================
+
+        function noteSuccess() {
+            consecutiveFailures = 0;
+            lastSuccessAt = Date.now();
+            updateStaleBanner();
+        }
+
+        function noteFailure(message) {
+            consecutiveFailures++;
+            // A failed FIRST load must not leave the loading overlay up forever —
+            // drop to the (empty) board + banner and keep retrying on the timers.
+            if (isFirstLoad) {
+                hideLoadingOverlay();
+                isFirstLoad = false;
+            }
+            setRefreshStatus('error', message);
+            updateStaleBanner();
+        }
+
+        function updateStaleBanner() {
+            const banner = document.getElementById('staleBanner');
+            const text = document.getElementById('staleBannerText');
+            const disconnected = consecutiveFailures >= OFFLINE_THRESHOLD;
+            const unconfirmedMs = Date.now() - lastSuccessAt;
+            const stale = unconfirmedMs > STALE_AFTER_MS;
+
+            if (!disconnected && !stale) {
+                banner.classList.remove('visible');
+                return;
+            }
+
+            const ageMin = Math.round(unconfirmedMs / 60000);
+            const ageText = ageMin < 1 ? 'moments ago' : ageMin + ' min ago';
+            const asOf = new Date(lastSuccessAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+            text.textContent = (disconnected ? 'CONNECTION LOST — ' : 'NOT LIVE — ')
+                + 'showing data from ' + asOf + ' (' + ageText + ')';
+            banner.classList.add('visible');
+        }
+
+        // ============================================
+        // DATA LOADING
+        // ============================================
+
+        async function loadData() {
+            if (loadInFlight) return;
+            loadInFlight = true;
+            setRefreshStatus('syncing');
+
+            try {
+                const response = await gasFetch(FRM_CONTRACT.APPS_SCRIPT_URL + '?action=getSession', {
+                    method: 'GET',
+                    redirect: 'follow'
+                });
+                const result = await response.json();
+
+                if (result && result.success) {
+                    applyData(result);
+                    if (typeof result.version === 'number') lastKnownVersion = result.version;
+                    if (typeof result.count === 'number') lastKnownCount = result.count;
+                    noteSuccess();
+                    if (isFirstLoad) {
+                        hideLoadingOverlay();
+                        isFirstLoad = false;
+                    }
+                    setRefreshStatus('connected');
+                } else {
+                    noteFailure('Data error');
+                }
+            } catch (error) {
+                console.error('Load error:', error);
+                noteFailure('Connection error');
+            } finally {
+                loadInFlight = false;
+            }
+        }
+
+        function applyData(result) {
+            currentMealType = result.mealType || 'Lunch';
+            document.getElementById('mealDisplay').textContent = '🕐 ' + currentMealType;
+
+            dogs = result.dogs || [];
+
+            for (const penId of FRM_CONTRACT.PEN_ORDER) {
+                pens[penId] = [];
+            }
+            dogs.forEach(dog => {
+                if (dog.penId && pens[dog.penId]) {
+                    pens[dog.penId].push(dog);
+                }
+            });
+
+            // Within-pen feeding order — same stable position sort as the tablet.
+            for (const penId of FRM_CONTRACT.PEN_ORDER) {
+                frmSortPenByPosition(pens[penId]);
+            }
+
+            renderAllPens();
+            updateStats();
+            calculateScale();
+        }
+
+        function renderAllPens() {
+            for (const penId of FRM_CONTRACT.PEN_ORDER) {
+                renderPen(penId);
+            }
+        }
+
+        function renderPen(penId) {
+            const container = document.getElementById(`dogs-${penId}`);
+            const penDogs = pens[penId];
+
+            if (penDogs.length === 0) {
+                container.innerHTML = '<div class="pen-empty">Empty</div>';
+                return;
+            }
+
+            container.innerHTML = penDogs.map(dog => {
+                const displayName = dog.matchedName || dog.inputName || 'Unknown';
+                const statusLabel = STATUS_LABELS[dog.status] || dog.status;
+
+                let indicators = '';
+                if (dog.prescription) {
+                    indicators += '<span class="indicator indicator-p">+P</span>';
+                }
+                if (dog.supplements) {
+                    indicators += '<span class="indicator indicator-s">+S</span>';
+                }
+
+                return `
+                    <div class="dog-card status-${dog.status || 'all'}">
+                        <span class="dog-name">${displayName}</span>
+                        <div class="dog-indicators">${indicators}</div>
+                        <span class="dog-status">${statusLabel}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateStats() {
+            let totalDogs = 0;
+            let pensUsed = 0;
+
+            for (const penDogs of Object.values(pens)) {
+                totalDogs += penDogs.length;
+                if (penDogs.length > 0) pensUsed++;
+            }
+
+            document.getElementById('totalDogs').textContent = totalDogs;
+            document.getElementById('pensUsed').textContent = pensUsed;
+            document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('en-GB', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // ============================================
+        // DYNAMIC SCALING
+        // ============================================
+
+        function calculateScale() {
+            const container = document.getElementById('tvContainer');
+            container.classList.remove('scale-xl', 'scale-lg', 'scale-md', 'scale-sm', 'scale-xs');
+
+            let maxDogsInPen = 0;
+            for (const penDogs of Object.values(pens)) {
+                if (penDogs.length > maxDogsInPen) {
+                    maxDogsInPen = penDogs.length;
+                }
+            }
+
+            let scaleClass;
+            if (maxDogsInPen <= 2) {
+                scaleClass = 'scale-xl';
+            } else if (maxDogsInPen <= 3) {
+                scaleClass = 'scale-lg';
+            } else if (maxDogsInPen <= 4) {
+                scaleClass = 'scale-md';
+            } else if (maxDogsInPen <= 6) {
+                scaleClass = 'scale-sm';
+            } else {
+                scaleClass = 'scale-xs';
+            }
+
+            container.classList.add(scaleClass);
+        }
+
+        // ============================================
+        // AUTO REFRESH (adaptive, version-gated)
+        // ============================================
+        // Normal mode: getSessionVersion every 10s. On a confirmed change: full
+        // load + fast mode (full reload every 3s) for 30s, then revert.
+        // Since backend @29 both endpoints serve the SAME Meta-tab version, so an
+        // idle board stays in normal mode (pre-@29 the mismatched version sources
+        // kept this loop permanently in fast mode).
+        // On failure: count it (banner) but do NOT fall back to full loads — the
+        // old display polled HARDER during outages.
+
+        function startAutoRefresh() {
+            if (refreshTimer) clearInterval(refreshTimer);
+            if (versionCheckTimer) clearInterval(versionCheckTimer);
+            if (fastModeTimer) clearTimeout(fastModeTimer);
+
+            currentRefreshMode = REFRESH_MODE_NORMAL;
+            startVersionPolling();
+
+            console.log('[Adaptive Refresh] Started in normal mode — version check every ' + (VERSION_CHECK_INTERVAL / 1000) + 's');
+        }
+
+        function startVersionPolling() {
+            if (versionCheckTimer) clearInterval(versionCheckTimer);
+            if (refreshTimer) clearInterval(refreshTimer);
+
+            versionCheckTimer = setInterval(() => {
+                checkForVersionChange();
+            }, VERSION_CHECK_INTERVAL);
+        }
+
+        async function checkForVersionChange() {
+            if (versionCheckInFlight || loadInFlight) return;
+            versionCheckInFlight = true;
+
+            try {
+                const response = await gasFetch(FRM_CONTRACT.APPS_SCRIPT_URL + '?action=getSessionVersion', {
+                    method: 'GET',
+                    redirect: 'follow'
+                });
+                const result = await response.json();
+
+                if (result && result.success) {
+                    const versionChanged = result.version !== lastKnownVersion;
+                    const countChanged = result.count !== lastKnownCount;
+
+                    if (versionChanged || countChanged) {
+                        console.log('[Adaptive Refresh] Data change detected! Version: ' + lastKnownVersion + ' → ' + result.version + ', Count: ' + lastKnownCount + ' → ' + result.count);
+                        // Deliberately NO noteSuccess here: this probe just proved the
+                        // board is STALE — only the successful full load confirms live
+                        // (otherwise a failing getSession behind a healthy version
+                        // probe would flap the banner and reset its timestamp).
+                        // lastKnownVersion/Count advance only when the full load
+                        // SUCCEEDS — a failed load re-detects on the next check.
+                        loadData();
+                        switchToFastMode();
+                    } else {
+                        noteSuccess(false);
+                    }
+                } else {
+                    // Pre-2026-07-26 this case was silently swallowed (dot stayed
+                    // green while the board went stale). Count it.
+                    noteFailure('Data error');
+                }
+            } catch (error) {
+                console.error('[Adaptive Refresh] Version check error:', error);
+                noteFailure('Connection error');
+            } finally {
+                versionCheckInFlight = false;
+            }
+        }
+
+        function switchToFastMode() {
+            if (currentRefreshMode === REFRESH_MODE_FAST) {
+                if (fastModeTimer) clearTimeout(fastModeTimer);
+                console.log('[Adaptive Refresh] Fast mode extended — resetting timeout');
+            } else {
+                currentRefreshMode = REFRESH_MODE_FAST;
+
+                if (versionCheckTimer) clearInterval(versionCheckTimer);
+                versionCheckTimer = null;
+
+                if (refreshTimer) clearInterval(refreshTimer);
+                refreshTimer = setInterval(() => {
+                    loadData();
+                }, FAST_REFRESH_INTERVAL);
+
+                console.log('[Adaptive Refresh] ⚡ Switched to FAST mode — full refresh every ' + (FAST_REFRESH_INTERVAL / 1000) + 's');
+            }
+
+            updateRefreshModeDisplay();
+
+            fastModeTimer = setTimeout(() => {
+                switchToNormalMode();
+            }, FAST_MODE_DURATION);
+        }
+
+        function switchToNormalMode() {
+            currentRefreshMode = REFRESH_MODE_NORMAL;
+
+            if (refreshTimer) clearInterval(refreshTimer);
+            refreshTimer = null;
+
+            if (fastModeTimer) clearTimeout(fastModeTimer);
+            fastModeTimer = null;
+
+            startVersionPolling();
+            updateRefreshModeDisplay();
+
+            console.log('[Adaptive Refresh] 🔄 Reverted to NORMAL mode — version check every ' + (VERSION_CHECK_INTERVAL / 1000) + 's');
+        }
+
+        function updateRefreshModeDisplay() {
+            const text = document.getElementById('statusText');
+            const dot = document.getElementById('refreshDot');
+
+            dot.className = 'refresh-dot';
+
+            if (currentRefreshMode === REFRESH_MODE_FAST) {
+                text.textContent = 'Live • ⚡ Rapid sync 3s';
+                dot.classList.add('fast-mode');
+            } else {
+                text.textContent = 'Live • Auto-refresh 10s';
+            }
+        }
+
+        function setRefreshStatus(status, message = null) {
+            const dot = document.getElementById('refreshDot');
+            const text = document.getElementById('statusText');
+
+            dot.className = 'refresh-dot';
+
+            switch (status) {
+                case 'syncing':
+                    dot.classList.add('syncing');
+                    text.textContent = 'Refreshing...';
+                    break;
+                case 'connected':
+                    updateRefreshModeDisplay();
+                    break;
+                case 'error':
+                    dot.classList.add('error');
+                    text.textContent = message || 'Error';
+                    break;
+            }
+        }
+
+        function hideLoadingOverlay() {
+            const overlay = document.getElementById('loadingOverlay');
+            overlay.classList.add('hidden');
+            setTimeout(() => {
+                overlay.style.display = 'none';
+            }, 500);
+        }
+    </script>
+</body>
+</html>
