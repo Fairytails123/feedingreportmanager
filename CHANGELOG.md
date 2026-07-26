@@ -1,5 +1,51 @@
 # Changelog
 
+## 2026-07-26 — Backend v2.1 (@29): lazy token read, Meta-tab real versions, write locks (phase 1 of the tablet+TV consolidation)
+
+**Why.** An audit of "connection issues / sync delays" (prep for merging this app with the TV Feeding
+Display) found three backend defects: (1) the bot-token Script-Properties read ran at **global scope**,
+costing 1 read per request against the **50,000/day quota** — an always-on fleet (~30k/day per tablet +
+~26k/day TV) could exhaust it mid-day, failing **every** endpoint at once (the whole fleet "loses
+connection" simultaneously); (2) `getSession` returned `version: Date.now()` (always fresh) while
+`getSessionVersion` returned max `Last_Updated` — the TV display stores the former and compares against
+the latter, which can **never match**, locking the TV in a permanent ~40s fast-mode loop (~26k full-sheet
+reads/day instead of the designed ~8.6k, even overnight on an empty board); (3) no write serialization —
+concurrent edits from two tablets could shift an update/meal-type write onto the **wrong dog's row**.
+
+**Fix (all in `feeding_report_backend_v2.js`, deployed @29 on the same `/exec` URL):**
+- **Lazy token**: `_secret_('TELEGRAM_BOT_TOKEN')` is called only inside `sendTelegramSummary`/`testTelegram`
+  (~1 Properties read per submit, was 1 per request). Never reintroduce a global-scope read.
+- **Real versions**: new hidden GAS-owned **Meta** tab (`A2` version, `B2` count). Every mutation bumps
+  `max(now, stored+1)` inside its lock — **including deletes and clears**. Both read endpoints return the
+  identical Meta version, with aligned non-empty-`Dog_ID` counts. Out-of-band count changes (n8n `/cancel`
+  whole-tab wipe, manual row edits) self-heal on the next read (count drift → bump → all clients refetch).
+  **Response contract:** `addDog/updateDog/deleteDog/setMealType` responses carry **no `version`** (the
+  tablet's guarded `flushQueue` must not advance `lastSyncVersion` past never-applied remote edits — this
+  also fixes a reconnect edge where another device's offline-window edits were skipped); `clearSession`
+  **keeps** `version` (tablet assigns it unguarded).
+- **Write locks**: `withScriptLock_` around all five session mutators + `submitReport`'s Temp rebuild +
+  `clearTempTab`/`repairTemp`. `deleteDog` waits **20s** (> the tablet's 12s abort) so lock contention
+  becomes a client-side retry, never a rejection the tablet would dequeue as "already gone" (dog
+  resurrection). Telegram send stays **outside** the lock. Bumps after landed writes are best-effort
+  (`tryBumpSessionVersion_`) so a Meta hiccup can't turn into a duplicate-append retry. `submitReport`
+  retries a failed post-Telegram clear once and reports `sessionCleared` (additive field).
+
+**Effect on the fleet (no client was changed — tablet + TV are byte-identical):** the tablet's
+`version > lastSyncVersion` poll gate became genuinely change-gated (applyRemoteState only on real
+changes); the TV's adaptive refresh stabilised (idle = one cheap version check per 10s, full reload only
+on change — ~65% fewer TV requests); the mid-day whole-fleet quota outage mode is gone.
+
+**Verification.** 54-assertion headless Node harness against the real backend source AND the real TV
+display script (endpoints agree, per-mutation bumps, response contract, wipe self-heal, lock contention,
+offline-reconnect merge, display stabilisation, review-fix hardening) — 54/54. Two-agent adversarial
+review of the diff (0 blockers; 4 minors found and fixed pre-deploy). Live smoke @29: ping shows v2.1,
+add→update→delete cycle bumps and agrees across both endpoints at every step, repeated idle reads stable,
+`clearSession` returns numeric version, stale staged Temp row untouched. One stale old-code response was
+observed during the ~1-min redeploy overlap (expected, converges).
+
+**Follow-ups:** phase 2 = contract-only merge of the TV display into this repo (hardened fetch + staleness
+banner on the TV, single-sourced constants, scripted publish to the existing `frmdisplay` Pages URL).
+
 ## 2026-07-06 — Submit 401 fixed: GAS Script Property updated to the rotated bot token (@27→@28)
 
 **Reported:** every tablet submit failed with `❌ Submit failed: Telegram delivery failed:

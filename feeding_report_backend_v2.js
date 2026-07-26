@@ -1,13 +1,14 @@
 /**
  * Feeding Report Manager - Google Apps Script Backend
- * VERSION 2.0 - Real-Time Sync Edition
- * 
+ * VERSION 2.1 - Real Versions + Write Locks Edition
+ *
  * Sheet ID: 1Ejjoo55BaoCPRaLdmFb9EdqtiAT9eNa52QRWjuVThyc
- * Tabs: Lookup (permanent), Session (real-time sync), Temp (submission staging)
- * 
+ * Tabs: Lookup (permanent), Session (real-time sync), Temp (submission staging),
+ *       Meta (GAS-owned, hidden: real session version + row count for change-gated polling)
+ *
  * TEMP TAB COLUMNS (7 columns):
  * Dog Name | Parent Email | Meal | Food Consumed | Medicine Supplement | Supplement Types | Comments
- * 
+ *
  * SESSION TAB COLUMNS (13 columns):
  * Dog_ID | Input_Name | Matched_Name | Possible_Matches | Status | Prescription |
  * Prescription_Comment | Supplements | Supplement_Types | Pen_ID | Last_Updated | Meal_Type | Position
@@ -30,9 +31,14 @@
 // Script Properties (key TELEGRAM_BOT_TOKEN). _secret_() returns '' if the property is
 // unset — the Telegram send sites then fail loud rather than building a malformed URL.
 // To set/rotate: Project Settings → Script Properties (or PropertiesService.setProperty).
-var _SCRIPT_PROPS = PropertiesService.getScriptProperties();
+//
+// ⚠️ Lazy by design (2026-07-26). PropertiesService must NOT be touched at global scope:
+// GAS re-evaluates globals on EVERY web-app request, and Properties reads have a
+// 50,000/day quota — a global read cost 1 per poll (~30k/day per always-on device) and
+// could exhaust the quota mid-day, failing every endpoint at once for the rest of the
+// day. _secret_() is called only inside the Telegram send paths (~1 read per submit).
 function _secret_(key) {
-  return _SCRIPT_PROPS.getProperty(key) || '';
+  return PropertiesService.getScriptProperties().getProperty(key) || '';
 }
 
 const CONFIG = {
@@ -40,8 +46,10 @@ const CONFIG = {
   LOOKUP_TAB: 'Lookup',
   SESSION_TAB: 'Session',
   TEMP_TAB: 'Temp',
-  
-  TELEGRAM_BOT_TOKEN: _secret_('TELEGRAM_BOT_TOKEN'),   // from Script Properties (not inline)
+  META_TAB: 'Meta',   // GAS-owned hidden tab: A2 = session version, B2 = session row count
+
+  // TELEGRAM_BOT_TOKEN deliberately NOT read here — see the lazy _secret_() note above.
+  // The send paths call _secret_('TELEGRAM_BOT_TOKEN') at send time.
   TELEGRAM_CHAT_ID: '-1003653235960',                   // group id — not a secret, left inline
 
   JOTFORM_ID: '240143730611039',
@@ -135,7 +143,7 @@ function doGet(e) {
         result = repairTemp();
         break;
       default:
-        result = { success: true, status: 'ok', message: 'Feeding Report API v2.0 - Real-Time Sync' };
+        result = { success: true, status: 'ok', message: 'Feeding Report API v2.1 - Real Versions + Write Locks' };
     }
     
     return ContentService
@@ -235,6 +243,134 @@ function ensureSessionTab() {
   return sheet;
 }
 
+// ============================================
+// SESSION VERSION META (real change detection)
+// ============================================
+// Before 2026-07-26 getSessionState returned version = Date.now() (always fresh), so no
+// polling client could ever gate on "did anything change" — and the TV display's adaptive
+// refresh oscillated permanently because getSession's fake version never matched
+// getSessionVersion's real one. The Meta tab fixes this: a single monotonic version
+// (A2) + the session row count (B2), bumped INSIDE every mutation's lock. Both read
+// endpoints return the same value, so clients can skip work when nothing changed.
+//
+// Out-of-band edits (n8n /cancel's whole-sheet Session clear, a manual row add/delete in
+// the Sheets UI) don't go through these mutators — the reads self-heal: when the actual
+// row count drifts from Meta's stored count, the version is bumped so every client
+// refetches. (An in-place cell edit made directly in the Sheets UI does not change the
+// count and is NOT detected — any tablet edit afterwards propagates it.)
+
+/** Ensure the hidden Meta tab exists. Row 1 header, row 2 = [version, count]. */
+function ensureMetaTab_(ss) {
+  let sheet = ss.getSheetByName(CONFIG.META_TAB);
+  if (!sheet) {
+    // Reads reach here unlocked, so two first-requests can race the null check —
+    // the loser's insertSheet throws "already exists"; recover by re-getting. If the
+    // rival hasn't seeded row 2 yet, readMeta_ sees version 0 and self-heal mints one.
+    try {
+      sheet = ss.insertSheet(CONFIG.META_TAB);
+      sheet.getRange(1, 1, 1, 3).setValues([['Session_Version', 'Session_Count', 'GAS-owned — do not edit']]);
+      sheet.getRange(2, 1, 1, 2).setValues([[new Date().getTime(), 0]]);
+      try { sheet.hideSheet(); } catch (e) { /* hiding is cosmetic — never fail a request over it */ }
+    } catch (e) {
+      sheet = ss.getSheetByName(CONFIG.META_TAB);
+      if (!sheet) throw e;
+    }
+  }
+  return sheet;
+}
+
+/** Read the stored session version + count from Meta. */
+function readMeta_(ss) {
+  const sheet = ensureMetaTab_(ss);
+  const vals = sheet.getRange(2, 1, 1, 2).getValues()[0];
+  return { version: Number(vals[0]) || 0, count: Number(vals[1]) || 0 };
+}
+
+/**
+ * Advance the session version and store the current row count.
+ * Monotonic even under same-millisecond writes (max(now, stored+1)).
+ * Call only while holding the script lock (mutators) or the tryLock in
+ * currentSessionVersion_'s self-heal path.
+ */
+function bumpSessionVersion_(ss, actualCount) {
+  const sheet = ensureMetaTab_(ss);
+  const stored = Number(sheet.getRange(2, 1).getValue()) || 0;
+  const version = Math.max(new Date().getTime(), stored + 1);
+  sheet.getRange(2, 1, 1, 2).setValues([[version, actualCount]]);
+  return version;
+}
+
+/**
+ * Best-effort bump for use AFTER an irreversible sheet mutation has already landed.
+ * A thrown bump must never fail the request: the tablet's queue would retry the op and
+ * (for add) append a DUPLICATE row. A missed bump on add/delete self-heals via the
+ * count-drift path; on update/setMealType it merely delays propagation until the next
+ * mutation — both strictly better than rejecting a write that already happened.
+ */
+function tryBumpSessionVersion_(ss, actualCount) {
+  try {
+    return bumpSessionVersion_(ss, actualCount);
+  } catch (e) {
+    console.warn('[tryBumpSessionVersion_] bump failed after a landed mutation — relying on drift self-heal: ' + e);
+    return null;
+  }
+}
+
+/** Count real session rows (non-empty Dog_ID) — the same predicate getSessionState uses. */
+function countSessionRows_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return 0;
+  const ids = sheet.getRange(2, CONFIG.SESSION_COLS.DOG_ID + 1, lastRow - 1, 1).getValues();
+  let n = 0;
+  for (let i = 0; i < ids.length; i++) {
+    if (ids[i][0]) n++;
+  }
+  return n;
+}
+
+/**
+ * The version both read endpoints return. Self-heals out-of-band count drift under a
+ * NON-BLOCKING lock: if a mutation currently holds the lock it will bump the version
+ * itself, so the read just returns the stored value and lets the next poll converge.
+ */
+function currentSessionVersion_(ss, actualCount) {
+  const meta = readMeta_(ss);
+  if (meta.version && meta.count === actualCount) {
+    return meta.version;
+  }
+  const lock = LockService.getScriptLock();
+  if (lock.tryLock(0)) {
+    try {
+      return bumpSessionVersion_(ss, actualCount);
+    } finally {
+      lock.releaseLock();
+    }
+  }
+  return meta.version || 1;  // never 0/falsy — clients truthy-check version
+}
+
+/**
+ * Serialize a mutation under the script lock. Closes the cross-device row-shift race:
+ * locate-row + write + version bump happen atomically, so a concurrent add/delete can't
+ * shift an update onto the wrong dog's row. A lock timeout surfaces as an op-level
+ * rejection ({success:false}), which the tablet's queue already retries.
+ * NOTE: locks serialize GAS executions only — n8n's own Sheets writes bypass them
+ * (covered by the count-drift self-heal above).
+ */
+function withScriptLock_(label, fn, waitMs) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(waitMs || 10000);
+  } catch (e) {
+    return { success: false, error: 'Server busy, please retry (' + label + ')' };
+  }
+  try {
+    return fn();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 /**
  * Safely parse a JSON string, returning a fallback value if parsing fails.
  * Prevents a single corrupted cell in Google Sheets from crashing the entire
@@ -258,15 +394,16 @@ function safeJsonParse(value, fallback) {
 function getSessionState() {
   try {
     const sheet = ensureSessionTab();
+    const ss = sheet.getParent();
     const data = sheet.getDataRange().getValues();
-    
+
     if (data.length <= 1) {
-      return { 
-        success: true, 
-        dogs: [], 
+      return {
+        success: true,
+        dogs: [],
         mealType: 'Lunch',
-        version: new Date().getTime(),
-        count: 0 
+        version: currentSessionVersion_(ss, 0),
+        count: 0
       };
     }
     
@@ -303,45 +440,34 @@ function getSessionState() {
       });
     }
     
-    return { 
-      success: true, 
-      dogs: dogs, 
+    // Real version from the Meta tab (bumped by every mutation) — identical to what
+    // getSessionVersion returns, so polling clients can gate on it. The count uses the
+    // same non-empty-Dog_ID predicate as getSessionVersion (keep them aligned: the TV
+    // display compares version AND count across the two endpoints).
+    return {
+      success: true,
+      dogs: dogs,
       mealType: mealType,
-      version: new Date().getTime(),
-      count: dogs.length 
+      version: currentSessionVersion_(ss, dogs.length),
+      count: dogs.length
     };
-    
+
   } catch (error) {
     return { success: false, error: error.toString() };
   }
 }
 
 /**
- * Get just the version timestamp (for efficient polling)
+ * Get just the version (for efficient change-gated polling).
+ * Returns the SAME Meta-tab version as getSessionState — never a per-request timestamp.
  */
 function getSessionVersion() {
   try {
     const sheet = ensureSessionTab();
-    const lastRow = sheet.getLastRow();
-    
-    if (lastRow <= 1) {
-      return { success: true, version: 0, count: 0 };
-    }
-    
-    // Get the most recent Last_Updated value
-    const lastUpdatedCol = CONFIG.SESSION_COLS.LAST_UPDATED + 1;
-    const range = sheet.getRange(2, lastUpdatedCol, lastRow - 1, 1);
-    const values = range.getValues();
-    
-    let maxVersion = 0;
-    for (const row of values) {
-      if (row[0] && row[0] > maxVersion) {
-        maxVersion = row[0];
-      }
-    }
-    
-    return { success: true, version: maxVersion, count: lastRow - 1 };
-    
+    const ss = sheet.getParent();
+    const count = countSessionRows_(sheet);
+    return { success: true, version: currentSessionVersion_(ss, count), count: count };
+
   } catch (error) {
     return { success: false, error: error.toString() };
   }
@@ -349,12 +475,23 @@ function getSessionVersion() {
 
 /**
  * Add a new dog to the session
+ *
+ * ⚠️ Write-response contract (2026-07-26): add/update/delete/setMealType responses
+ * deliberately carry NO `version` field. The tablet's flushQueue only advances
+ * lastSyncVersion when a response has one — omitting it keeps lastSyncVersion at the
+ * last APPLIED snapshot, so the poll after a queue flush still fetches any remote edits
+ * made while this device was offline. clearSession is the one write that keeps
+ * `version` (the tablet's syncClearSession assigns result.version unguarded).
  */
 function addDogToSession(dog) {
+  return withScriptLock_('addDog', function () { return addDogToSessionCore_(dog); });
+}
+
+function addDogToSessionCore_(dog) {
   try {
     const sheet = ensureSessionTab();
     const timestamp = new Date().getTime();
-    
+
     const row = [
       dog.id,
       dog.inputName,
@@ -370,16 +507,16 @@ function addDogToSession(dog) {
       dog.mealType || 'Lunch',
       (typeof dog.position === 'number' ? dog.position : 0)
     ];
-    
+
     sheet.appendRow(row);
-    
-    return { 
-      success: true, 
+    tryBumpSessionVersion_(sheet.getParent(), countSessionRows_(sheet));
+
+    return {
+      success: true,
       dogId: dog.id,
-      version: timestamp,
-      message: 'Dog added to session' 
+      message: 'Dog added to session'
     };
-    
+
   } catch (error) {
     return { success: false, error: error.toString() };
   }
@@ -387,8 +524,13 @@ function addDogToSession(dog) {
 
 /**
  * Update an existing dog in the session
+ * Locked: the row locate + writes are atomic vs concurrent add/delete (row-shift race).
  */
 function updateDogInSession(dogId, updates) {
+  return withScriptLock_('updateDog', function () { return updateDogInSessionCore_(dogId, updates); });
+}
+
+function updateDogInSessionCore_(dogId, updates) {
   try {
     const sheet = ensureSessionTab();
     const data = sheet.getDataRange().getValues();
@@ -435,14 +577,14 @@ function updateDogInSession(dogId, updates) {
 
     // Always update timestamp
     sheet.getRange(rowIndex, CONFIG.SESSION_COLS.LAST_UPDATED + 1).setValue(timestamp);
-    
-    return { 
-      success: true, 
+    tryBumpSessionVersion_(sheet.getParent(), countSessionRows_(sheet));
+
+    return {
+      success: true,
       dogId: dogId,
-      version: timestamp,
-      message: 'Dog updated' 
+      message: 'Dog updated'
     };
-    
+
   } catch (error) {
     return { success: false, error: error.toString() };
   }
@@ -450,27 +592,40 @@ function updateDogInSession(dogId, updates) {
 
 /**
  * Delete a dog from the session
+ * Locked: the row locate + deleteRow are atomic vs concurrent writes. The version bump
+ * on delete matters doubly — max(Last_Updated) never rose on a delete, which is one of
+ * the reasons the old always-fresh version could never be made real without Meta.
  */
 function deleteDogFromSession(dogId) {
+  // waitMs 20000 (> the tablet's 12s gasFetch abort) on purpose: the live tablet
+  // dequeues ANY success:false delete as "row already gone", so a 10s lock-timeout
+  // rejection would silently drop the delete and the dog would resurrect. With a
+  // 20s wait, contention makes the CLIENT abort instead (network failure → op kept
+  // and retried), and if this execution still completes the delete, the retry's
+  // "Dog not found" correctly resolves to done.
+  return withScriptLock_('deleteDog', function () { return deleteDogFromSessionCore_(dogId); }, 20000);
+}
+
+function deleteDogFromSessionCore_(dogId) {
   try {
     const sheet = ensureSessionTab();
     const data = sheet.getDataRange().getValues();
-    
+
     // Find and delete the dog's row
     for (let i = data.length - 1; i >= 1; i--) {
       if (data[i][CONFIG.SESSION_COLS.DOG_ID] == dogId) {
         sheet.deleteRow(i + 1);
-        return { 
-          success: true, 
+        tryBumpSessionVersion_(sheet.getParent(), countSessionRows_(sheet));
+        return {
+          success: true,
           dogId: dogId,
-          version: new Date().getTime(),
-          message: 'Dog removed from session' 
+          message: 'Dog removed from session'
         };
       }
     }
-    
+
     return { success: false, error: 'Dog not found: ' + dogId };
-    
+
   } catch (error) {
     return { success: false, error: error.toString() };
   }
@@ -478,8 +633,14 @@ function deleteDogFromSession(dogId) {
 
 /**
  * Set the meal type for the entire session
+ * Locked: the getLastRow snapshot + the two column writes are atomic vs concurrent
+ * add/delete, so the ranges can't be sized against a stale row count.
  */
 function setSessionMealType(mealType) {
+  return withScriptLock_('setMealType', function () { return setSessionMealTypeCore_(mealType); });
+}
+
+function setSessionMealTypeCore_(mealType) {
   try {
     const sheet = ensureSessionTab();
     const lastRow = sheet.getLastRow();
@@ -502,14 +663,15 @@ function setSessionMealType(mealType) {
       }
       timeRange.setValues(timeValues);
     }
-    
-    return { 
-      success: true, 
+
+    tryBumpSessionVersion_(sheet.getParent(), countSessionRows_(sheet));
+
+    return {
+      success: true,
       mealType: mealType,
-      version: timestamp,
-      message: 'Meal type updated' 
+      message: 'Meal type updated'
     };
-    
+
   } catch (error) {
     return { success: false, error: error.toString() };
   }
@@ -517,22 +679,36 @@ function setSessionMealType(mealType) {
 
 /**
  * Clear the entire session (only called after submission or explicit clear)
+ * The ONE write whose response keeps `version`: the tablet's syncClearSession assigns
+ * result.version to lastSyncVersion unguarded, so omitting it would poison the poll
+ * gate with undefined. Returning the bump is safe — after a clear, local and server
+ * state are both empty, so "up to date as of this version" is true.
  */
 function clearSession() {
+  return withScriptLock_('clearSession', function () { return clearSessionCore_(); });
+}
+
+function clearSessionCore_() {
   try {
     const sheet = ensureSessionTab();
     const lastRow = sheet.getLastRow();
-    
+
     if (lastRow > 1) {
       sheet.deleteRows(2, lastRow - 1);
     }
-    
-    return { 
-      success: true, 
-      version: new Date().getTime(),
-      message: 'Session cleared' 
+
+    // The response MUST carry a numeric version (unguarded tablet assignment). If the
+    // bump itself fails, fall back to wall-clock: the count-drift self-heal (meta count
+    // now stale vs 0 actual rows) bumps past it on the next read, so the gate recovers.
+    let version = tryBumpSessionVersion_(sheet.getParent(), 0);
+    if (typeof version !== 'number') version = new Date().getTime();
+
+    return {
+      success: true,
+      version: version,
+      message: 'Session cleared'
     };
-    
+
   } catch (error) {
     return { success: false, error: error.toString() };
   }
@@ -943,20 +1119,10 @@ function submitReport(data) {
       lookupMap[dog.name.toLowerCase()] = dog;
     });
     
-    // Open Temp sheet
+    // Open Temp sheet (all Temp mutations happen later, under the script lock)
     const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
     const tempSheet = ss.getSheetByName(CONFIG.TEMP_TAB);
 
-    // Self-heal the header first: n8n's whole-sheet clear can wipe row 1, and we write data at
-    // row 2 below — without a header row n8n mis-reads every row. ensureTempHeader_ rebuilds it.
-    ensureTempHeader_(tempSheet);
-
-    // Clear existing data (keep header)
-    const lastRow = tempSheet.getLastRow();
-    if (lastRow > 1) {
-      tempSheet.getRange(2, 1, lastRow - 1, CONFIG.TEMP_COLUMNS).clear();
-    }
-    
     // Prepare rows for Temp tab and JotForm URLs
     const rows = [];
     const jotformLinks = [];
@@ -980,7 +1146,7 @@ function submitReport(data) {
       if (!finalName) return; // skip malformed row rather than crash
 
       // Normalize possibly-malformed POST-body fields so a single bad row can't throw mid-loop
-      // (the Temp tab was already cleared above) or silently mis-map an unknown status to 'All'.
+      // or silently mis-map an unknown status to 'All'.
       const supplementTypes = Array.isArray(dog.supplementTypes) ? dog.supplementTypes : [];
       const foodConsumed = FEEDING_STATUS_MAP.hasOwnProperty(dog.status) ? FEEDING_STATUS_MAP[dog.status] : 'All';
       if (dog.status && !FEEDING_STATUS_MAP.hasOwnProperty(dog.status)) {
@@ -1051,11 +1217,26 @@ function submitReport(data) {
       });
     });
     
-    // Write to Temp tab
-    if (rows.length > 0) {
-      tempSheet.getRange(2, 1, rows.length, CONFIG.TEMP_COLUMNS).setValues(rows);
+    // Rebuild the Temp tab atomically under the script lock: header self-heal (n8n's
+    // whole-sheet clear can wipe row 1; without it n8n mis-reads every row), clear old
+    // data, write the new rows. The slow Telegram UrlFetchApp call stays OUTSIDE the
+    // lock so a hung send can't starve other tablets' writes into lock timeouts.
+    const tempWrite = withScriptLock_('submitTempWrite', function () {
+      ensureTempHeader_(tempSheet);
+      const lastRow = tempSheet.getLastRow();
+      if (lastRow > 1) {
+        tempSheet.getRange(2, 1, lastRow - 1, CONFIG.TEMP_COLUMNS).clear();
+      }
+      if (rows.length > 0) {
+        tempSheet.getRange(2, 1, rows.length, CONFIG.TEMP_COLUMNS).setValues(rows);
+      }
+      return { success: true };
+    });
+    if (!tempWrite.success) {
+      // Nothing was sent and the session is untouched — the tablet can simply retry.
+      return { success: false, telegramSent: false, error: 'Temp write failed: ' + tempWrite.error };
     }
-    
+
     // Send to Telegram
     const telegramResult = sendTelegramSummary(mealType, reportDate, jotformLinks, missingEmails);
 
@@ -1071,12 +1252,22 @@ function submitReport(data) {
       };
     }
 
-    // Clear session only after a confirmed Telegram delivery
-    clearSession();
+    // Clear session only after a confirmed Telegram delivery. Short lock waits (the
+    // tablet's fetch aborts at 12s and Temp write + Telegram already spent some of it)
+    // with one retry; on a double failure report sessionCleared:false (additive field —
+    // clients ignore it) and log loud. The dogs then legitimately remain in Session.
+    let clearResult = withScriptLock_('submitClear', function () { return clearSessionCore_(); }, 3000);
+    if (!clearResult.success) {
+      clearResult = withScriptLock_('submitClearRetry', function () { return clearSessionCore_(); }, 3000);
+    }
+    if (!clearResult.success) {
+      console.warn('[submitReport] session clear failed after Telegram delivery — dogs remain in Session: ' + clearResult.error);
+    }
 
     return {
       success: true,
       telegramSent: true,
+      sessionCleared: clearResult.success === true,
       dogsProcessed: dogsInPens.length,
       missingEmails: missingEmails,
       message: `${dogsInPens.length} dogs submitted. Check Telegram for review links.`
@@ -1197,12 +1388,14 @@ function sendTelegramSummary(mealType, reportDate, jotformLinks, missingEmails) 
     message += '✅ Reply `/send` to submit all reports to JotForm\n';
     message += '❌ Reply `/cancel` to clear without submitting';
     
-    // Send to Telegram
-    if (!CONFIG.TELEGRAM_BOT_TOKEN) {
+    // Send to Telegram — token read lazily HERE (one Properties read per submit),
+    // never at global scope (see the _secret_ note at the top of the file).
+    const botToken = _secret_('TELEGRAM_BOT_TOKEN');
+    if (!botToken) {
       Logger.log('[sendTelegramSummary] TELEGRAM_BOT_TOKEN missing — set it in Script Properties');
       return { success: false, error: 'TELEGRAM_BOT_TOKEN not configured' };
     }
-    const telegramUrl = 'https://api.telegram.org/bot' + CONFIG.TELEGRAM_BOT_TOKEN + '/sendMessage';
+    const telegramUrl = 'https://api.telegram.org/bot' + botToken + '/sendMessage';
 
     const payload = {
       chat_id: CONFIG.TELEGRAM_CHAT_ID,
@@ -1307,36 +1500,40 @@ function ensureTempHeader_(sheet) {
  * already-healthy tab is a no-op fast path.
  */
 function repairTemp() {
-  try {
-    const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
-    const sheet = ss.getSheetByName(CONFIG.TEMP_TAB);
-    const dogRows = ensureTempHeader_(sheet);
-    return { success: true, dogRows: dogRows, message: 'Temp header ensured; ' + dogRows + ' data row(s) present' };
-  } catch (error) {
-    return { success: false, error: error.toString() };
-  }
+  return withScriptLock_('repairTemp', function () {
+    try {
+      const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+      const sheet = ss.getSheetByName(CONFIG.TEMP_TAB);
+      const dogRows = ensureTempHeader_(sheet);
+      return { success: true, dogRows: dogRows, message: 'Temp header ensured; ' + dogRows + ' data row(s) present' };
+    } catch (error) {
+      return { success: false, error: error.toString() };
+    }
+  });
 }
 
 /**
  * Clear Temp tab (keep header row)
  */
 function clearTempTab() {
-  try {
-    const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
-    const sheet = ss.getSheetByName(CONFIG.TEMP_TAB);
+  return withScriptLock_('clearTemp', function () {
+    try {
+      const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+      const sheet = ss.getSheetByName(CONFIG.TEMP_TAB);
 
-    ensureTempHeader_(sheet);  // guarantee row 1 header survives even if it had been wiped
+      ensureTempHeader_(sheet);  // guarantee row 1 header survives even if it had been wiped
 
-    const lastRow = sheet.getLastRow();
-    if (lastRow > 1) {
-      sheet.getRange(2, 1, lastRow - 1, CONFIG.TEMP_COLUMNS).clear();
+      const lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        sheet.getRange(2, 1, lastRow - 1, CONFIG.TEMP_COLUMNS).clear();
+      }
+
+      return { success: true, message: 'Temp tab cleared' };
+
+    } catch (error) {
+      return { success: false, error: error.toString() };
     }
-
-    return { success: true, message: 'Temp tab cleared' };
-
-  } catch (error) {
-    return { success: false, error: error.toString() };
-  }
+  });
 }
 
 // ============================================
@@ -1391,8 +1588,9 @@ function testGetDogList() {
  * Test: Send Telegram message
  */
 function testTelegram() {
-  if (!CONFIG.TELEGRAM_BOT_TOKEN) { Logger.log('TELEGRAM_BOT_TOKEN not configured (set it in Script Properties)'); return; }
-  const telegramUrl = 'https://api.telegram.org/bot' + CONFIG.TELEGRAM_BOT_TOKEN + '/sendMessage';
+  const botToken = _secret_('TELEGRAM_BOT_TOKEN');
+  if (!botToken) { Logger.log('TELEGRAM_BOT_TOKEN not configured (set it in Script Properties)'); return; }
+  const telegramUrl = 'https://api.telegram.org/bot' + botToken + '/sendMessage';
   
   const payload = {
     chat_id: CONFIG.TELEGRAM_CHAT_ID,
