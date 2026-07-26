@@ -1,5 +1,30 @@
 # CLAUDE.md
 
+<!-- n8n-vps-brief:v1 -->
+## ⚠️ n8n platform: self-hosted VPS — NOT n8n Cloud (migration active since 2026-07-04)
+
+The business's n8n is moving from n8n Cloud (`ftmanager.app.n8n.cloud`) to a **self-hosted n8n on a Hostinger VPS**. All future work in this project must assume n8n lives on the VPS.
+
+- **n8n editor / API / webhook base: `https://auto.thefairytails.co.uk`** (webhooks: `https://auto.thefairytails.co.uk/webhook/<path>`; workflow IDs and webhook paths were preserved from cloud).
+- **Cutover status (2026-07-05): MIGRATION COMPLETE — all 32 production workflows are live on the VPS; n8n Cloud is fully inactive (0 of 47 active) and its subscription is pending cancellation (Phase F5).** **Never reactivate anything on the cloud instance** — a cloud Telegram-trigger activation would steal the bot webhook from the VPS instantly, and schedule triggers would double-fire.
+- **All new and future work targets the VPS.** Build, change, and amend workflows — and any code that calls n8n — against `auto.thefairytails.co.uk`. Do not build anything new against n8n Cloud. When amending a not-yet-flipped workflow, make the change on the VPS copy and flip that workflow as part of the work (per the F4 play card), rather than investing further in the cloud copy.
+- **n8n MCP deploys:** before creating/updating workflows via an n8n MCP, verify the MCP targets the VPS instance. If it still points at n8n Cloud, ask Kam to reconnect it to `https://auto.thefairytails.co.uk` first.
+
+**Source of truth for the migration** (VPS specs, SSH access, credential + data-table ID maps, F4 cutover plan, live status): `C:\Users\Kam\OneDrive\Business\CODING\Hostinger_n8n\n8n-vps-migration-handover.md`
+
+**Self-hosting benefits — design for them:**
+- No cloud plan limits: no execution-time caps and no per-execution/active-workflow billing pressure — long-running, heavy, or chatty workflows are fine; split logic into as many workflows as is clean.
+- Full server control: SSH (`root@187.124.214.24`, key `~/.ssh/id_ed25519_hostinger_n8n` on the FT Manager machine), `docker exec` n8n CLI (bulk import/export, upserts by workflow ID), container logs, compose + env under `/docker/n8n-d7un/` on the VPS.
+- Community nodes can be installed if a task needs them (cloud didn't allow this).
+- Static egress IP `187.124.214.24` — usable for third-party API allowlists.
+
+**Caveats:**
+- Credential IDs and data-table IDs are DIFFERENT on the VPS vs cloud (maps: `Hostinger_n8n\cloud-export-2026-07-04\cred-id-map-batch*.json`). Data Table nodes reference tables BY ID — never copy cloud IDs into VPS workflows.
+- Any external caller (web page, script, form, bot, dashboard) still pointing at `ftmanager.app.n8n.cloud` must be repointed to `https://auto.thefairytails.co.uk` when its workflow flips — and must never be newly written against the cloud URL.
+
+### n8n touchpoints in this project (scanned 2026-07-04)
+- No hardcoded n8n URLs found in this project's files as of 2026-07-04 — this project's n8n logic lives in the n8n instance itself (workflows). All future n8n work targets the VPS (see above).
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## What this is
@@ -121,7 +146,7 @@ When building any URL that a mobile Telegram user will tap, **emit zero `%XX` se
 
 Still inline **intentionally** (not secrets): `TELEGRAM_CHAT_ID` (group id), `JOTFORM_ID` (public form id), `SHEET_ID`, `CHECKINOUT_TOKEN` (already public in the Pages whiteboard). Don't add new secrets to source — put them in Script Properties / an n8n credential.
 
-**⚠️ Residual exposure — the old key + token are NOT neutralized.** Both were public in `github.com/Fairytails123/feedingreportmanager` (JotForm key `…cbc7`, flagged by JotForm 2026-06-04; the bot token was committed too) and were scraped before removal. They remain **valid** and stay readable in **git history** (commit `b5e6e68` etc.); moving them out of the current files stops *future* leakage only. The owner chose **not to rotate** (2026-06-04), and history was deliberately **not** rewritten. **Rotation is the only complete fix** and can be done any time: regenerate the JotForm key in the JotForm UI → update credential `XT7arES7w7GdlpOm`; `/revoke` the bot token via BotFather → update the `TELEGRAM_BOT_TOKEN` Script Property **and** the n8n bot credential `QGWk6jRMWIlPH8Jz`.
+**⚠️ Residual exposure.** Both secrets were public in `github.com/Fairytails123/feedingreportmanager` (JotForm key `…cbc7`, flagged by JotForm 2026-06-04; the bot token was committed too) and were scraped before removal; both stay readable in **git history** (commit `b5e6e68` etc.), which was deliberately **not** rewritten. Status per secret: the **bot token WAS rotated 2026-07-05** (scam-bot scare — old token revoked, so the leaked one is dead; current token in `_SECRETS\telegram-bots.md` + the VPS n8n cred `uMLzq2C84fMZqZPj`); the **JotForm key is still the leaked one** (owner chose not to rotate) — regenerating it in the JotForm UI → update credential `XT7arES7w7GdlpOm` remains the outstanding fix. **Rotation gotcha (bit us 2026-07-06):** the bot token lives in **TWO places** — the n8n bot credential AND the GAS `TELEGRAM_BOT_TOKEN` Script Property. The 07-05 rotation updated only n8n, so every tablet submit failed with `Telegram delivery failed … 401 Unauthorized` (submit-gating correctly preserved the data) until the Script Property was updated on 2026-07-06 (deployment @28). On any future rotation update **both**, plus re-set the bot webhook if n8n's Telegram Trigger registration was cleared by the revoke.
 
 The `CONFIG` object at the top of `feeding_report_backend_v2.js` is the **canonical source of truth** for every ID, gid, and field map this app uses — tab gids, the lunch pen source `PEN_SHEET_ID`/`PEN_TAB_GID`/`PEN_COL_FALLBACK_INDEX`, the whiteboard/check-in-out URLs and token, the JotForm question-ID map (`JOTFORM_FIELDS`), and the full `SESSION_COLS`/`TEMP` schemas (the bot token now comes from Script Properties, not `CONFIG`). Constants quoted elsewhere in this doc are for context; read `CONFIG` rather than trusting a scattered mention if they ever disagree.
 

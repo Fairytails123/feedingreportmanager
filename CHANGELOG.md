@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-07-06 — Submit 401 fixed: GAS Script Property updated to the rotated bot token (@27→@28)
+
+**Reported:** every tablet submit failed with `❌ Submit failed: Telegram delivery failed:
+{"ok":false,"error_code":401,"description":"Unauthorized"}` — the submit-gating worked as designed
+(Temp + Session preserved, dogs kept on the board), but no report could go out.
+
+**Root cause:** the Feeding bot token was **rotated on 2026-07-05** (scam-bot scare; old token
+revoked at BotFather). The new token was put into the VPS n8n credential (`uMLzq2C84fMZqZPj`) but
+the token's **second home — the GAS `TELEGRAM_BOT_TOKEN` Script Property** on the "Feeding manager"
+script — was never updated, so `sendTelegramSummary` kept calling Telegram with the revoked token.
+No code bug; a rotation-checklist gap.
+
+**Fix (no lasting code change):** deployed a temporary nonce-guarded `__rotateTelegramToken` doPost
+action (@27), called it once to set the Script Property (verified live — test message 612 delivered
+to the Feeding Reports group via the same sendMessage path that was 401ing), then removed the temp
+action and redeployed clean (@28; `getSessionVersion` OK, temp action confirmed gone). The
+backend source in this repo is byte-identical to what was live before (drift-checked at clone time).
+
+**Prevention:** `_SECRETS\telegram-bots.md` and CLAUDE.md ("Residual exposure") now both warn that
+the Feeding token lives in TWO places — the n8n credential AND the GAS Script Property — and any
+rotation must update both.
+
 ## 2026-06-19 — Lunch "Add Dogs" gates ALL dogs on "Lunch Y?" + owner-surname name-join, deployed @26
 
 **Reported:** at lunch, `Oliver` was missing from the pens even though the master "Jot form Dog
