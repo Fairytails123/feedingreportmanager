@@ -1,5 +1,43 @@
 # Changelog
 
+## 2026-08-04 (evening, @34) — TV display showed dogs repeated 3–7 times: `addDog` was not idempotent
+
+**Reported.** "It keeps duplicating the names on the TV display — not in mobile, only the TV."
+Photo showed `Leo` ×3 in TOP 1 and `Milo McVey` ×7 in BOTTOM 2, with the red **Connection error**
+dot lit. **A separate bug from the morning's outage** — the morning fix did not address it.
+
+**Confirmed live before touching anything:** `getSession` returned **37 rows for 16 unique dogs**,
+and the duplicates shared the *same* `Dog_ID` (Bay Ansell ×5, Goose Fowle ×5, Coco Heerema ×4).
+Same ID = the same dog written repeatedly, i.e. a **non-idempotent retry**, not bad data entry.
+
+**Cause.** `addDogToSessionCore_` called `sheet.appendRow(row)` unconditionally. The tablet's
+durable mutation queue retries an `add` whenever the POST did not *visibly* succeed — and a
+client-side fetch abort is indistinguishable from a failure even when the server **landed** the
+write. Every retry appended the dog again. The morning's slow/failing GAS is exactly what
+generates those aborts, which is why it spiked today (and why the Connection-error dot was lit in
+the photo — same root conditions).
+
+**Why only the TV.** Both clients get the same duplicated rows. The tablet's `applyRemoteState`
+rebuilds pen membership keyed by dog id, so duplicates collapse invisibly; the display's
+`applyData` pushes **every** row into its pen, so it renders each one. The TV wasn't wrong — it
+was the only surface telling the truth.
+
+**Fix (@34, v2.4).** `addDogToSessionCore_` is now **idempotent by `Dog_ID`**: it looks for an
+existing row and *updates* it instead of appending (already inside the script lock, so the
+read-then-write cannot race). A replay refreshes the row rather than duplicating, so a retry
+carrying a newer pen/position still wins. The response gains `deduped: true` when a retry lands on
+an already-written row. Added `?action=dedupeSession` to repair a tab that already accumulated
+duplicates (keeps the last row per `Dog_ID`, deletes bottom-up, safe no-op when clean).
+
+**Verified on the live backend**, not just in tests: posting the same `addDog` twice returned
+`deduped:false` then `deduped:true` and left **exactly one row**. Regression tests added
+(`tests/backend.test.js` group **M**) covering the retry, the newer-values-win replay, and
+`dedupeSession`.
+
+⚠️ **Note on the cleanup:** by the time `dedupeSession` ran, the live tab had already returned to
+16/16 on its own (staff were actively rebuilding the board), so it reported `removed: 0`. The
+repair path is therefore proven only by test, not by a live repair of real duplicates.
+
 ## 2026-08-04 — "Add Dogs for Today" was dead at Lunch: a 12s client abort, and an upstream outage reported as an empty day
 
 **Reported.** "Cannot add today's dogs using add today's dog button — cannot start work", then
@@ -116,9 +154,25 @@ sibling, the check-in/out feed, already serves from a 5h cache with a 6h stale f
 exactly why that endpoint never failed in probing — or having this app read the Staff Board sheet
 (`1kQsNXee…`, tab `Today`, `Dog_Name` + `Appointment_Type`) directly and skip the web-app hop.
 
-**Verified** with headless harnesses against the real source before deploy: backend 46/46 (Apps
+**Verified** with headless harnesses against the real source before deploy: backend 64/64 (Apps
 Script globals + `CacheService`/`Utilities.sleep` stubbed), tablet 35/35 — including a negative
 control proving the pre-fix code reproduces the exact "signal is aborted without reason" staff saw.
+
+### Part 4 — the harness became a committed suite: `bash tests/run.sh`
+
+The verification harness had been **rebuilt from scratch every session and thrown away** since
+2026-06-02, which is why nothing caught this outage earlier. It now lives in **`tests/`**
+(`tablet_harness.js`, `backend_harness.js`, `tablet.test.js`, `backend.test.js`, `run.sh`) and
+chains syntax → contract drift → backend (64) → tablet (35). `tests/README.md` records **why each
+group exists**, so a future session can't delete a scenario without seeing which outage it
+protects against. The same was done for the staff board, which had **no test step at all**:
+`Whiteboard and Routes\Whiteboard Mobile Edit\tests\` (47 tests, incl. the `flush()`-before-bump
+write-visibility assertion).
+
+Two limits are written into both READMEs so they aren't rediscovered the hard way: a stubbed Apps
+Script has **no write-visibility semantics** (a 30/30-green suite shipped a silent data-loss bug),
+and it has **no concurrency and no n8n** — so the riskiest paths still need a live exercise after
+deploy, per the project's own live-edit rule.
 
 ## 2026-07-26 — TV display consolidated into this repo (phase 2): hardened display v2 + shared contract + one-command publish
 

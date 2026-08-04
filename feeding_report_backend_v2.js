@@ -176,6 +176,9 @@ function doGet(e) {
       case 'repairTemp':
         result = repairTemp();
         break;
+      case 'dedupeSession':
+        result = dedupeSession();
+        break;
       default:
         // A bare /exec (no action) is the deployment ping — keep it success:true, it is the
         // documented smoke check. But an action that was ASKED FOR and isn't recognised is an
@@ -185,7 +188,7 @@ function doGet(e) {
           ? { success: false, error: 'Unknown action: ' + action }
           // ⚠️ BUMP THIS STRING ON EVERY DEPLOY. It is the documented way to confirm which code
           // is serving, and it silently went stale across @30/@31/@32 while behaviour changed.
-          : { success: true, status: 'ok', message: 'Feeding Report API v2.3 - Direct Staff Board Read + Plan Cache' };
+          : { success: true, status: 'ok', message: 'Feeding Report API v2.4 - Idempotent addDog (no duplicate rows)' };
     }
     
     return ContentService
@@ -550,13 +553,35 @@ function addDogToSessionCore_(dog) {
       (typeof dog.position === 'number' ? dog.position : 0)
     ];
 
-    sheet.appendRow(row);
+    // ⚠️ IDEMPOTENT BY Dog_ID — do NOT revert to a bare appendRow (2026-08-04).
+    // The tablet's durable mutation queue retries an `add` whenever the POST did not VISIBLY
+    // succeed, and a client-side fetch abort is indistinguishable from a failure even when the
+    // server actually LANDED the write. A blind append therefore writes the same dog again on
+    // every retry. On 2026-08-04, with GAS slow, the live Session tab reached 37 rows for 16
+    // real dogs (one dog x5). The tablet hid it — its merge is keyed by dog id — but the TV
+    // display renders every row, so staff saw "Milo McVey" seven times in one pen.
+    // We are already inside the script lock, so this read-then-write cannot race another add.
+    let existingRow = -1;
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      const ids = sheet.getRange(2, CONFIG.SESSION_COLS.DOG_ID + 1, lastRow - 1, 1).getValues();
+      for (let i = 0; i < ids.length; i++) {
+        if (ids[i][0] && ids[i][0].toString() === dog.id.toString()) { existingRow = i + 2; break; }
+      }
+    }
+
+    if (existingRow > 0) {
+      sheet.getRange(existingRow, 1, 1, row.length).setValues([row]);   // replay -> refresh, don't duplicate
+    } else {
+      sheet.appendRow(row);
+    }
     tryBumpSessionVersion_(sheet.getParent(), countSessionRows_(sheet));
 
     return {
       success: true,
       dogId: dog.id,
-      message: 'Dog added to session'
+      deduped: existingRow > 0,       // diagnostic: a retry landed on an already-written row
+      message: existingRow > 0 ? 'Dog already in session — row refreshed' : 'Dog added to session'
     };
 
   } catch (error) {
@@ -1797,6 +1822,51 @@ function ensureTempHeader_(sheet) {
  * dog rows sit at row 2+. Exposed via doGet(?action=repairTemp). Idempotent — running it on an
  * already-healthy tab is a no-op fast path.
  */
+/**
+ * Remove duplicate Session rows, keeping the LAST row for each Dog_ID (it carries the most recent
+ * status/pen/position, since a retry rewrites the whole row). Recovery tool for sessions that
+ * accumulated duplicates before `addDogToSessionCore_` became idempotent on 2026-08-04 — the live
+ * tab had 37 rows for 16 dogs that morning. Safe to run any time; a no-op when there is nothing
+ * to remove. Deletes bottom-up so earlier row indexes stay valid.
+ *   GET  ?action=dedupeSession
+ */
+function dedupeSession() {
+  return withScriptLock_('dedupeSession', function () {
+    try {
+      const sheet = ensureSessionTab();
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return { success: true, removed: 0, remaining: 0, message: 'Session empty' };
+
+      const ids = sheet.getRange(2, CONFIG.SESSION_COLS.DOG_ID + 1, lastRow - 1, 1).getValues();
+      const lastSeen = {};                       // Dog_ID -> last sheet row holding it
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i][0];
+        if (id) lastSeen[id.toString()] = i + 2;
+      }
+      const keep = {};
+      Object.keys(lastSeen).forEach(function (id) { keep[lastSeen[id]] = true; });
+
+      const doomed = [];
+      for (let i = 0; i < ids.length; i++) {
+        const rowNum = i + 2;
+        if (ids[i][0] && !keep[rowNum]) doomed.push(rowNum);
+      }
+      for (let d = doomed.length - 1; d >= 0; d--) sheet.deleteRow(doomed[d]);   // bottom-up
+
+      const remaining = countSessionRows_(sheet);
+      tryBumpSessionVersion_(sheet.getParent(), remaining);
+      return {
+        success: true,
+        removed: doomed.length,
+        remaining: remaining,
+        message: 'Removed ' + doomed.length + ' duplicate row(s); ' + remaining + ' dog(s) remain'
+      };
+    } catch (error) {
+      return { success: false, error: error.toString() };
+    }
+  });
+}
+
 function repairTemp() {
   return withScriptLock_('repairTemp', function () {
     try {
