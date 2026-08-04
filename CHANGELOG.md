@@ -1,5 +1,91 @@
 # Changelog
 
+## 2026-08-04 — "Add Dogs for Today" was dead at Lunch: a 12s client abort, and an upstream outage reported as an empty day
+
+**Reported.** "Cannot add today's dogs using add today's dog button — cannot start work", then
+"it keeps saying signal is aborted without reason". Staff were blocked mid-morning.
+
+### Part 1 (hotfix, shipped first) — the tablet was timing ITSELF out
+
+`gasFetch` applied one flat `FETCH_TIMEOUT_MS` (12s) to **every** GAS call, including
+`getTodayPlan` — the one endpoint that is legitimately slow, because it fans out to the
+Whiteboard web app and, at Lunch, also opens the shared master pen sheet. "signal is aborted
+without reason" is Chrome/Android's `AbortError` message: the tablet's own AbortController, not
+a network fault. Measured live: **Lunch 10.9s / 15.7s / 3.8s** (breakfast 1.9–2.9s, dinner
+2.0–4.6s), so the Lunch path straddled the abort exactly when the board gets set up.
+
+- `gasFetch(url, opts, timeoutMs)` — optional third arg; omit it and every pre-existing caller
+  keeps 12s (asserted by test).
+- `addDogsForToday` uses `PLAN_FETCH_TIMEOUT_MS` (45s) + one retry, and reports a timeout in
+  words instead of leaking the raw `AbortError`.
+
+### Part 2 — the bigger bug the measurements uncovered: an outage looked like a quiet day
+
+Probing the upstream `?action=loadToday` directly: **HTTP 404 + a 3,039-byte Google "Page not
+found" page for ~40% of requests, taking 8–43s to fail** (5/12 at a realistic 30s cadence;
+6/10 back-to-back). Successes ranged 1.7–24s. `fetchJson_` returned `null` for that, and
+`getLunchPlan_` turned `null` into `roster = []` → `{success: true, dogs: []}`. The tablet then
+showed **"No Lunch dogs found on the whiteboard for today"** as an `info` toast —
+indistinguishable from a genuinely empty day, so staff hand-built the board during an outage.
+`readPenMap_` had the same shape and was worse: the roster read *succeeds*, so every count looks
+plausible while an unreadable pen sheet drops every dog through the "Lunch Y?" gate.
+
+⚠️ **The Part 1 retry could never fire on this path** — the loop breaks on `result.success`, and
+the backend was returning `success: true`. Part 1 fixed the reported abort; Part 2 fixes the 404.
+
+**Backend (`feeding_report_backend_v2.js`, @30):**
+- `fetchJson_(url, opts)` gains a real error channel (`opts.out.ok/error`) — `null` used to mean
+  *both* "failed" and "empty". Everything else is downstream of that one conflation.
+- `getLunchPlan_` / `getBoardingPlan_` return `success:false` on a failed read (and on a 200
+  carrying `success:false`, e.g. a rejected `CHECKINOUT_TOKEN`). Safe: `addDogsForToday` is the
+  sole consumer and already renders `success:false`.
+- `readPenMap_` reports `ok/error` so an unreadable pen sheet is an outage, not a quiet day.
+  **A sheet with zero "Lunch Y?" rows is deliberately NOT a failure** — that is a legitimate
+  state, it would black out the button all day with no override, and the tablet already reports
+  it better (it names the roster count and the column to check).
+- Script-cache layer, best-effort by design (a cache outage degrades to a live read):
+  **FRESH 120s** so most presses skip the flaky upstream entirely, and **last-known-good 2700s**
+  (45 min, *not* the 6h cap — a six-hour-old lunch roster is a different day's service, and the
+  tablet merges without removing, so it could put a departed dog into a live feeding round).
+  Keys carry `(v1, today, mealPeriod)`, so an LKG can never cross midnight or meals. An **empty**
+  LKG is refused — serving it would fire the stale warning *and* "no dogs found" together.
+- `?fresh=1` bypasses the cache; the tablet sends it on any repeat press.
+- `doGet` now returns `success:false` for an **unrecognised action** (a bare `/exec` ping stays
+  `success:true` — it is the documented smoke check). Previously a frontend deployed ahead of the
+  backend read as a quiet day rather than a version mismatch.
+- No retry against the whiteboard (`attempts: 1`): its failures take 16–43s so a retry could never
+  clear the deadline gate, and the producer documents that this `/exec` degrades under concurrent
+  load. Retry stays armed only on the fast, healthy check-in/out feed.
+
+**Tablet (`index.html`):** one `info` toast covering six distinct causes became accurate,
+cause-specific messages; `skipped` names are surfaced (previously swallowed by the empty-guard
+exactly when they mattered); the stale warning goes in the **`confirm()` text**, not a toast —
+`confirm()` blocks, so a toast may never paint before the modal.
+
+**⚠️ Deploy order is load-bearing: `index.html` via Pages FIRST, then `clasp redeploy`.** The old
+page has no `stale` branch, so a backend-first deploy hands staff an unmarked 45-minute-old roster.
+Frontend-first is safe both ways (it tolerates a backend that omits the new fields).
+
+**Deliberately NOT done** (with reasons, so they are not re-proposed): caching `readPenMap_` — it
+is ~2s of a ~4s best case and its `firstLast` map, built over every named row of the shared master
+sheet at ~110–145 bytes/row, sits within 2× of CacheService's hard 100KB per-value cap, which
+*throws* rather than degrading; and a pre-warm trigger — the 90 min/day trigger budget is **per
+Google account** and shared with the Whiteboard project's own 14:05 pull, and a 5-minute pre-warm
+costs 66–96 min/day on the measured failure mix (the @29 failure shape: fine all morning, dead
+mid-afternoon, looks like something else).
+
+**Root cause is upstream and remains open.** The 404s come from the Whiteboard staff-board
+`/exec`, which the producer already logged at ~01:00 the same day as degrading under concurrent
+load (its TV display polls every 97s, the mobile editor every 93s plus autosave, and the Routes
+feed on every stage press). The durable cure is either a response cache there — its healthy
+sibling, the check-in/out feed, already serves from a 5h cache with a 6h stale fallback, which is
+exactly why that endpoint never failed in probing — or having this app read the Staff Board sheet
+(`1kQsNXee…`, tab `Today`, `Dog_Name` + `Appointment_Type`) directly and skip the web-app hop.
+
+**Verified** with headless harnesses against the real source before deploy: backend 46/46 (Apps
+Script globals + `CacheService`/`Utilities.sleep` stubbed), tablet 35/35 — including a negative
+control proving the pre-fix code reproduces the exact "signal is aborted without reason" staff saw.
+
 ## 2026-07-26 — TV display consolidated into this repo (phase 2): hardened display v2 + shared contract + one-command publish
 
 **What.** The TV Feeding Display's source moved from the un-tracked OneDrive file

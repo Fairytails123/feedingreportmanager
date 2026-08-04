@@ -2397,7 +2397,16 @@
             // The Whiteboard fan-out is slow and its cold start is the main variance, so this call
             // gets PLAN_FETCH_TIMEOUT_MS (not the standard 12s) and one retry — a timeout on the
             // first press must not leave staff unable to start the day.
-            const url = APPS_SCRIPT_URL + '?action=getTodayPlan&mealPeriod=' + encodeURIComponent(mealPeriod);
+            // The backend caches a good plan briefly. The FIRST press of a session may serve
+            // that cache (fast, and it dodges a flaky upstream). A REPEAT press is the staff
+            // gesture for "I just changed the whiteboard / ticked Lunch Y? — go and look
+            // again", so it bypasses the cache. Without this the cache TTL would silently
+            // swallow an edit staff had just made and were standing there waiting to see.
+            const forceFresh = addDogsForToday._pressed === true;
+            addDogsForToday._pressed = true;
+
+            const url = APPS_SCRIPT_URL + '?action=getTodayPlan&mealPeriod=' + encodeURIComponent(mealPeriod) +
+                        (forceFresh ? '&fresh=1' : '');
             let result = null, timedOut = false;
 
             for (let attempt = 1; attempt <= PLAN_FETCH_ATTEMPTS; attempt++) {
@@ -2423,9 +2432,43 @@
                 return;
             }
 
+            // The board data is stale only when the backend could not reach the roster source
+            // and fell back to its last good copy. The warning goes in the confirm() text below,
+            // NOT in a toast: confirm() blocks the thread, so a toast fired first may never even
+            // paint before the modal, and staff would approve a stale board having seen nothing.
+            // (Backend adds `stale`/`capturedAt`; older backends simply omit them.)
+            let staleNotice = '';
+            if (result.stale) {
+                const age = result.capturedAt ? new Date(result.capturedAt) : null;
+                const when = age && !isNaN(age.getTime())
+                    ? age.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : 'earlier';
+                staleNotice = `\n\n⚠️ WARNING — this list is NOT live.\n${result.upstreamError || 'The roster source did not answer'}.\n` +
+                              `Showing the last good list from ${when}. Dogs that left since then may still be on it, ` +
+                              `and dogs that arrived since will be missing. Check the board before you feed.`;
+            }
+
             const planDogs = Array.isArray(result.dogs) ? result.dogs : [];
             if (planDogs.length === 0) {
-                showToast(`No ${mealLabel} dogs found on the whiteboard for today.`, 'info');
+                // "Nothing to add" has several very different causes, and staff acted on the
+                // wrong one for months. Use the counts the backend already sends to say which.
+                const counts = result.counts || {};
+                const skippedNames = Array.isArray(result.skipped) ? result.skipped : [];
+                // Only Lunch has a roster count that means "dogs here today" AND a per-dog
+                // opt-in to point at. `counts.source` (breakfast/dinner) is the raw stay count
+                // before the date filter, so it must NOT be quoted back as "dogs on the board".
+                const lunchRoster = (mealPeriod === 'Lunch' && typeof counts.roster === 'number')
+                    ? counts.roster : null;
+
+                if (skippedNames.length) {
+                    // The genuine data gap — these dogs are booked but unplaceable. This used to
+                    // be swallowed by the early return, so nobody ever saw the names.
+                    showToast(`No ${mealLabel} dogs could be placed: ${skippedNames.length} booked but with no B/T pen — ${skippedNames.join(', ')}. Add their feeding pen on the dog details sheet.`, 'error');
+                } else if (lunchRoster > 0) {
+                    showToast(`${lunchRoster} dogs are here today, but none are marked for lunch. Check "Lunch Y?" on the dog details sheet.`, 'info');
+                } else {
+                    showToast(`No ${mealLabel} dogs found on the whiteboard for today.`, 'info');
+                }
                 return;
             }
 
@@ -2440,7 +2483,8 @@
             }
 
             const confirmMsg = `Add ${newDogs.length} dog${newDogs.length === 1 ? '' : 's'} for ${mealLabel}?` +
-                (dupCount ? `\n(${dupCount} already on the board — will be skipped.)` : '');
+                (dupCount ? `\n(${dupCount} already on the board — will be skipped.)` : '') +
+                staleNotice;
             if (!confirm(confirmMsg)) return;
 
             pauseSync();
