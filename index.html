@@ -1172,6 +1172,12 @@
         const HEARTBEAT_INTERVAL = 7000;       // Independent ping every 7s — runs even mid-edit
         const QUEUE_KEY = 'feedingManager.queue.v1';   // durable outbound mutation queue
         const FETCH_TIMEOUT_MS = 12000;        // abort any GAS call that hangs longer than this
+        // "Add Dogs for Today" is the one slow endpoint: getTodayPlan fans out to the Whiteboard
+        // web app (its own GAS cold start) and, at Lunch, opens the shared master pen sheet —
+        // measured 2s–16s, so the standard 12s budget aborted it mid-morning and the button died
+        // with "signal is aborted without reason". Own budget + one retry (fixed 2026-08-04).
+        const PLAN_FETCH_TIMEOUT_MS = 45000;
+        const PLAN_FETCH_ATTEMPTS = 2;
         const OFFLINE_THRESHOLD = 2;           // consecutive failures before declaring offline (debounces flaky wifi blips)
 
         let heartbeatInterval = null;
@@ -1186,9 +1192,13 @@
 
         // Every GAS call goes through this: an AbortController aborts a request that hangs past
         // FETCH_TIMEOUT_MS, so slow/dead requests can't pile up on flaky tablet wifi.
-        function gasFetch(url, opts) {
+        // `timeoutMs` overrides that budget for the rare endpoint that is legitimately slow
+        // (getTodayPlan fans out to the Whiteboard web app + the master pen sheet) — omit it
+        // and every existing caller keeps the standard 12s.
+        function gasFetch(url, opts, timeoutMs) {
             const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+            const budget = (typeof timeoutMs === 'number' && timeoutMs > 0) ? timeoutMs : FETCH_TIMEOUT_MS;
+            const timer = setTimeout(() => controller.abort(), budget);
             return _rawFetch(url, Object.assign({}, opts || {}, { signal: controller.signal }))
                 .finally(() => clearTimeout(timer));
         }
@@ -2384,19 +2394,32 @@
 
             if (btn) { btn.disabled = true; btn.textContent = '⏳ Loading…'; }
 
-            let result;
-            try {
-                const url = APPS_SCRIPT_URL + '?action=getTodayPlan&mealPeriod=' + encodeURIComponent(mealPeriod);
-                const response = await gasFetch(url, { method: 'GET', redirect: 'follow' });
-                result = await response.json();
-            } catch (e) {
-                result = { success: false, error: e.toString() };
+            // The Whiteboard fan-out is slow and its cold start is the main variance, so this call
+            // gets PLAN_FETCH_TIMEOUT_MS (not the standard 12s) and one retry — a timeout on the
+            // first press must not leave staff unable to start the day.
+            const url = APPS_SCRIPT_URL + '?action=getTodayPlan&mealPeriod=' + encodeURIComponent(mealPeriod);
+            let result = null, timedOut = false;
+
+            for (let attempt = 1; attempt <= PLAN_FETCH_ATTEMPTS; attempt++) {
+                if (btn && attempt > 1) btn.textContent = '⏳ Still loading…';
+                try {
+                    const response = await gasFetch(url, { method: 'GET', redirect: 'follow' }, PLAN_FETCH_TIMEOUT_MS);
+                    result = await response.json();
+                    timedOut = false;
+                } catch (e) {
+                    // An AbortError here is OUR timeout firing, not the server refusing.
+                    timedOut = !!(e && (e.name === 'AbortError' || /abort/i.test(String(e && e.message))));
+                    result = { success: false, error: e.toString() };
+                }
+                if (result && result.success) break;
             }
 
             if (btn) { btn.disabled = false; btn.textContent = '🐶 Add Dogs for Today'; }
 
             if (!result || !result.success) {
-                showToast("Couldn't load today's dogs: " + ((result && result.error) || 'unknown error'), 'error');
+                showToast(timedOut
+                    ? "Timed out loading today's dogs — the whiteboard was slow to answer. Tap the button again."
+                    : "Couldn't load today's dogs: " + ((result && result.error) || 'unknown error'), 'error');
                 return;
             }
 
