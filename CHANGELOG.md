@@ -74,7 +74,41 @@ Google account** and shared with the Whiteboard project's own 14:05 pull, and a 
 costs 66–96 min/day on the measured failure mix (the @29 failure shape: fine all morning, dead
 mid-afternoon, looks like something else).
 
-**Root cause is upstream and remains open.** The 404s come from the Whiteboard staff-board
+### Part 3 (@32) — root cause removed: the lunch roster is read straight from the Staff Board sheet
+
+The 404s were never this app's to fix: they come from the Whiteboard project's `/exec`, which is
+shared with its TV display (97s poll), its mobile editor (93s poll + autosave) and the Routes feed,
+and which that project had already logged at ~01:00 the same day as degrading under concurrent load.
+But the **data** behind that endpoint is a Google Sheet owned by the same account as this script — so
+we can read it directly and skip the failing hop entirely.
+
+`readStaffBoardToday_()` opens `CONFIG.STAFF_BOARD_SHEET_ID` (`1kQsNXee…`, tab `Today`) and resolves
+`Dog_Name` + `Appointment_Type` **by header name**. No new OAuth scope (this script already
+`openById`s the master pen sheet). The web app remains the **fallback**.
+
+Design rules, each deliberate:
+- **Strictly read-only.** It mirrors the producer's `loadBoardData` for the two fields consumed (row
+  counts when either `ID` or `Dog_Name` is non-empty; missing cells coerce to `''`) but deliberately
+  does NOT mirror its `getOrCreateSheet` — creating a tab would make this app a *writer* in another
+  project's workbook. A missing tab is reported, never repaired.
+- **Never guesses a column by position.** If the headers can't be resolved it returns not-ok and falls
+  back to the web app, which runs the producer's own reader including its own positional fallback —
+  so that heuristic keeps exactly one implementation, theirs.
+- **`rosterSource: 'sheet'|'webapp'`** is on the response so a silent degradation back to the flaky
+  path is visible from outside instead of hiding behind a working button.
+
+**Result, measured live:** 10/10 lunch reads via the sheet, **zero failures**, 2.7–7.9s (cached 1.0s)
+— against 2–48s with ~40% failures through the web app. Dog counts unchanged (19 lunch / 18 breakfast
+/ 19 dinner). Breakfast and dinner are untouched: they use the check-in/out feed, which was always
+healthy (it serves from a 5h cache with a 6h stale fallback — the pattern this app now mirrors).
+
+⚠️ **New cross-project coupling.** This app is now a consumer of the Staff Board **sheet schema**, not
+just the web-app JSON. Renaming the `Dog_Name` or `Appointment_Type` headers in the `Today` tab drops
+this app back to the flaky web app (it fails safe, not silently wrong — `rosterFallbackReason` records
+why). The producer's own docs list the enforcement sites for that schema and should be updated to
+include this one.
+
+**The upstream endpoint is still broken for everyone else.** The 404s come from the Whiteboard staff-board
 `/exec`, which the producer already logged at ~01:00 the same day as degrading under concurrent
 load (its TV display polls every 97s, the mobile editor every 93s plus autosave, and the Routes
 feed on every stage press). The durable cure is either a response cache there — its healthy

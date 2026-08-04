@@ -62,6 +62,20 @@ const CONFIG = {
   CHECKINOUT_URL: 'https://script.google.com/macros/s/AKfycbz2kc3lJbrGk7lw9jVcZMdUrPWjRx4qBARM8YVAIARhYAlQwCzlhHBbKswyOcVHytmB7Q/exec', // ?mode=checkinout&token=… → boarding stays w/ reliable dates (breakfast/dinner source)
   CHECKINOUT_TOKEN: 'ft-k9-board-2024-sec',
 
+  // ── Lunch roster: read the Staff Board sheet DIRECTLY (2026-08-04) ──
+  // WHY: WHITEBOARD_TODAY_URL above is a GAS web app that 404s for ~40% of requests under
+  // load (it is shared with the TV display, the mobile editor and the Routes feed). The
+  // underlying Today tab is owned by the same Google account as this script, so we can read
+  // it with SpreadsheetApp directly and skip the failing web-app hop entirely — no new OAuth
+  // scope (we already openById the master pen sheet). The web app stays as a FALLBACK.
+  // ⚠️ READ-ONLY. This workbook belongs to the Whiteboard project. Never create the tab,
+  // never write. If the tab is missing that is an error to report, not a thing to fix.
+  // Columns are resolved by HEADER NAME (`Dog_Name`, `Appointment_Type`); if the header
+  // cannot be resolved we do NOT guess by position — we fall back to the web app, which runs
+  // the producer's own reader and its own fallback logic.
+  STAFF_BOARD_SHEET_ID: '1kQsNXeeyw-_XIw1MetkiR4D7Psyq-sUfxfWhF0DaoMs',   // "Fairy Tails Staff Board"
+  STAFF_BOARD_TODAY_TAB: 'Today',
+
   // ── "Add Dogs for Today" resilience (2026-08-04) ──
   // Measured live: WHITEBOARD_TODAY_URL returns HTTP 404 + a Google "Page not found"
   // page for ~40% of requests (8–43s to fail), and even a SUCCESS takes 2–24s. Before
@@ -975,27 +989,40 @@ function getLunchPlan_(today) {
   const DAYCARE = { 'Full Day': true, 'Half Day AM': true, 'Half Day PM': true };
   const BOARDING = { 'Boarding': true, 'Boarding School': true };
 
-  const probe = {};
-  // attempts:1 deliberately. This endpoint's failures take 16–43s, so a retry could never
-  // clear the deadline gate anyway — and the producer documents that this /exec "degrades
-  // sharply under concurrent load" (it is shared with the TV display, the mobile editor and
-  // the Routes feed). Retrying into a load-driven failure would deepen the outage. The cache
-  // and the honest error below are what actually protect staff here, not a retry.
-  const board = fetchJson_(CONFIG.WHITEBOARD_TODAY_URL + '?action=loadToday', {
-    attempts: 1,
-    out: probe
-  });
-  // Roster read failed (the measured ~40% 404) → report it; never pass it off as an empty day.
-  if (!probe.ok || !board || (board.success === false) || !Array.isArray(board.dogs)) {
-    return {
-      success: false,
-      upstreamOk: false,
-      mealPeriod: 'Lunch',
-      today: today,
-      error: 'Whiteboard roster unavailable: ' + (probe.error || 'unexpected response shape')
-    };
+  // PRIMARY: read the Staff Board sheet directly — no web-app hop, so none of its ~40% 404s.
+  let roster = null;
+  let rosterSource = 'sheet';
+  let rosterError = '';
+  const direct = readStaffBoardToday_();
+  if (direct.ok) {
+    roster = direct.dogs;
+  } else {
+    // FALLBACK: the web app. Slower and flaky, but it is the producer's own reader, so it
+    // covers the cases the direct read deliberately refuses to guess at (unrecognised headers)
+    // as well as a sharing change on the workbook.
+    // attempts:1 deliberately — this endpoint's failures take 16–43s, so a retry could never
+    // clear the deadline gate, and the producer documents it "degrades sharply under
+    // concurrent load". Retrying into a load-driven failure would deepen the outage.
+    rosterSource = 'webapp';
+    rosterError = direct.error;
+    const probe = {};
+    const board = fetchJson_(CONFIG.WHITEBOARD_TODAY_URL + '?action=loadToday', {
+      attempts: 1,
+      out: probe
+    });
+    if (!probe.ok || !board || (board.success === false) || !Array.isArray(board.dogs)) {
+      // Both paths are down → report it; never pass it off as an empty day.
+      return {
+        success: false,
+        upstreamOk: false,
+        mealPeriod: 'Lunch',
+        today: today,
+        error: 'Whiteboard roster unavailable — sheet: ' + (direct.error || 'unknown') +
+               '; web app: ' + (probe.error || 'unexpected response shape')
+      };
+    }
+    roster = board.dogs;
   }
-  const roster = board.dogs;
 
   const penData = readPenMap_();          // { map:{normName:'top'|'bottom'}, lunchY:{normName:true}, firstLast:{...}, ok }
   // The pen sheet is the SECOND way this can silently empty the board, and the nastier one:
@@ -1072,6 +1099,10 @@ function getLunchPlan_(today) {
     today: today,
     dogs: dogs,
     skipped: skipped,
+    // `rosterSource` is diagnostic: it makes a silent fall-back to the flaky web app visible
+    // from outside, so "the sheet read stopped working" can't hide behind a working button.
+    rosterSource: rosterSource,
+    rosterFallbackReason: rosterError || undefined,
     counts: { roster: roster.length, eligible: dogs.length, skipped: skipped.length }
   };
 }
@@ -1183,6 +1214,74 @@ function readPenMap_() {
   } catch (e) {
     out.error = e.toString();
     console.warn('[readPenMap_] Failed to read pen sheet: ' + e.toString());
+  }
+  return out;
+}
+
+/**
+ * Today's roster read STRAIGHT from the Whiteboard project's Staff Board sheet, bypassing its
+ * `?action=loadToday` web app (which 404s for ~40% of requests under concurrent load).
+ *
+ * This is a deliberate, read-only reach into another project's workbook, so it mirrors that
+ * project's own reader (`loadBoardData`) for the two fields we consume and nothing else:
+ *   • resolve columns by HEADER NAME, not position (other workflows edit this sheet);
+ *   • a row counts when EITHER `ID` or `Dog_Name` is non-empty;
+ *   • missing cells coerce to '' rather than undefined.
+ * It deliberately does NOT mirror `getOrCreateSheet` — creating the tab would make this app a
+ * writer into someone else's workbook. A missing tab is reported, never repaired.
+ *
+ * If the headers can't be resolved we return !ok rather than guessing by position: the caller
+ * then falls back to the web app, which runs the producer's OWN reader (including its own
+ * positional fallback). That keeps exactly one implementation of that heuristic — theirs.
+ *
+ * Returns { ok, dogs:[{name, serviceType}], error }.
+ */
+function readStaffBoardToday_() {
+  const out = { ok: false, dogs: [], error: '' };
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.STAFF_BOARD_SHEET_ID);
+    const sheet = ss.getSheetByName(CONFIG.STAFF_BOARD_TODAY_TAB);
+    if (!sheet) {
+      out.error = 'no "' + CONFIG.STAFF_BOARD_TODAY_TAB + '" tab in the Staff Board sheet';
+      return out;
+    }
+
+    const data = sheet.getDataRange().getValues();
+    if (!data.length) { out.error = 'Today tab is completely empty'; return out; }
+
+    const header = data[0].map(function (h) {
+      return (h === null || h === undefined) ? '' : h.toString().trim().toLowerCase();
+    });
+    let idCol = -1, nameCol = -1, typeCol = -1;
+    for (let c = 0; c < header.length; c++) {
+      if (idCol === -1 && header[c] === 'id') idCol = c;
+      if (nameCol === -1 && header[c] === 'dog_name') nameCol = c;
+      if (typeCol === -1 && header[c] === 'appointment_type') typeCol = c;
+    }
+    if (nameCol === -1 || typeCol === -1) {
+      out.error = 'Today tab headers not recognised (Dog_Name / Appointment_Type missing)';
+      console.warn('[readStaffBoardToday_] ' + out.error + ' — falling back to the web app');
+      return out;
+    }
+
+    const cell = function (row, i) {
+      if (i < 0 || i >= row.length) return '';
+      const v = row[i];
+      return (v === null || v === undefined) ? '' : v.toString().trim();
+    };
+
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const id = cell(row, idCol);
+      const name = cell(row, nameCol);
+      if (!id && !name) continue;                    // producer's own row filter
+      out.dogs.push({ name: name, serviceType: cell(row, typeCol) });
+    }
+    out.ok = true;
+  } catch (e) {
+    // Most likely a sharing/authorisation change on the Staff Board workbook.
+    out.error = e.toString();
+    console.warn('[readStaffBoardToday_] ' + out.error + ' — falling back to the web app');
   }
   return out;
 }
