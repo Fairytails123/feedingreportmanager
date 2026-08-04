@@ -118,10 +118,23 @@ edit → syncAddDog/UpdateDog/DeleteDog/MealType → enqueue {op, dogId, payload
 else Evening), then **GET `?action=getTodayPlan`**. GAS (computing "today" in `Europe/London`)
 reads your **separate White Board project**:
 - **Morning/Evening** → the check-in/out feed (who's boarding tonight / slept here last night).
-- **Lunch** → the `loadToday` roster + the master **"Jot form Dog Details"** sheet (`1OD8SQR2…`), joined by dog name (exact `normName_` with an ambiguity-guarded first+last-token fallback that also bridges dog-first-name|owner-surname, e.g. roster `Oliver / Ollie Reed` ↔ master `Oliver`). A dog (day-care **or** boarding) is added to a lunch pen **only if** the master flags **"Lunch Y?"** (col L) = `Y` **and** gives a `B`/`T` pen (col K) — the staff opt-in for the lunch board, *not* the report (sent later on submit). No `Y` → not added; `Y` + no pen → `skipped`. (Universal Lunch-Y gate since 2026-06-19 / @26; was day-care-pen-only + boarding-opt-in before.)
+- **Lunch** → the Staff Board **`Today` tab read DIRECTLY** (`1kQsNXee…`, columns resolved by header name `Dog_Name` / `Appointment_Type` — `readStaffBoardToday_`, since @32 on 2026-08-04) + the master **"Jot form Dog Details"** sheet (`1OD8SQR2…`), joined by dog name (exact `normName_` with an ambiguity-guarded first+last-token fallback that also bridges dog-first-name|owner-surname, e.g. roster `Oliver / Ollie Reed` ↔ master `Oliver`). A dog (day-care **or** boarding) is added to a lunch pen **only if** the master flags **"Lunch Y?"** (col L) = `Y` **and** gives a `B`/`T` pen (col K) — the staff opt-in for the lunch board, *not* the report (sent later on submit). No `Y` → not added; `Y` + no pen → `skipped`. (Universal Lunch-Y gate since 2026-06-19 / @26; was day-care-pen-only + boarding-opt-in before.)
 
 It returns the dogs; the tablet skips any already on the board and drops each new dog into
 the **least-occupied eligible pen** (`pickLeastOccupiedPen`).
+
+**⚠️ Failure semantics (2026-08-04 — this is the day-long outage, don't regress it).** The old
+`?action=loadToday` web app returned HTTP 404 for ~40% of requests, and a failed read used to
+become an empty roster with `success:true` — so staff were told *"No Lunch dogs found on the
+whiteboard for today"* during an outage. Now: **a failed read is `success:false`, never an empty
+day**; a genuinely empty roster is still `success:true` with 0 dogs. The Lunch path reads the
+sheet directly and falls back to the web app only if the headers can't be resolved or the
+workbook can't be opened (`rosterSource:'sheet'|'webapp'` says which was used). A short **plan
+cache** serves repeat presses, and a **last-known-good** copy (45 min, same-day + same-meal only,
+never empty) is served during an outage marked `stale:true` + `capturedAt` — which the tablet
+shows in the **`confirm()` dialog**, not a toast. `?fresh=1` bypasses the cache; the tablet sends
+it on any repeat press. The tablet gives this one call a 45s budget (`PLAN_FETCH_TIMEOUT_MS`)
+because every other call keeps the standard 12s.
 
 ### Phase 3 — Submit (the critical safety handshake)
 `confirmSubmit()` first **guards**: if offline or the queue isn't empty, it blocks and warns.
@@ -185,8 +198,9 @@ REAL now" for the full contract — preserve it).
 | `getDogList` | GET/POST | Lookup | — | `{success, dogs:[{name,email,parentName}]}` |
 | `getSession` | GET/POST | Session + Meta | (self-heal only) | `{success, dogs:[…], mealType, version, count}` |
 | `getSessionVersion` | GET | Session + Meta | (self-heal only) | `{success, version, count}` (lightweight heartbeat) |
-| `getTodayPlan` | GET/POST | White Board feeds + master pen sheet (col K) | — | `{success, mealPeriod, today, dogs, skipped, counts}` |
-| `addDog` | POST | — | Session (append) + Meta bump | `{success, dogId}` — **no version** |
+| `getTodayPlan` | GET/POST | Staff Board `Today` tab **direct** (web app = fallback) + check-in/out feed + master pen sheet (col K) | — | `{success, mealPeriod, today, dogs, skipped, counts, rosterSource}` — **`success:false` on a failed read, never an empty day**; `+ stale, capturedAt, upstreamError` when a last-known-good copy is served; `+ cached` on a cache hit. `?fresh=1` bypasses the cache |
+| `dedupeSession` | GET | Session | Session (deletes duplicate rows) + Meta bump | `{success, removed, remaining}` — recovery for a tab that accumulated duplicate `Dog_ID` rows |
+| `addDog` | POST | Session (id lookup) | Session (**update-or-insert**, never blind append) + Meta bump | `{success, dogId, deduped}` — **no version**. Idempotent by `Dog_ID` since @34 |
 | `updateDog` | POST | Session | Session (one row) + Meta bump | `{success, dogId}` — **no version** |
 | `deleteDog` | POST | Session | Session (delete row) + Meta bump | `{success, dogId}` — **no version** (20s lock wait) |
 | `setMealType` | POST | Session | Session (all rows) + Meta bump | `{success, mealType}` — **no version** |
