@@ -62,6 +62,26 @@ const CONFIG = {
   CHECKINOUT_URL: 'https://script.google.com/macros/s/AKfycbz2kc3lJbrGk7lw9jVcZMdUrPWjRx4qBARM8YVAIARhYAlQwCzlhHBbKswyOcVHytmB7Q/exec', // ?mode=checkinout&token=… → boarding stays w/ reliable dates (breakfast/dinner source)
   CHECKINOUT_TOKEN: 'ft-k9-board-2024-sec',
 
+  // ── "Add Dogs for Today" resilience (2026-08-04) ──
+  // Measured live: WHITEBOARD_TODAY_URL returns HTTP 404 + a Google "Page not found"
+  // page for ~40% of requests (8–43s to fail), and even a SUCCESS takes 2–24s. Before
+  // this, a failed read became `dogs: []` with `success: true`, so staff were told
+  // "No Lunch dogs found on the whiteboard for today" during an outage — indistinguishable
+  // from a genuinely empty day, and they hand-built the board instead.
+  // Defence in depth, most valuable first:
+  //   1. FRESH cache      — most presses never touch the flaky upstream at all.
+  //   2. LAST-KNOWN-GOOD  — an outage still yields a usable board, clearly marked stale.
+  //   3. bounded retry    — rescues the cheap transient failure only (see fetchJson_).
+  PLAN_CACHE_FRESH_SEC: 120,      // short: a whiteboard edit must show up quickly
+  // 45 min, NOT the 6h cap. A lunch roster six hours old is a different day's service: dogs
+  // have gone home, "Lunch Y?" has been re-ticked. Because the tablet MERGES a plan onto the
+  // board and never removes, an over-long horizon can put a dog that left back into a live
+  // feeding round — which ends in a JotForm report and a parent email for a dog that wasn't
+  // there. 45 min covers a genuine outage without spanning a service change.
+  PLAN_CACHE_LKG_SEC: 2700,
+  PLAN_FETCH_ATTEMPTS: 2,
+  PLAN_FETCH_DEADLINE_MS: 8000,   // only retry a failure that came back fast
+
   // ── Pen-assignment source (master "Jot form Dog Details" sheet) ──
   // Lunch Top/Bottom side now lives in the shared master sheet, column K, NOT in a
   // dedicated tab of the feeding sheet (the old BT_PEN_GID tab is retired). We own
@@ -137,13 +157,19 @@ function doGet(e) {
         result = getSessionVersion();
         break;
       case 'getTodayPlan':
-        result = getTodayPlan(e.parameter.mealPeriod);
+        result = getTodayPlan(e.parameter.mealPeriod, e.parameter.fresh === '1');
         break;
       case 'repairTemp':
         result = repairTemp();
         break;
       default:
-        result = { success: true, status: 'ok', message: 'Feeding Report API v2.1 - Real Versions + Write Locks' };
+        // A bare /exec (no action) is the deployment ping — keep it success:true, it is the
+        // documented smoke check. But an action that was ASKED FOR and isn't recognised is an
+        // error: answering success:true let a frontend deployed ahead of the backend read as
+        // a quiet, empty day instead of a version mismatch (2026-08-04). doPost already does this.
+        result = action
+          ? { success: false, error: 'Unknown action: ' + action }
+          : { success: true, status: 'ok', message: 'Feeding Report API v2.1 - Real Versions + Write Locks' };
     }
     
     return ContentService
@@ -198,7 +224,7 @@ function doPost(e) {
         result = clearTempTab();
         break;
       case 'getTodayPlan':
-        result = getTodayPlan(data.mealPeriod);
+        result = getTodayPlan(data.mealPeriod, data.fresh === true || data.fresh === '1');
         break;
       default:
         result = { success: false, error: 'Unknown action: ' + action };
@@ -774,22 +800,93 @@ function getDogList() {
  * Returns { success, mealPeriod, today, dogs:[{name, penGroup}], skipped:[name], counts }.
  * Never throws to the client.
  */
-function getTodayPlan(mealPeriod) {
+function getTodayPlan(mealPeriod, forceFresh) {
   try {
     if (!mealPeriod) return { success: false, error: 'Missing mealPeriod' };
+    if (mealPeriod !== 'Morning Meal' && mealPeriod !== 'Evening Meal' && mealPeriod !== 'Lunch') {
+      return { success: false, error: 'Unknown mealPeriod: ' + mealPeriod };
+    }
 
     // "Today" is authoritative in the business timezone, independent of the tablet clock.
     const today = Utilities.formatDate(new Date(), 'Europe/London', 'yyyy-MM-dd');
 
-    if (mealPeriod === 'Morning Meal' || mealPeriod === 'Evening Meal') {
-      return getBoardingPlan_(mealPeriod, today);
+    // Cache keys carry BOTH the date and the meal period, so a last-known-good plan can
+    // never be served for the wrong meal or leak across midnight into the next day.
+    const base = 'todayPlan|v1|' + today + '|' + mealPeriod;
+    const freshKey = base + '|fresh';
+    const lkgKey = base + '|lkg';
+
+    // 1. A fresh plan short-circuits the flaky upstream entirely — the main win.
+    //    `?fresh=1` bypasses it: the escape hatch for staff who just ticked "Lunch Y?" or
+    //    changed the whiteboard and need to see it NOW rather than within the TTL. The
+    //    last-known-good copy is still consulted below if the live read then fails.
+    if (!forceFresh) {
+      const cached = planCacheGet_(freshKey);
+      if (cached) { cached.cached = true; return cached; }   // `cached` is diagnostic: it makes
+      // cache effectiveness measurable from outside instead of inferred from response times.
     }
-    if (mealPeriod === 'Lunch') {
-      return getLunchPlan_(today);
+
+    // 2. Build it for real.
+    const built = (mealPeriod === 'Lunch')
+      ? getLunchPlan_(today)
+      : getBoardingPlan_(mealPeriod, today);
+
+    if (built && built.success && built.upstreamOk) {
+      delete built.upstreamOk;                       // internal signal, not part of the wire contract
+      planCachePut_(freshKey, built, CONFIG.PLAN_CACHE_FRESH_SEC);
+      planCachePut_(lkgKey, { plan: built, capturedAt: new Date().toISOString() },
+                    CONFIG.PLAN_CACHE_LKG_SEC);
+      return built;
     }
-    return { success: false, error: 'Unknown mealPeriod: ' + mealPeriod };
+
+    // 3. Upstream is down. A usable-but-stale board beats no board at all — but say so,
+    //    loudly and with its age, so staff can judge it. Only ever from TODAY (key above).
+    //    An EMPTY last-known-good is worse than none: the tablet would show the stale warning
+    //    and then "No dogs found for today" — the exact lie this change exists to kill, just
+    //    wearing a warning label. Fall through to the honest error instead. (We still WRITE
+    //    empty plans to LKG above, so a quiet morning can't leave a stale non-empty board behind.)
+    const lkg = planCacheGet_(lkgKey);
+    if (lkg && lkg.plan && Array.isArray(lkg.plan.dogs) && lkg.plan.dogs.length > 0) {
+      const stale = lkg.plan;
+      stale.stale = true;
+      stale.capturedAt = lkg.capturedAt;
+      stale.upstreamError = (built && built.error) || 'upstream unavailable';
+      return stale;
+    }
+
+    // 4. Nothing cached either — fail loud. Staff must never be told this is an empty day.
+    return {
+      success: false,
+      mealPeriod: mealPeriod,
+      today: today,
+      error: (built && built.error) || 'Could not load today\'s plan.'
+    };
   } catch (error) {
     return { success: false, error: error.toString() };
+  }
+}
+
+/**
+ * Script-cache helpers for the today-plan. Both are best-effort by design: CacheService
+ * is an optimisation, never a dependency, so a cache outage (or a value over the 100KB
+ * per-entry cap) must degrade to a live read rather than fail the request.
+ */
+function planCacheGet_(key) {
+  try {
+    const raw = CacheService.getScriptCache().get(key);
+    if (!raw) return null;
+    return safeJsonParse(raw, null);
+  } catch (e) {
+    console.warn('[planCacheGet_] ' + e.toString());
+    return null;
+  }
+}
+
+function planCachePut_(key, value, ttlSeconds) {
+  try {
+    CacheService.getScriptCache().put(key, JSON.stringify(value), ttlSeconds);
+  } catch (e) {
+    console.warn('[planCachePut_] ' + e.toString());   // oversized value / cache unavailable
   }
 }
 
@@ -806,8 +903,24 @@ function getTodayPlan(mealPeriod) {
 function getBoardingPlan_(mealPeriod, today) {
   const url = CONFIG.CHECKINOUT_URL +
     '?mode=checkinout&token=' + encodeURIComponent(CONFIG.CHECKINOUT_TOKEN);
-  const feed = fetchJson_(url);
-  const stays = (feed && Array.isArray(feed.stays)) ? feed.stays : [];
+  const probe = {};
+  const feed = fetchJson_(url, {
+    attempts: CONFIG.PLAN_FETCH_ATTEMPTS,
+    deadlineMs: CONFIG.PLAN_FETCH_DEADLINE_MS,
+    out: probe
+  });
+  // A dead feed (or a rejected CHECKINOUT_TOKEN, which answers 200 with success:false)
+  // must NOT read as "no dogs boarding tonight" — say so and let getTodayPlan fall back.
+  if (!probe.ok || !feed || (feed.success === false) || !Array.isArray(feed.stays)) {
+    return {
+      success: false,
+      upstreamOk: false,
+      mealPeriod: mealPeriod,
+      today: today,
+      error: 'Check-in/out feed unavailable: ' + (probe.error || 'unexpected response shape')
+    };
+  }
+  const stays = feed.stays;
 
   const isMorning = (mealPeriod === 'Morning Meal');
   const seen = {};
@@ -837,6 +950,7 @@ function getBoardingPlan_(mealPeriod, today) {
     success: true,
     mealPeriod: mealPeriod,
     today: today,
+    upstreamOk: true,
     dogs: dogs,
     skipped: [],
     counts: { source: stays.length, eligible: dogs.length }
@@ -861,9 +975,43 @@ function getLunchPlan_(today) {
   const DAYCARE = { 'Full Day': true, 'Half Day AM': true, 'Half Day PM': true };
   const BOARDING = { 'Boarding': true, 'Boarding School': true };
 
-  const board = fetchJson_(CONFIG.WHITEBOARD_TODAY_URL + '?action=loadToday');
-  const roster = (board && Array.isArray(board.dogs)) ? board.dogs : [];
-  const penData = readPenMap_();          // { map:{normName:'top'|'bottom'}, lunchY:{normName:true}, firstLast:{...} }
+  const probe = {};
+  // attempts:1 deliberately. This endpoint's failures take 16–43s, so a retry could never
+  // clear the deadline gate anyway — and the producer documents that this /exec "degrades
+  // sharply under concurrent load" (it is shared with the TV display, the mobile editor and
+  // the Routes feed). Retrying into a load-driven failure would deepen the outage. The cache
+  // and the honest error below are what actually protect staff here, not a retry.
+  const board = fetchJson_(CONFIG.WHITEBOARD_TODAY_URL + '?action=loadToday', {
+    attempts: 1,
+    out: probe
+  });
+  // Roster read failed (the measured ~40% 404) → report it; never pass it off as an empty day.
+  if (!probe.ok || !board || (board.success === false) || !Array.isArray(board.dogs)) {
+    return {
+      success: false,
+      upstreamOk: false,
+      mealPeriod: 'Lunch',
+      today: today,
+      error: 'Whiteboard roster unavailable: ' + (probe.error || 'unexpected response shape')
+    };
+  }
+  const roster = board.dogs;
+
+  const penData = readPenMap_();          // { map:{normName:'top'|'bottom'}, lunchY:{normName:true}, firstLast:{...}, ok }
+  // The pen sheet is the SECOND way this can silently empty the board, and the nastier one:
+  // the roster read succeeded, so every count looks plausible while `lunchY` is empty and the
+  // "Lunch Y?" gate below drops every dog. An unreadable sheet, a missing tab gid, or a
+  // re-keyed header must surface as an outage, not as "nobody is booked for lunch".
+  if (!penData.ok && roster.length > 0) {
+    return {
+      success: false,
+      upstreamOk: false,
+      mealPeriod: 'Lunch',
+      today: today,
+      error: 'Pen sheet unreadable (' + (penData.error || 'no usable rows') +
+             ') — cannot tell which dogs are booked for lunch.'
+    };
+  }
   const penMap = penData.map;
   const lunchYMap = penData.lunchY;
   const firstLast = penData.firstLast;
@@ -919,6 +1067,7 @@ function getLunchPlan_(today) {
 
   return {
     success: true,
+    upstreamOk: true,
     mealPeriod: 'Lunch',
     today: today,
     dogs: dogs,
@@ -953,7 +1102,10 @@ function readPenMap_() {
   const map = {};         // normName -> 'top' | 'bottom'  (exact pen-side join key)
   const lunchY = {};      // normName -> true  (master "Lunch Y?" = Y → a BOARDING dog opts into a lunch report)
   const firstLast = {};   // "first|last" -> { side:'top'|'bottom'|null, lunchY:bool, count } over all named rows
-  const out = { map: map, lunchY: lunchY, firstLast: firstLast };
+  // `ok` distinguishes "read the sheet, these are the real answers" from "could not read it".
+  // Without it an unreadable sheet returns empty maps, the "Lunch Y?" gate drops every dog,
+  // and the client is told the day is simply empty (2026-08-04).
+  const out = { map: map, lunchY: lunchY, firstLast: firstLast, ok: false, error: '' };
   try {
     const ss = SpreadsheetApp.openById(CONFIG.PEN_SHEET_ID);
     const sheets = ss.getSheets();
@@ -962,12 +1114,17 @@ function readPenMap_() {
       if (sheets[i].getSheetId() === CONFIG.PEN_TAB_GID) { sheet = sheets[i]; break; }
     }
     if (!sheet) {
+      out.error = 'no tab with gid ' + CONFIG.PEN_TAB_GID;
       console.warn('[readPenMap_] No tab gid ' + CONFIG.PEN_TAB_GID + ' in sheet ' + CONFIG.PEN_SHEET_ID);
       return out;
     }
 
     const data = sheet.getDataRange().getValues();
-    if (data.length < 2) { console.warn('[readPenMap_] pen sheet has no data rows'); return out; }
+    if (data.length < 2) {
+      out.error = 'sheet has no data rows';
+      console.warn('[readPenMap_] pen sheet has no data rows');
+      return out;
+    }
 
     // Resolve the pen + lunch columns by header (shared master sheet → column order not guaranteed).
     const header = data[0].map(function (h) { return (h || '').toString().toLowerCase().trim(); });
@@ -1018,7 +1175,13 @@ function readPenMap_() {
         else { firstLast[fl].count++; if (side) firstLast[fl].side = side; if (wantsLunch) firstLast[fl].lunchY = true; }
       });
     }
+    // NOTE: "zero rows flagged Lunch Y?" is deliberately NOT treated as a failure. It is a
+    // legitimate state (a genuinely quiet lunch), it would black out the button for the whole
+    // day with no override, and the tablet already reports this case far better — it names the
+    // roster count and points at the "Lunch Y?" column. Only a sheet we could not READ is !ok.
+    out.ok = true;
   } catch (e) {
+    out.error = e.toString();
     console.warn('[readPenMap_] Failed to read pen sheet: ' + e.toString());
   }
   return out;
@@ -1026,22 +1189,56 @@ function readPenMap_() {
 
 /**
  * GET a URL and parse JSON. GAS web apps 302-redirect to googleusercontent;
- * UrlFetchApp follows redirects by default. Returns null on any failure so callers
- * default to an empty roster rather than throwing.
+ * UrlFetchApp follows redirects by default. Returns null on any failure.
+ *
+ * ⚠️ `null` means FAILED, not "empty" — a caller that turns null into an empty list
+ * reports an outage to staff as a normal quiet day. Pass `opts.out` and check
+ * `out.ok` to tell the two apart (see getLunchPlan_ / getBoardingPlan_).
+ *
+ * Retry (2026-08-04): the upstream Whiteboard web app returns HTTP 404 + a Google
+ * "Page not found" page for a large minority of requests — measured ~40% today, and
+ * 8–43s to fail. Retrying is only worth it when the failure was CHEAP: once we are
+ * past `deadlineMs` the upstream is clearly struggling and another attempt would
+ * blow the tablet's fetch budget, so we stop and let the caller fall back to cache.
+ *   opts.attempts   max attempts (default 1 — every pre-existing caller is unchanged)
+ *   opts.deadlineMs stop retrying once this much time has elapsed (default 0 = never retry)
+ *   opts.out        {ok, error, attempts} written back for the caller
  */
-function fetchJson_(url) {
-  try {
-    const response = UrlFetchApp.fetch(url, { method: 'get', muteHttpExceptions: true });
-    const code = response.getResponseCode();
-    if (code < 200 || code >= 300) {
-      console.warn('[fetchJson_] HTTP ' + code + ' for ' + url);
-      return null;
+function fetchJson_(url, opts) {
+  opts = opts || {};
+  const out = opts.out || {};
+  const attempts = opts.attempts || 1;
+  const deadlineMs = opts.deadlineMs || 0;
+  const started = Date.now();
+  let lastError = 'unknown';
+
+  for (let i = 1; i <= attempts; i++) {
+    out.attempts = i;
+    try {
+      const response = UrlFetchApp.fetch(url, { method: 'get', muteHttpExceptions: true });
+      const code = response.getResponseCode();
+      if (code >= 200 && code < 300) {
+        const parsed = safeJsonParse(response.getContentText(), null);
+        if (parsed !== null) { out.ok = true; out.error = ''; return parsed; }
+        lastError = 'HTTP ' + code + ' but body was not JSON';   // Google HTML interstitial
+      } else {
+        lastError = 'HTTP ' + code;
+      }
+    } catch (e) {
+      lastError = e.toString();
     }
-    return safeJsonParse(response.getContentText(), null);
-  } catch (e) {
-    console.warn('[fetchJson_] fetch failed for ' + url + ': ' + e.toString());
-    return null;
+    if (i >= attempts) break;
+    if (deadlineMs && (Date.now() - started) >= deadlineMs) {
+      lastError += ' (slow failure — not retrying)';
+      break;
+    }
+    Utilities.sleep(400 * i);
   }
+
+  out.ok = false;
+  out.error = lastError;
+  console.warn('[fetchJson_] failed after ' + out.attempts + ' attempt(s) for ' + url + ': ' + lastError);
+  return null;
 }
 
 /**
