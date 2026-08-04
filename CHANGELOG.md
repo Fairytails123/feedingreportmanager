@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-08-04 (evening) — TV display: a permanent "Connection error" that was lying
+
+**Reported.** "There is a permanent connection error symbol in the top right corner" of the
+feeding TV display — visible in the same photo as the duplicate-names report, while the board was
+happily showing 27 dogs.
+
+**Cause — a one-way indicator.** `noteFailure()` set the status pill to `error`, but `noteSuccess()`
+only reset the failure counter and the staleness banner; it **never cleared the pill**.
+`setRefreshStatus('connected')` lived solely in `loadData()`'s success path — and `loadData()` only
+runs when the **version changes**. So a single transient failure lit "Connection error", and on a
+quiet board *nothing ever turned it off*, while the 10s version probe kept succeeding behind it.
+Today's flaky GAS guaranteed that first failure.
+
+That is worse than having no indicator: staff had no way to distinguish a real outage from a stuck
+light, so the one signal telling them whether the board is live had become noise.
+
+**Fix.** `noteSuccess()` now calls `setRefreshStatus('connected')` — a successful poll proves
+connectivity, so it must say so. Also removed a stray `noteSuccess(false)` argument that was never
+read. Published to `Fairytails123/frmdisplay`; **the TV needs a browser refresh to pick it up.**
+
+**Verified** with a new `tests/display.test.js` (9 scenarios) that assembles the page exactly as
+published and drives the connection-health functions, **plus a negative control**: with the fix
+stripped out, the indicator provably stays lit after a successful poll. Failures still register and
+the two-failure staleness banner still works, so the indicator was fixed, not disabled.
+
+⚠️ **Harness lesson worth keeping:** the first run of this test *failed against correct code*,
+because the DOM stub kept `className` and `classList` as separate stores while the real code resets
+classes via `dot.className = '...'`. A loosely-modelled stub lies in **both** directions — it hid a
+real bug this morning and invented a fake one this evening.
+
 ## 2026-08-04 (evening, @34) — TV display showed dogs repeated 3–7 times: `addDog` was not idempotent
 
 **Reported.** "It keeps duplicating the names on the TV display — not in mobile, only the TV."

@@ -18,6 +18,7 @@ run "syntax — backend"   node --check feeding_report_backend_v2.js
 run "contract drift"     node scripts/check_contract.js
 run "backend (GAS)"      node tests/backend.test.js
 run "tablet (index.html)" node tests/tablet.test.js
+run "TV display"       node tests/display.test.js
 
 echo
 if [ "$fail" -eq 0 ]; then

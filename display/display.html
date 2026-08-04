@@ -591,6 +591,14 @@
             consecutiveFailures = 0;
             lastSuccessAt = Date.now();
             updateStaleBanner();
+            // ⚠️ Clearing the STATUS PILL here is load-bearing (fixed 2026-08-04).
+            // Before this, only loadData()'s success path called setRefreshStatus('connected'),
+            // and loadData only runs when the version CHANGES. So a single transient failure lit
+            // "Connection error" and, on a quiet board, NOTHING ever turned it off — the probe
+            // kept succeeding every 10s behind a permanently red dot. Staff on the TV had no way
+            // to tell a real outage from a stale indicator, which is worse than no indicator.
+            // A successful poll proves connectivity, so it must say so.
+            setRefreshStatus('connected');
         }
 
         function noteFailure(message) {
@@ -829,7 +837,9 @@
                         loadData();
                         switchToFastMode();
                     } else {
-                        noteSuccess(false);
+                        // Board unchanged AND the probe answered — connectivity is confirmed.
+                        // (The stray `false` argument here was never read by noteSuccess.)
+                        noteSuccess();
                     }
                 } else {
                     // Pre-2026-07-26 this case was silently swallowed (dot stayed
