@@ -183,7 +183,9 @@ function doGet(e) {
         // a quiet, empty day instead of a version mismatch (2026-08-04). doPost already does this.
         result = action
           ? { success: false, error: 'Unknown action: ' + action }
-          : { success: true, status: 'ok', message: 'Feeding Report API v2.1 - Real Versions + Write Locks' };
+          // ⚠️ BUMP THIS STRING ON EVERY DEPLOY. It is the documented way to confirm which code
+          // is serving, and it silently went stale across @30/@31/@32 while behaviour changed.
+          : { success: true, status: 'ok', message: 'Feeding Report API v2.3 - Direct Staff Board Read + Plan Cache' };
     }
     
     return ContentService
