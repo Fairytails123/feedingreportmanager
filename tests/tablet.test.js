@@ -290,14 +290,19 @@ async function scenario(label, path, netPlan) {
 
   console.log('\n=== S15 — failure handling is unchanged (debounced, 2 strikes) ===');
   {
+    // NB: since S18 each tick makes up to PROBE_ATTEMPTS probes, so a tick that must FAIL needs
+    // every one of its attempts to fail — otherwise the harness's default success response
+    // rescues the retry. One tick still counts exactly one strike (pinned by S19).
+    const bad = () => ({ delayMs: 5, body: { success: false, error: 'boom' } });
     const t = syncBoot({ version: 100 });
-    t.h.state.netPlan = [{ delayMs: 5, body: { success: false, error: 'boom' } }];
+    t.h.state.netPlan = [bad(), bad()];
     await t.h.api.pollForUpdates();
-    check('one bad response does NOT declare offline', t.h.api.syncState.isOnline === true);
-    check('but it is counted', t.h.api.syncState.consecutiveFailures === 1);
-    t.h.state.netPlan = [{ delayMs: 5, body: { success: false, error: 'boom' } }];
+    check('one bad tick does NOT declare offline', t.h.api.syncState.isOnline === true);
+    check('but it is counted', t.h.api.syncState.consecutiveFailures === 1,
+      String(t.h.api.syncState.consecutiveFailures));
+    t.h.state.netPlan = [bad(), bad()];
     await t.h.api.pollForUpdates();
-    check('two consecutive failures DO declare offline', t.h.api.syncState.isOnline === false);
+    check('two consecutive bad ticks DO declare offline', t.h.api.syncState.isOnline === false);
     check('a failed version probe never fetches the full session', t.applied.length === 0);
   }
 
@@ -311,6 +316,69 @@ async function scenario(label, path, netPlan) {
     await t.h.api.pollForUpdates();          // fires while the first is still outstanding
     await inFlight;
     check('the overlapping tick was dropped, not queued', t.seq().length === 1, JSON.stringify(t.seq()));
+  }
+
+  // ============================================================================
+  // S17–S20 — resilience against a BIMODAL /exec (2026-08-05). Measured live: ~60% of
+  // calls answer in 2-4s, the rest take 15-48s or return Google's own 404 HTML page.
+  // A flat 12s budget makes the tablet abort ITSELF and staff see "connection lost"
+  // while the backend is healthy. Same class as the 2026-08-04 outage.
+  // ============================================================================
+  console.log('\n=== S17 — budgets: writes get 45s, the default stays 12s ===');
+  {
+    const { h } = boot(FIXED);
+    const c = h.api.consts;
+    check('default budget still 12s', c.FETCH_TIMEOUT_MS === 12000, String(c.FETCH_TIMEOUT_MS));
+    check('write budget is 45s', c.SYNC_WRITE_TIMEOUT_MS === 45000, String(c.SYNC_WRITE_TIMEOUT_MS));
+    check('the version probe retries once', c.PROBE_ATTEMPTS === 2, String(c.PROBE_ATTEMPTS));
+  }
+
+  console.log('\n=== S18 — a slow version probe RETRIES instead of latching offline ===');
+  {
+    const t = syncBoot({ version: 100 });
+    // First probe hangs past the 12s budget (aborts), second answers fine.
+    t.h.state.netPlan = [{ delayMs: 30000, body: { success: true, version: 100, count: 0 } }, vOK(100)];
+    await t.h.api.pollForUpdates();
+    check('it made a second attempt', t.seq().length === 2, JSON.stringify(t.seq()));
+    check('the retry rescued the tick — NOT counted as a failure',
+      t.h.api.syncState.consecutiveFailures === 0, String(t.h.api.syncState.consecutiveFailures));
+    check('...so the tablet stays online', t.h.api.syncState.isOnline === true);
+  }
+
+  console.log('\n=== S19 — both probes failing still counts exactly ONE strike ===');
+  {
+    const t = syncBoot({ version: 100 });
+    t.h.state.netPlan = [
+      { delayMs: 30000, body: { success: true } },
+      { delayMs: 30000, body: { success: true } },
+    ];
+    await t.h.api.pollForUpdates();
+    check('two attempts were made', t.seq().length === 2, JSON.stringify(t.seq()));
+    check('one tick = one strike, not two', t.h.api.syncState.consecutiveFailures === 1,
+      String(t.h.api.syncState.consecutiveFailures));
+    check('one bad tick does not declare offline', t.h.api.syncState.isOnline === true);
+  }
+
+  console.log('\n=== S20 — REGRESSION: a slow WRITE must not instantly kill the connection ===');
+  // flushQueue used to set isOnline = false outright on any network error, bypassing
+  // OFFLINE_THRESHOLD. Against a bimodal /exec that meant ONE slow POST disabled Submit.
+  {
+    const h = load(FIXED);
+    h.api.stub({
+      showToast: () => {}, renderAllPens: () => {}, renderStagingArea: () => {},
+      updateConnectionUI: () => {}, updateStatus: () => {}, pauseSync: () => {},
+    });
+    h.api.initPens();
+    h.api.syncState.initialLoadComplete = true;
+    h.api.syncState.isOnline = true;
+    h.api.syncState.queue = [{ op: 'update', dogId: 'd1', payload: { status: 'all' }, ts: Date.now() }];
+    h.state.netPlan = [{ delayMs: 60000, body: { success: true } }];   // aborts at the 45s budget
+    await h.api.flushQueue();
+    check('a single aborted write does NOT declare offline', h.api.syncState.isOnline === true,
+      'isOnline=' + h.api.syncState.isOnline);
+    check('it is debounced like every other failure', h.api.syncState.consecutiveFailures === 1,
+      String(h.api.syncState.consecutiveFailures));
+    check('the edit stays queued for retry', h.api.syncState.queue.length === 1);
   }
 
   console.log(`\n================ ${pass} passed, ${fail} failed ================\n`);

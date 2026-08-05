@@ -1189,6 +1189,21 @@
         const PLAN_FETCH_TIMEOUT_MS = 45000;
         const PLAN_FETCH_ATTEMPTS = 2;
         const OFFLINE_THRESHOLD = 2;           // consecutive failures before declaring offline (debounces flaky wifi blips)
+        // ⚠️ 2026-08-05: the /exec endpoint is BIMODAL — measured live, ~60% of calls answer in
+        // 2-4s and the rest take 15-48s or return Google's own 404 page. A flat 12s budget means
+        // the tablet ABORTS ITSELF on roughly 4 calls in 10 and staff see "connection lost" while
+        // the backend is fine. Same class as the 2026-08-04 outage: suspect the budget before
+        // suspecting the wifi. Two separate budgets, because the two call types want opposite things:
+        //  * WRITES must land. A dropped POST means unsynced work sitting on one tablet, so they
+        //    get the same generous 45s the plan fetch already uses.
+        //  * The version PROBE is a heartbeat — a stale answer is worthless, a fresh attempt is
+        //    better. It keeps the short budget but retries ONCE before it counts as a failure.
+        //    That retry is deliberate redundancy: the pre-@35 design had a 5s poll with NO
+        //    in-flight guard plus a 7s heartbeat, so 2-3 attempts were always in flight and one
+        //    slow response never latched the banner. @35 collapsed that to one guarded attempt and
+        //    removed the redundancy along with the waste — this puts it back, bounded and on purpose.
+        const SYNC_WRITE_TIMEOUT_MS = 45000;   // flushQueue / submitReport / clearSession POSTs
+        const PROBE_ATTEMPTS = 2;              // version-probe tries before counting a failure
 
         let consecutiveFailures = 0;           // reset by any success; offline only at OFFLINE_THRESHOLD
         let mutationQueue = [];   // [{op:'add'|'update'|'delete'|'mealType', dogId, payload, ts}]
@@ -1387,17 +1402,27 @@
                     try {
                         const response = await gasFetch(APPS_SCRIPT_URL, {
                             method: 'POST', redirect: 'follow', body: JSON.stringify(body)
-                        });
+                        }, SYNC_WRITE_TIMEOUT_MS);
                         result = await response.json();
                     } catch (e) {
+                        // Debounced (2026-08-05). This used to set isOnline = false OUTRIGHT,
+                        // bypassing OFFLINE_THRESHOLD entirely — so ONE slow POST against a
+                        // bimodal /exec was enough to raise "connection lost" and disable Submit.
+                        // Our own abort proves the call was SLOW, not that the link is down, so it
+                        // goes through the same 2-strike debounce as every other failure.
                         console.error('[flushQueue] network error', e);
-                        isOnline = false;     // genuine connectivity failure
+                        markSyncFailure('flush-network');
                         return;
                     }
                     if (result && result.success) {
                         if (result.version) lastSyncVersion = result.version;
                         mutationQueue.shift();
                         persistQueue();
+                        // A LANDED WRITE is the strongest possible proof of connectivity — stronger
+                        // than a version probe. Reset the failure count too, not just the flag,
+                        // otherwise a probe that failed a moment ago still counts toward the next
+                        // strike and the banner reappears while writes are visibly succeeding.
+                        consecutiveFailures = 0;
                         isOnline = true;
                         continue;
                     }
@@ -1946,13 +1971,24 @@
             isSyncing = true;
 
             try {
-                const vres = await gasFetch(APPS_SCRIPT_URL + '?action=getSessionVersion', {
-                    method: 'GET',
-                    redirect: 'follow'
-                });
-                const version = await vres.json();
+                let version = null;
+                for (let attempt = 1; attempt <= PROBE_ATTEMPTS && !version; attempt++) {
+                    try {
+                        const vres = await gasFetch(APPS_SCRIPT_URL + '?action=getSessionVersion', {
+                            method: 'GET',
+                            redirect: 'follow'
+                        });
+                        const parsed = await vres.json();
+                        if (parsed && parsed.success) version = parsed;
+                    } catch (e) {
+                        // A slow /exec aborts here, and Google sometimes answers with an HTML
+                        // error page (so .json() throws too). Swallow both and try again — only
+                        // the LAST attempt may count as a failure. See the PROBE_ATTEMPTS note.
+                        console.warn('[poll] version probe attempt ' + attempt + ' failed: ' + (e && e.name));
+                    }
+                }
 
-                if (!version || !version.success) {
+                if (!version) {
                     markSyncFailure('poll-version');
                     return;
                 }
@@ -2239,7 +2275,7 @@
                     method: 'POST',
                     redirect: 'follow',
                     body: JSON.stringify({ action: 'clearSession' })
-                });
+                }, SYNC_WRITE_TIMEOUT_MS);   // a write — must land, not abort at 12s
 
                 const result = await response.json();
                 if (result && result.success) {
@@ -2263,11 +2299,18 @@
             }
 
             try {
+                // 45s, NOT the default 12s (2026-08-05). submitReport is by far the heaviest
+                // endpoint — it rebuilds the Temp tab, builds a prefilled JotForm URL per dog,
+                // makes a blocking Telegram UrlFetchApp call and then clears the session. On a
+                // healthy /exec that is already several seconds; on the bimodal one measured today
+                // it routinely exceeds 12s. Aborting here is the WORST case in the whole app: the
+                // server may have delivered to Telegram and cleared the session while the tablet
+                // reports failure and keeps the board, so staff resubmit an already-sent round.
                 const response = await gasFetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     redirect: 'follow',
                     body: JSON.stringify({ action: 'submitReport', ...reportData })
-                });
+                }, SYNC_WRITE_TIMEOUT_MS);
 
                 const result = await response.json();
                 // We got a response, so the server is reachable. Do NOT treat result.success===false
