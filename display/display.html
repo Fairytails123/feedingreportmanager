@@ -284,6 +284,18 @@
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             color: var(--color-neutral-300);
         }
+        /* On a quiet board the type is at its largest and a two-word name plus two badges
+           ellipsised to "Bell…" — unreadable from the doorway, which is the whole point of
+           this screen. The xl/lg tiers only apply when a pen holds <=3 dogs, so there is
+           vertical room to spare: wrap instead of truncating. */
+        .scale-xl .dog-name, .scale-lg .dog-name {
+            white-space: normal;
+            overflow: visible;
+            text-overflow: clip;
+            line-height: 1.08;
+            overflow-wrap: break-word;   /* break at spaces first; split a word only if it cannot fit alone */
+        }
+        .scale-xl .dog-card, .scale-lg .dog-card { align-items: center; }
         .dog-status {
             flex: none;
             text-align: right;
