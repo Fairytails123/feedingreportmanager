@@ -431,6 +431,118 @@ async function scenario(label, path, netPlan) {
     check('getDogList still goes to Apps Script', u.indexOf('script.google.com') !== -1 && u.indexOf('getDogList') !== -1, u);
   }
 
+  // ============================================================================
+  // S22 — the mutation queue must not lose an edit made WHILE a POST is in flight.
+  // Found on the live board 2026-08-05 while exercising the redesigned dog tile: the
+  // tile puts portion, medicine and supplements in one panel, so staff fire three edits
+  // inside one ~700ms round-trip. flushQueue serialises an item's payload when it POSTs
+  // and removes the item on success; enqueue() merged later edits INTO that same payload
+  // object, so they went out with nothing and were thrown away. Reproduced live: ½ landed,
+  // "Medicine / Metacam" vanished with no error anywhere. The n8n handler was innocent —
+  // a direct updateDog with the same fields wrote them fine.
+  // ============================================================================
+  function queueBoot() {
+    const h = load(FIXED);
+    h.api.stub({
+      showToast: () => {}, renderAllPens: () => {}, renderStagingArea: () => {},
+      updateConnectionUI: () => {}, updateStatus: () => {}, pauseSync: () => {},
+    });
+    h.api.initPens();
+    h.api.syncState.initialLoadComplete = true;
+    h.api.syncState.isOnline = true;
+    return h;
+  }
+  const okBody = { delayMs: 5, body: { success: true, count: 1 } };
+  const sent = h => h.state.netLog.map(e => { try { return JSON.parse(e.body); } catch (e2) { return {}; } });
+
+  console.log('\n=== S22a — an edit made mid-POST must still reach the server ===');
+  {
+    const h = queueBoot();
+    h.api.syncState.queue = [{ op: 'update', dogId: 'd1', payload: { status: 'half' }, ts: 1 }];
+    h.state.netPlan = [{ delayMs: 200, body: { success: true, count: 1 } }, okBody];
+    const flushing = h.api.flushQueue();
+    await new Promise(r => setTimeout(r, 60));          // now mid-flight
+    h.api.enqueue('update', 'd1', { prescription: true, prescriptionComment: 'Metacam' });
+    await flushing;
+    const bodies = sent(h);
+    check('the portion edit went out', bodies[0] && bodies[0].updates.status === 'half',
+      JSON.stringify(bodies[0]));
+    check('the mid-flight medicine edit was NOT swallowed', bodies.length === 2,
+      `${bodies.length} request(s): ` + JSON.stringify(bodies));
+    check('...and carried both fields', !!(bodies[1] && bodies[1].updates &&
+      bodies[1].updates.prescription === true && bodies[1].updates.prescriptionComment === 'Metacam'),
+      JSON.stringify(bodies[1]));
+    check('the queue still drained', h.api.syncState.queue.length === 0,
+      String(h.api.syncState.queue.length));
+  }
+
+  console.log('\n=== S22b — deleting a dog whose ADD is in flight must still send the delete ===');
+  {
+    // The add may already have landed, so "it was never synced, nothing to delete" is
+    // wrong once the request is on the wire — it orphans the row on the server forever.
+    const h = queueBoot();
+    h.api.syncState.queue = [{ op: 'add', dogId: 'd2', payload: { id: 'd2' }, ts: 1 }];
+    h.state.netPlan = [{ delayMs: 200, body: { success: true, count: 1 } }, okBody];
+    const flushing = h.api.flushQueue();
+    await new Promise(r => setTimeout(r, 60));
+    h.api.enqueue('delete', 'd2', {});
+    await flushing;
+    const actions = sent(h).map(b => b.action);
+    check('the add went out first', actions[0] === 'addDog', JSON.stringify(actions));
+    check('the delete followed it', actions.indexOf('deleteDog') > 0, JSON.stringify(actions));
+    check('nothing left queued', h.api.syncState.queue.length === 0);
+  }
+  {
+    // ...but an add that has NOT gone out yet is still collapsed away, as before.
+    const h = queueBoot();
+    h.api.syncState.queue = [{ op: 'add', dogId: 'd3', payload: { id: 'd3' }, ts: 1 }];
+    h.api.enqueue('delete', 'd3', {});
+    check('an unsent add + delete still collapse to nothing', h.api.syncState.queue.length === 0,
+      JSON.stringify(h.api.syncState.queue));
+  }
+
+  console.log('\n=== S22c — a queue rebuilt mid-flight must not drop a bystander edit ===');
+  {
+    // enqueue('delete') rebuilds the array. flushQueue used to remove the completed item
+    // with shift(), i.e. "whatever is at index 0 now" — which after the rebuild is a
+    // DIFFERENT dog's edit. It was discarded unsent, silently.
+    const h = queueBoot();
+    h.api.syncState.queue = [
+      { op: 'update', dogId: 'd1', payload: { status: 'half' }, ts: 1 },
+      { op: 'update', dogId: 'dX', payload: { status: 'none' }, ts: 2 },
+    ];
+    h.state.netPlan = [{ delayMs: 200, body: { success: true, count: 1 } }, okBody, okBody];
+    const flushing = h.api.flushQueue();
+    await new Promise(r => setTimeout(r, 60));
+    h.api.enqueue('delete', 'd1', {});     // targets the dog whose POST is in flight
+    await flushing;
+    const bodies = sent(h);
+    check("the bystander dog's edit still went out",
+      bodies.some(b => b.dogId === 'dX' && b.updates && b.updates.status === 'none'),
+      JSON.stringify(bodies));
+    check('the delete went out too', bodies.some(b => b.action === 'deleteDog' && b.dogId === 'd1'),
+      JSON.stringify(bodies));
+    check('queue fully drained', h.api.syncState.queue.length === 0,
+      JSON.stringify(h.api.syncState.queue));
+  }
+
+  console.log('\n=== S22d — a reload must clear a persisted inFlight flag ===');
+  {
+    // Otherwise nothing would ever merge into that item again, and the collapse rules
+    // that bound queue growth would be quietly dead for it.
+    const h = queueBoot();
+    h.localStorage.setItem('feedingManager.queue.v1',
+      JSON.stringify([{ op: 'update', dogId: 'd1', payload: { status: 'all' }, ts: 1, inFlight: true }]));
+    h.api.loadQueue();
+    check('inFlight is not restored from storage',
+      h.api.syncState.queue.length === 1 && h.api.syncState.queue[0].inFlight === undefined,
+      JSON.stringify(h.api.syncState.queue));
+    h.api.enqueue('update', 'd1', { status: 'none' });
+    check('...so a later edit still collapses into it',
+      h.api.syncState.queue.length === 1 && h.api.syncState.queue[0].payload.status === 'none',
+      JSON.stringify(h.api.syncState.queue));
+  }
+
   console.log(`\n================ ${pass} passed, ${fail} failed ================\n`);
   process.exit(fail ? 1 : 0);
 })();

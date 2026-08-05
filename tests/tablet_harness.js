@@ -55,7 +55,9 @@ function load(indexPath) {
     // action in the payload, so the URL alone no longer says what was asked for.
     let action = null;
     try { action = JSON.parse((opts && opts.body) || '{}').action || null; } catch (e) {}
-    state.netLog.push({ url: String(url), delayMs: plan.delayMs, action });
+    // The raw body too: S22 asserts WHICH FIELDS actually went on the wire, which is the
+    // only way to see an edit that was merged into an already-serialised payload and lost.
+    state.netLog.push({ url: String(url), delayMs: plan.delayMs, action, body: (opts && opts.body) || null });
     const signal = opts && opts.signal;
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -109,6 +111,10 @@ function load(indexPath) {
       flushQueue: (...a) => flushQueue(...a),
       submitToBackend: (...a) => submitToBackend(...a),
       loadDogList: (...a) => loadDogList(...a),
+      // Queue internals, for the S22 in-flight races. Called through lambdas so a
+      // stub() on the sync* wrappers can never shadow the real implementation.
+      enqueue: (...a) => enqueue(...a),
+      loadQueue: (...a) => loadQueue(...a),
       get dogs() { return dogs; },
       get pens() { return pens; },
       get currentMealType() { return currentMealType; },
@@ -151,7 +157,7 @@ function load(indexPath) {
   const factory = new Function(...names, src + '\n' + EXPORTS);
   const api = factory(...names.map(n => sandbox[n]));
 
-  return { api, state, els, srcLen: src.length };
+  return { api, state, els, localStorage, srcLen: src.length };
 }
 
 module.exports = { load, abortErr };

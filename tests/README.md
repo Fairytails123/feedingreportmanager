@@ -41,6 +41,23 @@ Every group below is a bug that reached staff. They are regression tests, not de
 - **S17–S20** — resilience against a BIMODAL backend: writes get a 45s budget, the version probe
   retries once before counting a strike, one tick counts exactly one strike, and a slow write no
   longer instantly kills the connection (it used to bypass OFFLINE_THRESHOLD entirely).
+- **S22** — ⭐ the mutation queue must not lose an edit made **while a POST is in flight**.
+  Found on the live board on 2026-08-05 by exercising the redesigned dog tile, which puts
+  portion, medicine and supplements in one panel — so staff fire three edits inside one
+  ~700ms round-trip. `flushQueue` serialises an item's payload when it POSTs it and removes
+  the item on success, while `enqueue` merged later edits **into that same payload object**:
+  they went out with nothing and were then thrown away. Live repro: tapping ½ → Medicine →
+  typing "Metacam" landed only the ½, with no error anywhere. The n8n handler was innocent —
+  a direct `updateDog` carrying the same fields wrote them fine, which is what isolated it.
+  Two siblings fell out of the same read: a `delete` for a dog whose `add` was already on the
+  wire was collapsed to "never synced, nothing to delete" and **orphaned the row on the
+  server**; and `flushQueue` removed the completed item with `shift()` — "whatever is at
+  index 0 *now*" — so an `enqueue` that rebuilt the array mid-flight made it discard a
+  **different dog's** edit, unsent. Fix: an `inFlight` marker that `enqueue` refuses to merge
+  into (cleared by `loadQueue`, since a reload means nothing is on the wire), and removal by
+  identity rather than by position. All three predate the redesign; the redesign is what made
+  them reachable in normal use. Negative-control tested against the pre-fix build: 5 of the 13
+  checks fail there.
 - **S11–S16** — the version-first sync loop (@35). S11/S12 are the point of the change: an unchanged
   board must cost ONE cheap `getSessionVersion` and a real change must still escalate to the full
   read. **S13 and S14 are the ones that matter** — they are regression guards for the properties the

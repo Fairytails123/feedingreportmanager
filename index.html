@@ -1439,6 +1439,9 @@
                 mutationQueue = raw ? JSON.parse(raw) : [];
                 if (!Array.isArray(mutationQueue)) mutationQueue = [];
             } catch (e) { mutationQueue = []; }
+            // A reload means nothing is actually on the wire, whatever the last persisted
+            // snapshot said. A stale inFlight would stop enqueue() from ever merging again.
+            mutationQueue.forEach(it => { delete it.inFlight; });
         }
 
         function persistQueue() {
@@ -1457,11 +1460,24 @@
 
         // Record a local mutation. Collapses repeats so the queue can't grow unbounded
         // (e.g. repeated re-match repairs or rapid edits to the same dog while offline).
+        //
+        // ⚠️ `it.inFlight` is load-bearing, and it is the fix for a silent data-loss race
+        // caught on the live board 2026-08-05. flushQueue serialises an item's payload the
+        // moment it POSTs it, then removes the item when the POST succeeds. Merging into
+        // THAT payload writes fields into an object that has already gone on the wire and
+        // is about to be thrown away — so the edit vanishes with no error anywhere.
+        // Reproduced live: tapping ½, then Medicine, then typing a medicine name inside one
+        // ~700ms round-trip landed only the ½. Never merge into an item that is in flight;
+        // push a new one and let it go out next.
         function enqueue(op, dogId, payload) {
             if (op === 'delete') {
-                const hadPendingAdd = mutationQueue.some(it => it.dogId === dogId && it.op === 'add');
-                mutationQueue = mutationQueue.filter(it => it.dogId !== dogId);
-                if (hadPendingAdd) {
+                const pendingAdd = mutationQueue.find(it => it.dogId === dogId && it.op === 'add');
+                // An add that is already on the wire may well have landed, so the dog is NOT
+                // "never synced" — the delete has to go out or the row is orphaned server-side.
+                const neverSynced = !!pendingAdd && !pendingAdd.inFlight;
+                // Keep in-flight items: flushQueue holds a reference to the one it is sending.
+                mutationQueue = mutationQueue.filter(it => it.dogId !== dogId || it.inFlight);
+                if (neverSynced) {
                     // Dog was never synced — there is nothing to delete on the server.
                     persistQueue();
                     updateConnectionUI();
@@ -1472,6 +1488,7 @@
                 for (let i = mutationQueue.length - 1; i >= 0; i--) {
                     const it = mutationQueue[i];
                     if (it.dogId !== dogId) continue;
+                    if (it.inFlight) break;                 // see the note above — must not merge
                     if (it.op === 'add' || it.op === 'update') {
                         it.payload = Object.assign({}, it.payload, payload);
                         persistQueue();
@@ -1481,7 +1498,7 @@
                     break;
                 }
             } else if (op === 'mealType') {
-                mutationQueue = mutationQueue.filter(it => it.op !== 'mealType');
+                mutationQueue = mutationQueue.filter(it => it.op !== 'mealType' || it.inFlight);
             }
             mutationQueue.push({ op: op, dogId: dogId, payload: payload, ts: Date.now() });
             persistQueue();
@@ -1504,15 +1521,22 @@
         async function flushQueue() {
             if (isFlushing || !isOnline || mutationQueue.length === 0) { updateConnectionUI(); return; }
             isFlushing = true;
+            // Remove BY IDENTITY, never by shift(). enqueue() can rebuild the array while a
+            // POST is in flight (a delete filters the dog's other ops out), and a blind
+            // shift() would then drop whichever op had slid into index 0 — someone else's
+            // edit, silently. Same 2026-08-05 class of bug as the in-flight merge above.
+            const drop = it => { const i = mutationQueue.indexOf(it); if (i >= 0) mutationQueue.splice(i, 1); };
             try {
                 while (mutationQueue.length > 0) {
                     const item = mutationQueue[0];
                     const body = queueItemToBody(item);
-                    if (!body) { mutationQueue.shift(); persistQueue(); continue; }
+                    if (!body) { drop(item); persistQueue(); continue; }
+                    item.inFlight = true;      // payload is now serialised — do not merge into it
                     let result;
                     try {
                         result = await sessionFetch(body, SYNC_WRITE_TIMEOUT_MS);
                     } catch (e) {
+                        item.inFlight = false;
                         // Debounced (2026-08-05). This used to set isOnline = false OUTRIGHT,
                         // bypassing OFFLINE_THRESHOLD entirely — so ONE slow POST against a
                         // bimodal /exec was enough to raise "connection lost" and disable Submit.
@@ -1524,7 +1548,7 @@
                     }
                     if (result && result.success) {
                         if (result.version) lastSyncVersion = result.version;
-                        mutationQueue.shift();
+                        drop(item);
                         persistQueue();
                         // A LANDED WRITE is the strongest possible proof of connectivity — stronger
                         // than a version probe. Reset the failure count too, not just the flag,
@@ -1537,9 +1561,10 @@
                     // We got a response, so the server is reachable — this is an op-level rejection,
                     // NOT a connectivity failure. Don't raise the offline banner.
                     isOnline = true;
+                    item.inFlight = false;
                     if (item.op === 'delete') {
                         // Row already gone (e.g. cleared elsewhere) — treat as done.
-                        mutationQueue.shift();
+                        drop(item);
                         persistQueue();
                         continue;
                     }
@@ -1548,7 +1573,7 @@
                         // Persistently rejected (e.g. the dog was deleted on another device) —
                         // drop it so the queue can't wedge forever, and continue with the rest.
                         console.warn('[flushQueue] dropping op after ' + item.attempts + ' attempts', item, result);
-                        mutationQueue.shift();
+                        drop(item);
                         persistQueue();
                         continue;
                     }
