@@ -1,7 +1,8 @@
 # tests/ — the pre-deploy gate
 
 ```bash
-bash tests/run.sh          # syntax + contract + backend + tablet.  MUST be green before deploying.
+bash tests/run.sh          # syntax + contract + backend + tablet + display.  MUST be green before deploying.
+LIVE=1 bash tests/run.sh   # ...plus 27 assertions against the REAL n8n board (refuses to run mid-round).
 ```
 
 Nothing in this project runs locally as a server, so these harnesses load the **real source** and
@@ -12,7 +13,7 @@ replay acceptance scenarios against it:
 | `backend_harness.js` | Loads the real `feeding_report_backend_v2.js` with Apps Script globals stubbed — `SpreadsheetApp`, `UrlFetchApp`, `CacheService`, `LockService`, `PropertiesService`, `Utilities`, and a controllable clock. Lets a test drive a flaky upstream, a broken cache, an unreadable sheet. |
 | `backend.test.js` | 80 scenarios. |
 | `tablet_harness.js` | Extracts the inline `<script>` from the real `index.html` and evaluates it with DOM/`fetch`/`localStorage` stubs and a scriptable fake network. |
-| `tablet.test.js` | 69 scenarios. |
+| `tablet.test.js` | 82 scenarios. |
 
 This formalises what `CLAUDE.md` already called the de-facto test step. It was throwaway before
 2026-08-04; the day's outage is why it now lives in the repo.

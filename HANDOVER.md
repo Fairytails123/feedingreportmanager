@@ -1,6 +1,6 @@
 # HANDOVER — read this before changing anything
 
-Last updated: **2026-08-05**, after the @36 migration. This file exists to stop the next session
+Last updated: **2026-08-05**, after the @37 UI redesign (which sits on top of the @36 migration). This file exists to stop the next session
 undoing work that took a day and an outage to get right. It is deliberately short. If you read
 nothing else, read §1 and §2.
 
@@ -48,6 +48,7 @@ lost"*: the tablet was aborting **itself**.
 
 | About to… | Do this first |
 |---|---|
+| restyle anything, or "match the design spec" | read `design_handoff_feeding_board/AS-BUILT.md`. The shipped UI differs from that folder's spec **on purpose** in ~6 places, including the portion control being a `<select>` (owner decision). |
 | touch the drag engine, or any tile CSS | load `frontend-gotchas`, then re-test **on a real Android tablet**. A mouse cannot catch this class — that is why it was rewritten (@37). |
 | touch `enqueue` / `flushQueue` | read `CLAUDE.md` → the `it.inFlight` bullet, and `tests/tablet.test.js` **S22**. Merging into a payload that is already on the wire loses the edit silently. |
 | change the n8n session workflow | `LIVE=1 bash tests/run.sh` **after**. Validation is not proof — see §4. |
@@ -112,7 +113,7 @@ non-idempotent `addDog` put 37 rows on the board for 16 dogs.
 ## 6. How to verify the whole thing is alive
 
 ```bash
-bash tests/run.sh                 # offline gate: 80 backend / 69 tablet / 9 display + contract
+bash tests/run.sh                 # offline gate: 80 backend / 82 tablet / 9 display + contract
 LIVE=1 bash tests/run.sh          # + 27 live assertions against the real n8n API
 
 # the live board
@@ -147,6 +148,7 @@ feeding round.
 | Need | File |
 |---|---|
 | Architecture, protocols, credentials, deploy commands | `CLAUDE.md` |
+| The UI design spec — and where the build deliberately differs from it | `design_handoff_feeding_board/README.md` → **`AS-BUILT.md`** |
 | End-to-end data flow + endpoint tables | `DATAFLOW.md` |
 | Dated history and why each change happened | `CHANGELOG.md` |
 | Why each test exists (do not delete without reading) | `tests/README.md` |

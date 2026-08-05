@@ -1,5 +1,17 @@
 # Handoff: Feeding Report Manager — tablet-first UI redesign
 
+> ## ⚠️ THIS SPEC WAS IMPLEMENTED ON 2026-08-05 — READ `AS-BUILT.md` FIRST
+>
+> This file is preserved as the design **as delivered**, and it is still the source of truth for
+> colours, sizes, spacing and copy. But the shipped UI deliberately differs from it in a handful
+> of places — most importantly **the portion control is a `<select>`, not the 5-way segmented
+> control described in §2** (owner decision, taken after using the first build: five side-by-side
+> targets set a wide floor on the tile, which left **one pen on screen** in phone portrait).
+>
+> **`AS-BUILT.md` in this folder lists every difference and why.** Do not "restore" this spec over
+> the implementation without reading it — several of those decisions were made after measuring the
+> result on a real device or on the live board.
+
 ## Overview
 
 A redesign of the **Feeding Report Manager** staff UI (`index.html`) and the **TV display**

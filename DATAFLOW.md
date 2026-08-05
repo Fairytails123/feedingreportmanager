@@ -143,16 +143,28 @@ edit → syncAddDog/UpdateDog/DeleteDog/MealType → enqueue {op, dogId, payload
 
 The **op shapes did not change** in the n8n move — `{action:'addDog', dog}`,
 `{action:'updateDog', dogId, updates}`, `{action:'deleteDog', dogId}`,
-`{action:'setMealType', mealType}` — so the durable queue itself was untouched.
+`{action:'setMealType', mealType}` — so the durable queue survived that move untouched. It was
+hardened later, on 2026-08-05 (@37), for the in-flight race below.
 
 - The **queue owns ordering and retry**, not the call site. It drains in order, removes an
   item only after its POST succeeds, **stops on the first failure** and retries next cycle,
   and **drops an item after 5 rejections** so one bad edit can't jam the whole queue.
+- ⚠️ **An edit made WHILE a POST is in flight must not be merged into it** (`it.inFlight`), and a
+  finished item is removed **by identity, never by `shift()`**. `flushQueue` serialises a payload
+  the moment it POSTs it and discards the item on success, so merging into that object writes
+  fields into something already on the wire and about to be thrown away. Found live: on the
+  redesigned tile, portion + medicine + supplements are one panel, so tapping ½ → Medicine →
+  typing "Metacam" fired three edits inside one ~700ms round-trip and **only the ½ landed**, with
+  no error anywhere. Two siblings: a `delete` for a dog whose `add` was in flight orphaned the row
+  server-side, and a queue rebuilt mid-flight made `shift()` discard a *different* dog's edit.
+  Regression tests: `tests/tablet.test.js` **S22**.
 - The **5s poll** is **version-first**: every tick costs one cheap `getSessionVersion` and the
   full `getSession` runs only when the version actually moved. It keeps running while **editing**
-  and while **offline** (only the board *write* is gated on the edit pause) — that is what the
-  deleted 7s heartbeat used to provide, and `tests/tablet.test.js` S13/S14 exist to stop anyone
-  re-gating it. When it does fetch, `applyRemoteState()` **merges** the server
+  and while **offline** (only the board *write* is gated on the edit pause, and since @37 also on
+  `isDragActive()` — re-rendering a pen while a dog is in the air replaces the captured tile and
+  the browser fires `pointercancel`, dropping the dog somewhere nobody asked for) — that is what
+  the deleted 7s heartbeat used to provide, and `tests/tablet.test.js` S13/S14 exist to stop
+  anyone re-gating it. When it does fetch, `applyRemoteState()` **merges** the server
   snapshot with your pending queue. The rule: **the server wins only for dogs you have no
   pending change on** — pending adds are kept, edits re-applied, deletes suppressed. Then it
   **sorts each pen by the `Position` column**. This merge is exactly why a ~5s poll never
