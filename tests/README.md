@@ -12,7 +12,7 @@ replay acceptance scenarios against it:
 | `backend_harness.js` | Loads the real `feeding_report_backend_v2.js` with Apps Script globals stubbed — `SpreadsheetApp`, `UrlFetchApp`, `CacheService`, `LockService`, `PropertiesService`, `Utilities`, and a controllable clock. Lets a test drive a flaky upstream, a broken cache, an unreadable sheet. |
 | `backend.test.js` | 80 scenarios. |
 | `tablet_harness.js` | Extracts the inline `<script>` from the real `index.html` and evaluates it with DOM/`fetch`/`localStorage` stubs and a scriptable fake network. |
-| `tablet.test.js` | 50 scenarios. |
+| `tablet.test.js` | 69 scenarios. |
 
 This formalises what `CLAUDE.md` already called the de-facto test step. It was throwaway before
 2026-08-04; the day's outage is why it now lives in the repo.
@@ -33,6 +33,14 @@ Every group below is a bug that reached staff. They are regression tests, not de
   blocks the thread, so a toast fired first may never paint and staff would approve a stale board
   having seen nothing.
 - **S10** — a repeat press sends `&fresh=1`, the staff gesture for "I just changed the whiteboard".
+- **S21** — @36 routing, in BOTH directions: session calls must go to the n8n webhook and never
+  to `script.google.com`, and `getDogList` must still go to Apps Script. This is the test that
+  catches the migration silently unravelling — Apps Script /exec measured a 4.5–8.7s median with a
+  55.6s peak and ~40% of calls past the client budget, so a session call drifting back onto it
+  brings "connection lost" straight back.
+- **S17–S20** — resilience against a BIMODAL backend: writes get a 45s budget, the version probe
+  retries once before counting a strike, one tick counts exactly one strike, and a slow write no
+  longer instantly kills the connection (it used to bypass OFFLINE_THRESHOLD entirely).
 - **S11–S16** — the version-first sync loop (@35). S11/S12 are the point of the change: an unchanged
   board must cost ONE cheap `getSessionVersion` and a real change must still escalate to the full
   read. **S13 and S14 are the ones that matter** — they are regression guards for the properties the

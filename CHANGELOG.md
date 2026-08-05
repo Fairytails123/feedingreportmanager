@@ -1,5 +1,59 @@
 # Changelog
 
+## 2026-08-05 (evening) — @36 / v2.6: the live session moves off Apps Script onto n8n
+
+**Trigger.** Staff could not submit — "connection lost" all afternoon. @35's client-side fixes
+(45s write budgets, probe retry, debounced failures) helped but did not cure it, because the
+cause was never on the client.
+
+**The decisive measurement.** A bare `/exec` ping that does **no spreadsheet work at all** was
+just as slow as a real read — worst case **55.6s vs 30.5s**. So the bottleneck is Apps Script's
+**dispatch** layer, not our data and not our code. The planned fix (cache `getSessionVersion` so
+it never opens the spreadsheet) would have bought **nothing**; measuring first saved a day of
+work building the wrong thing. Apps Script allows ~30 simultaneous executions **per Google
+account**, shared across Staff Board, Training Planner, Boarding API, Grooming and Order list —
+they starve each other.
+
+| same test, same afternoon | Apps Script `/exec` | n8n on the VPS |
+|---|---|---|
+| median / mean | 4.5–8.7s | **0.70s** |
+| worst | **55.6s** | **1.83s** |
+| failures | ~40% past the 12s budget, plus Google 404s | **0 in ~40 calls** |
+
+The tail matters more than the median: every n8n call finished under 2s, so the tablet can no
+longer abort itself on the hot path.
+
+**What moved.** Session reads/writes only — ~95% of all traffic (4 devices polling every 5s) —
+to `https://auto.thefairytails.co.uk/webhook/feeding-session` (workflow `hdGUbrd0PffVnwDS`)
+backed by Data Tables `feeding_session` + `feeding_meta`. **Apps Script keeps** `submitReport`,
+`getTodayPlan`, `getDogList`: a handful of calls a day with generous budgets.
+
+**What was deliberately preserved** — one version source served by both read endpoints; mutation
+responses carrying no `version` while `clearSession` does; per-field partial updates; idempotency
+by `dog_id`; and the tablet's durable queue op shapes, so the queue itself did not have to change.
+
+**Two bugs found by TESTING, not by validation.**
+1. The Data Table node advertises a `table/clear` operation that its **runtime router does not
+   implement**. `clearSession` returned an empty body and silently left the board populated —
+   and `n8n_validate_workflow` passed it clean. Replaced with `row/deleteRows`.
+2. The first mirror design (clear-then-append) **corrupted the Session sheet**: six rapid writes
+   each spawned a mirror chain, they interleaved, and a 2-dog board mirrored as 6 rows with
+   duplicates and stale values. Replaced with ONE atomic fixed-height range write (`A2:M201`) —
+   concurrent executions now overwrite each other with whole snapshots, so the worst case is
+   briefly stale, never duplicated. Re-verified under the exact pattern that broke it.
+
+**Also.** `submitReport` clears the n8n board (`liveBoardCleared`), with a complementary
+tablet-side clear when GAS reports it could not. `/cancel` clears the n8n board too, and its
+Session clear changed from `wholeSheet` to `A2:M1000` so it stops eating the header row.
+
+**Tests:** tablet 62 → 69. **S21** pins the routing in both directions — session calls go to n8n
+and never to `script.google.com`, and `getDogList` still goes to GAS. The contract check asserts
+the tablet has exactly three GAS call sites left.
+
+**Still true and still unfixed:** Apps Script `/exec` remains flaky for the three endpoints that
+stay on it. Their budgets (45s submit, 45s plan) absorb it, and a failed smoke check should be
+retried 2–3× before concluding a deploy broke.
+
 ## 2026-08-05 — @35 / v2.5: one version-first poll replaces the 5s full read + 7s heartbeat
 
 **Origin.** A review of an experimental "sync v3" candidate produced by Codex

@@ -47,7 +47,43 @@ There is no build/lint/test runner — the operations below are the full command
 - **POST an action to GAS via curl** → `curl -sL -d '{...}' <exec>`. Do **not** use `-X POST` — it forces POST onto the 302 redirect hop and 411s.
 - **Edit the n8n workflow** → live workflow `yaBIrDOVbJTEMsH9` via the n8n MCP `n8n_update_partial_workflow` (run `validateOnly:true` first), then `n8n_validate_workflow` (expect 0 errors) and confirm a real run in `n8n_executions`. The repo JSON is a mirror — regenerate it with `n8n_get_workflow` after a change.
 - **Deploy the Feeding Display** → separate repo `Fairytails123/frmdisplay` (see Deployment checklist).
-- **Verify before any deploy** → **`bash tests/run.sh`** (syntax + contract + 80 backend + 50 tablet + 9 display). Must be green. Do not hand-deploy unverified edits.
+- **Edit the SESSION API** (the live board) → n8n workflow **`hdGUbrd0PffVnwDS`** via `n8n_update_partial_workflow`, then `n8n_validate_workflow` (0 errors) **and a real curl round-trip** — validation passed a `table/clear` that silently did nothing. Test with `curl -H 'Content-Type: application/json' -d '{"action":"getSessionVersion"}' https://auto.thefairytails.co.uk/webhook/feeding-session`.
+- **Verify before any deploy** → **`bash tests/run.sh`** (syntax + contract + 80 backend + 69 tablet + 9 display). Must be green. Do not hand-deploy unverified edits.
+
+## ⚠️ THE LIVE SESSION IS IN n8n, NOT THE SHEET (since @36, 2026-08-05)
+
+**Every session read and write — `getSessionVersion`, `getSession`, `addDog`, `updateDog`,
+`deleteDog`, `setMealType`, `clearSession` — goes to the n8n webhook
+`https://auto.thefairytails.co.uk/webhook/feeding-session`** (workflow `hdGUbrd0PffVnwDS`, Data
+Tables `feeding_session` `nnbHmglWVbneFigg` + `feeding_meta` `5TGDqjRVlrczGUgm`). The **Session
+tab is now a best-effort MIRROR** that n8n writes; do not treat it as authoritative and do not
+point a new reader at it.
+
+**Why** — measured live on 2026-08-05, same test both sides: Apps Script `/exec` median **4.5–8.7s
+with a 55.6s peak**, ~40% of calls past the tablet's 12s budget, plus Google 404s; n8n **0.70s
+mean, 1.83s worst, zero failures**. The decisive experiment: a bare `/exec` ping doing **no
+spreadsheet work at all** was just as slow (55.6s worst), so the bottleneck was Apps Script's
+**dispatch** layer — not the data, not the code. Caching `getSessionVersion` (the original plan)
+would have bought nothing. Apps Script allows ~30 simultaneous executions **per Google account**,
+shared with Staff Board, Training Planner, Boarding API, Grooming and Order list.
+
+**Apps Script KEEPS** `submitReport`, `getTodayPlan` and `getDogList` — a handful of calls a day,
+each with its own generous budget. `submitReport` additionally clears the n8n board
+(`clearLiveBoard_`, reported as `liveBoardCleared`) because the TV reads n8n.
+
+**Invariants that must survive any future change here** (each is a bug that already happened):
+- **ONE version source.** `getSession` and `getSessionVersion` both serve the same stored value
+  from `feeding_meta`. Two sources can never compare equal and pin clients in permanent fast mode.
+- **Mutation responses carry NO `version`; `clearSession` DOES.** The tablet assigns the latter
+  unguarded, so omitting it poisons the poll gate with `undefined`.
+- **Partial updates emit only changed columns** (`autoMapInputData`), so two tablets editing
+  different fields of one dog don't clobber each other.
+- **The mirror is ONE atomic fixed-height range write** (`A2:M201`). It was clear-then-append and
+  that CORRUPTED the sheet — concurrent executions interleaved and a 2-dog board mirrored as 6
+  rows with duplicates. Never reintroduce a separate clear step.
+- ⚠️ **The Data Table node advertises a `table/clear` operation its runtime router does NOT
+  implement.** `clearSession` returned an empty body and silently left the board populated, and
+  `n8n_validate_workflow` passed it clean. Use `row/deleteRows` with an always-true filter.
 
 ## The four moving parts (most live outside this repo)
 
