@@ -51,7 +51,11 @@ function load(indexPath) {
 
   function fakeFetch(url, opts) {
     const plan = state.netPlan.shift() || { delayMs: 5, body: { success: true, dogs: [] } };
-    state.netLog.push({ url: String(url), delayMs: plan.delayMs });
+    // Record the BODY too: since @36 the session calls are POSTs to the n8n webhook with the
+    // action in the payload, so the URL alone no longer says what was asked for.
+    let action = null;
+    try { action = JSON.parse((opts && opts.body) || '{}').action || null; } catch (e) {}
+    state.netLog.push({ url: String(url), delayMs: plan.delayMs, action });
     const signal = opts && opts.signal;
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -104,6 +108,7 @@ function load(indexPath) {
       },
       flushQueue: (...a) => flushQueue(...a),
       submitToBackend: (...a) => submitToBackend(...a),
+      loadDogList: (...a) => loadDogList(...a),
       get dogs() { return dogs; },
       get pens() { return pens; },
       get currentMealType() { return currentMealType; },

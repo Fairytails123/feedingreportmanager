@@ -232,10 +232,12 @@ async function scenario(label, path, netPlan) {
     return {
       h, applied, calls,
       get flushes() { return flushes; },
+      // @36: session calls are POSTs to n8n carrying the action in the body.
       seq: () => origin.netLog.map(e =>
-        e.url.indexOf('getSessionVersion') !== -1 ? 'VERSION'
-        : e.url.indexOf('getSession') !== -1 ? 'SESSION'
+        e.action === 'getSessionVersion' ? 'VERSION'
+        : e.action === 'getSession' ? 'SESSION'
         : e.url.indexOf('getDogList') !== -1 ? 'DOGLIST' : 'OTHER'),
+      urls: () => origin.netLog.map(e => e.url),
     };
   }
   const vOK = v => ({ delayMs: 5, body: { success: true, version: v, count: 0 } });
@@ -379,6 +381,54 @@ async function scenario(label, path, netPlan) {
     check('it is debounced like every other failure', h.api.syncState.consecutiveFailures === 1,
       String(h.api.syncState.consecutiveFailures));
     check('the edit stays queued for retry', h.api.syncState.queue.length === 1);
+  }
+
+  console.log('\n=== S21 — @36 ROUTING: the session must never go back to Apps Script ===');
+  // The entire point of the n8n migration. Apps Script /exec measured a 4.5-8.7s median with a
+  // 55.6s peak and ~40% of calls past the 12s budget; n8n measured 0.70s mean, 1.83s worst, zero
+  // failures. If a session call drifts back onto GAS, "connection lost" comes straight back.
+  {
+    const t = syncBoot({ version: 100 });
+    t.h.state.netPlan = [vOK(200), sOK(200)];
+    await t.h.api.pollForUpdates();
+    const urls = t.urls();
+    check('the poll made both session calls', t.seq().join(',') === 'VERSION,SESSION', t.seq().join(','));
+    check('...both to the n8n webhook',
+      urls.length === 2 && urls.every(u => u.indexOf('auto.thefairytails.co.uk') !== -1),
+      JSON.stringify(urls));
+    check('...and NONE to script.google.com',
+      urls.every(u => u.indexOf('script.google.com') === -1), JSON.stringify(urls));
+  }
+  {
+    // A queued edit must also post to n8n, and carry the same action names the backend used,
+    // so the durable queue's op shapes did not have to change.
+    const h = load(FIXED);
+    h.api.stub({
+      showToast: () => {}, renderAllPens: () => {}, renderStagingArea: () => {},
+      updateConnectionUI: () => {}, updateStatus: () => {}, pauseSync: () => {},
+    });
+    h.api.initPens();
+    h.api.syncState.initialLoadComplete = true;
+    h.api.syncState.isOnline = true;
+    h.api.syncState.queue = [{ op: 'update', dogId: 'd1', payload: { status: 'all' }, ts: Date.now() }];
+    h.state.netPlan = [{ delayMs: 5, body: { success: true, count: 1 } }];
+    await h.api.flushQueue();
+    const e = h.state.netLog[0];
+    check('a queued mutation posts to n8n', e && e.url.indexOf('auto.thefairytails.co.uk') !== -1,
+      e ? e.url : '(no call)');
+    check('...using the unchanged updateDog action name', e && e.action === 'updateDog',
+      e ? String(e.action) : '(none)');
+    check('...and the queue drained', h.api.syncState.queue.length === 0);
+  }
+  {
+    // The three endpoints that legitimately stay on Apps Script must NOT have moved.
+    const { h } = boot(FIXED);
+    h.state.netPlan = [{ delayMs: 5, body: { success: true, dogs: [{ name: 'A' }, { name: 'B' },
+      { name: 'C' }, { name: 'D' }, { name: 'E' }, { name: 'F' }, { name: 'G' }, { name: 'H' },
+      { name: 'I' }, { name: 'J' }, { name: 'K' }] } }];
+    await h.api.loadDogList();
+    const u = h.state.netLog[0].url;
+    check('getDogList still goes to Apps Script', u.indexOf('script.google.com') !== -1 && u.indexOf('getDogList') !== -1, u);
   }
 
   console.log(`\n================ ${pass} passed, ${fail} failed ================\n`);

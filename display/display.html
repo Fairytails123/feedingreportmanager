@@ -643,9 +643,12 @@
             setRefreshStatus('syncing');
 
             try {
-                const response = await gasFetch(FRM_CONTRACT.APPS_SCRIPT_URL + '?action=getSession', {
-                    method: 'GET',
-                    redirect: 'follow'
+                // @36: the live board lives in n8n, not Apps Script — see shared/contract.js.
+                const response = await gasFetch(FRM_CONTRACT.SESSION_API_URL, {
+                    method: 'POST',
+                    redirect: 'follow',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'getSession' })
                 });
                 const result = await response.json();
 
@@ -816,9 +819,13 @@
             versionCheckInFlight = true;
 
             try {
-                const response = await gasFetch(FRM_CONTRACT.APPS_SCRIPT_URL + '?action=getSessionVersion', {
-                    method: 'GET',
-                    redirect: 'follow'
+                // @36: version probe also goes to n8n — both endpoints MUST serve the same
+                // stored version or this change gate can never settle (the @29 lesson).
+                const response = await gasFetch(FRM_CONTRACT.SESSION_API_URL, {
+                    method: 'POST',
+                    redirect: 'follow',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'getSessionVersion' })
                 });
                 const result = await response.json();
 

@@ -34,7 +34,12 @@ if (markerRe.test(assembled)) {
   console.error('ASSEMBLE FAIL: marker line still present after injection');
   process.exit(1);
 }
-for (const needle of ['FRM_CONTRACT', 'frmMakeGasFetch', 'staleBanner', '?action=getSessionVersion']) {
+// @36: the display's session calls moved from GAS query strings to JSON POSTs against the n8n
+// webhook, so the old '?action=getSessionVersion' sentinel would now always fail. Assert the
+// new shape instead — the point of the check is that the page still actually polls for a
+// version, whichever backend serves it.
+for (const needle of ['FRM_CONTRACT', 'frmMakeGasFetch', 'staleBanner',
+                      'FRM_CONTRACT.SESSION_API_URL', "action: 'getSessionVersion'"]) {
   if (!assembled.includes(needle)) {
     console.error('ASSEMBLE FAIL: assembled page missing expected content: ' + needle);
     process.exit(1);

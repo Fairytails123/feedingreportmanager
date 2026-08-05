@@ -22,6 +22,17 @@ var FRM_CONTRACT = {
   // update it here and in index.html, then republish the display.
   APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbwP74AXOe1cZmHKTxi9KbMhZJU48EHRFI7NQ6Og65_FcTVB1sMQuqgkPKIkr7Fm7e40mw/exec',
 
+  // ⚠️ THE LIVE SESSION NO LONGER LIVES IN APPS SCRIPT (@36, 2026-08-05).
+  // Every session read/write — getSessionVersion, getSession, addDog, updateDog, deleteDog,
+  // setMealType, clearSession — goes to this n8n webhook on the self-hosted VPS. Measured the
+  // same afternoon: Apps Script /exec median 4.5-8.7s with a 55.6s peak and ~40% of calls over
+  // the 12s client budget (plus Google 404s); n8n mean 0.70s, worst 1.83s, zero failures. The
+  // cause was Apps Script's DISPATCH layer, not the data — a bare /exec ping doing no
+  // spreadsheet work at all was just as slow, so caching would have bought nothing.
+  // Apps Script KEEPS submitReport, getTodayPlan and getDogList: a handful of calls a day,
+  // each with its own generous budget.
+  SESSION_API_URL: 'https://auto.thefairytails.co.uk/webhook/feeding-session',
+
   // Pen IDs in canonical feeding order. Hardcoded in the tablet (PEN_ORDER + the
   // submit-preview penOrder) and the backend (sendTelegramSummary penOrder +
   // submitReport penRank) — keep every copy identical.

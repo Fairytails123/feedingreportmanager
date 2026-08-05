@@ -60,6 +60,13 @@ const CONFIG = {
   // public in the Pages-hosted whiteboard display, so this introduces no new secret.
   WHITEBOARD_TODAY_URL: 'https://script.google.com/macros/s/AKfycbzqXD9OCM5oSNFdy3OF7pOG0PRcpy4dgkEYWJBVh40CFHJgjvSpPn6SE-mNjloo-GKw/exec', // ?action=loadToday → today's daycare/boarding roster (lunch source)
   CHECKINOUT_URL: 'https://script.google.com/macros/s/AKfycbz2kc3lJbrGk7lw9jVcZMdUrPWjRx4qBARM8YVAIARhYAlQwCzlhHBbKswyOcVHytmB7Q/exec', // ?mode=checkinout&token=… → boarding stays w/ reliable dates (breakfast/dinner source)
+
+  // ⚠️ SINCE @36 THE LIVE BOARD IS NOT THIS SHEET. The tablet and TV read/write the session
+  // through n8n on the VPS (measured 0.70s mean vs this web app's 4.5-8.7s median and 55s
+  // peak). The Session tab is now a best-effort MIRROR that n8n writes. So clearing the sheet
+  // after a submit is no longer enough — the authoritative board must be cleared too, or the
+  // TV keeps showing a round that has already been reported.
+  SESSION_API_URL: 'https://auto.thefairytails.co.uk/webhook/feeding-session',
   CHECKINOUT_TOKEN: 'ft-k9-board-2024-sec',
 
   // ── Lunch roster: read the Staff Board sheet DIRECTLY (2026-08-04) ──
@@ -200,7 +207,7 @@ function doGet(e) {
           ? { success: false, error: 'Unknown action: ' + action }
           // ⚠️ BUMP THIS STRING ON EVERY DEPLOY. It is the documented way to confirm which code
           // is serving, and it silently went stale across @30/@31/@32 while behaviour changed.
-          : { success: true, status: 'ok', message: 'Feeding Report API v2.5 - Full Session header self-heal + BUSY code' };
+          : { success: true, status: 'ok', message: 'Feeding Report API v2.6 - Live session moved to n8n; GAS keeps submit/plan/lookup' };
     }
     
     return ContentService
@@ -1419,6 +1426,39 @@ function normName_(s) {
  * 5. Send to Telegram
  * 6. Clear session
  */
+/**
+ * Clear the LIVE board in n8n (the authoritative session store since @36).
+ * Best-effort and never throws: a submit that has already delivered to Telegram must not be
+ * reported as failed just because the board clear did not land — the caller reports it as
+ * liveBoardCleared:false instead, exactly like sessionCleared. clearSession is idempotent on
+ * the n8n side, so a retry is always safe.
+ */
+function clearLiveBoard_() {
+  try {
+    const res = UrlFetchApp.fetch(CONFIG.SESSION_API_URL, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ action: 'clearSession' }),
+      muteHttpExceptions: true,
+      followRedirects: true
+    });
+    const code = res.getResponseCode();
+    if (code < 200 || code >= 300) {
+      console.warn('[clearLiveBoard_] n8n returned HTTP ' + code + ' — live board may still show this round');
+      return false;
+    }
+    const body = safeJsonParse(res.getContentText(), null);
+    if (!body || body.success !== true) {
+      console.warn('[clearLiveBoard_] n8n did not confirm the clear: ' + res.getContentText().slice(0, 200));
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('[clearLiveBoard_] failed: ' + e);
+    return false;
+  }
+}
+
 function submitReport(data) {
   try {
     // POST-BODY-FIRST: Trust the tablet's local snapshot (data.dogs) when present.
@@ -1609,6 +1649,10 @@ function submitReport(data) {
     // tablet's fetch aborts at 12s and Temp write + Telegram already spent some of it)
     // with one retry; on a double failure report sessionCleared:false (additive field —
     // clients ignore it) and log loud. The dogs then legitimately remain in Session.
+    // Clear the AUTHORITATIVE board first (n8n), then the sheet mirror. Order matters: the TV
+    // reads n8n, so leaving it populated is what staff would actually see and act on.
+    const liveCleared = clearLiveBoard_();
+
     let clearResult = withScriptLock_('submitClear', function () { return clearSessionCore_(); }, 3000);
     if (!clearResult.success) {
       clearResult = withScriptLock_('submitClearRetry', function () { return clearSessionCore_(); }, 3000);
@@ -1621,6 +1665,7 @@ function submitReport(data) {
       success: true,
       telegramSent: true,
       sessionCleared: clearResult.success === true,
+      liveBoardCleared: liveCleared,     // additive: false = n8n board still shows this round
       dogsProcessed: dogsInPens.length,
       missingEmails: missingEmails,
       message: `${dogsInPens.length} dogs submitted. Check Telegram for review links.`

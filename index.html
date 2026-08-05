@@ -1097,6 +1097,14 @@
         // ============================================
         
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwP74AXOe1cZmHKTxi9KbMhZJU48EHRFI7NQ6Og65_FcTVB1sMQuqgkPKIkr7Fm7e40mw/exec';
+
+        // ⚠️ THE LIVE SESSION MOVED OFF APPS SCRIPT (@36, 2026-08-05) — see shared/contract.js.
+        // Session reads/writes go here; submitReport, getTodayPlan and getDogList stay on GAS.
+        // Measured that afternoon: GAS /exec median 4.5-8.7s, 55.6s peak, ~40% of calls past the
+        // 12s budget so the tablet aborted ITSELF and staff saw "connection lost"; n8n mean
+        // 0.70s, worst 1.83s, zero failures. A bare GAS ping doing no spreadsheet work was
+        // equally slow, so the fault was Google's dispatch layer, not the data.
+        const SESSION_API_URL = 'https://auto.thefairytails.co.uk/webhook/feeding-session';
         
         const SYNC_INTERVAL = 5000;
         const SYNC_PAUSE_DURATION = 8000;
@@ -1218,6 +1226,20 @@
         // `timeoutMs` overrides that budget for the rare endpoint that is legitimately slow
         // (getTodayPlan fans out to the Whiteboard web app + the master pen sheet) — omit it
         // and every existing caller keeps the standard 12s.
+        // Every session call is a JSON POST to the n8n webhook. n8n answers the CORS preflight
+        // correctly (verified live: OPTIONS -> 204 with Allow-Origin/Methods/Headers), unlike
+        // Apps Script which 405s it — so unlike the GAS path we can send a real
+        // Content-Type: application/json and read the response back.
+        async function sessionFetch(body, timeoutMs) {
+            const response = await gasFetch(SESSION_API_URL, {
+                method: 'POST',
+                redirect: 'follow',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            }, timeoutMs);
+            return await response.json();
+        }
+
         function gasFetch(url, opts, timeoutMs) {
             const controller = new AbortController();
             const budget = (typeof timeoutMs === 'number' && timeoutMs > 0) ? timeoutMs : FETCH_TIMEOUT_MS;
@@ -1304,8 +1326,7 @@
         async function retryConnection() {
             updateStatus('Retrying...', 'syncing');
             try {
-                const r = await gasFetch(APPS_SCRIPT_URL + '?action=getSessionVersion', { method: 'GET', redirect: 'follow' });
-                const j = await r.json();
+                const j = await sessionFetch({ action: 'getSessionVersion' });
                 if (j && j.success) {
                     markSyncSuccess();
                     if (initialLoadComplete) await pollForUpdates();
@@ -1400,10 +1421,7 @@
                     if (!body) { mutationQueue.shift(); persistQueue(); continue; }
                     let result;
                     try {
-                        const response = await gasFetch(APPS_SCRIPT_URL, {
-                            method: 'POST', redirect: 'follow', body: JSON.stringify(body)
-                        }, SYNC_WRITE_TIMEOUT_MS);
-                        result = await response.json();
+                        result = await sessionFetch(body, SYNC_WRITE_TIMEOUT_MS);
                     } catch (e) {
                         // Debounced (2026-08-05). This used to set isOnline = false OUTRIGHT,
                         // bypassing OFFLINE_THRESHOLD entirely — so ONE slow POST against a
@@ -1974,11 +1992,7 @@
                 let version = null;
                 for (let attempt = 1; attempt <= PROBE_ATTEMPTS && !version; attempt++) {
                     try {
-                        const vres = await gasFetch(APPS_SCRIPT_URL + '?action=getSessionVersion', {
-                            method: 'GET',
-                            redirect: 'follow'
-                        });
-                        const parsed = await vres.json();
+                        const parsed = await sessionFetch({ action: 'getSessionVersion' });
                         if (parsed && parsed.success) version = parsed;
                     } catch (e) {
                         // A slow /exec aborts here, and Google sometimes answers with an HTML
@@ -1995,11 +2009,7 @@
 
                 // Only pay for a full read when something changed AND we're not mid-edit.
                 if (version.version > lastSyncVersion && !isSyncPaused() && pendingDogIds.size === 0) {
-                    const response = await gasFetch(APPS_SCRIPT_URL + '?action=getSession', {
-                        method: 'GET',
-                        redirect: 'follow'
-                    });
-                    const result = await response.json();
+                    const result = await sessionFetch({ action: 'getSession' });
 
                     if (!result || !result.success) {
                         markSyncFailure('poll-bad-response');
@@ -2167,12 +2177,7 @@
 
         async function loadSessionState() {
             try {
-                const response = await gasFetch(APPS_SCRIPT_URL + '?action=getSession', {
-                    method: 'GET',
-                    redirect: 'follow'
-                });
-
-                const result = await response.json();
+                const result = await sessionFetch({ action: 'getSession' });
 
                 if (result && result.success) {
                     applyRemoteState(result);
@@ -2271,13 +2276,7 @@
             if (!isOnline) return { success: false, offline: true };
 
             try {
-                const response = await gasFetch(APPS_SCRIPT_URL, {
-                    method: 'POST',
-                    redirect: 'follow',
-                    body: JSON.stringify({ action: 'clearSession' })
-                }, SYNC_WRITE_TIMEOUT_MS);   // a write — must land, not abort at 12s
-
-                const result = await response.json();
+                const result = await sessionFetch({ action: 'clearSession' }, SYNC_WRITE_TIMEOUT_MS);
                 if (result && result.success) {
                     lastSyncVersion = result.version;
                     isOnline = true;
