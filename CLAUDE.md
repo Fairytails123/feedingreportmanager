@@ -1,5 +1,15 @@
 # CLAUDE.md
 
+## 👉 START HERE: read `HANDOVER.md` first
+
+`HANDOVER.md` is the anti-regress brief — what the system is **now**, the tripwire table
+("about to do X → do Y first"), the invariants, and the things that passed validation and were
+still broken. It is short and it is the fastest way to avoid undoing work.
+
+**The single most important fact, because every older doc and commit contradicts it:**
+**the live feeding board is in n8n on the VPS, not in the Google Sheet.** The Session tab is a
+mirror. Apps Script keeps only `submitReport`, `getTodayPlan` and `getDogList`.
+
 <!-- n8n-vps-brief:v1 -->
 ## ⚠️ n8n platform: self-hosted VPS — NOT n8n Cloud (migration active since 2026-07-04)
 

@@ -40,43 +40,81 @@ intermittently**, not that a live socket dropped.
 
 ## 4. The map
 
+⚠️ **Since @36 (2026-08-05) the LIVE BOARD IS NOT IN THE SHEET.** It lives in n8n on the VPS.
+Apps Script keeps only the three infrequent endpoints. Read §4a before trusting any older
+description of "the Session tab is the live state".
+
 ```
-                        ┌──────────────────────────────────────────────────────┐
-                        │          GOOGLE SHEET  (the shared state bus)          │
-                        │  Lookup │ Session (live) │ Temp │ Meta (version+count) │
-                        └──────────────────────────────────────────────────────┘
-                                        ▲    ▲    ▲
-                    only Apps Script reads/writes the Sheet
-                                        │    │    │
-                        ┌───────────────┴────┴────┴───────────────┐
-                        │       GAS Web App   (single /exec URL)   │
-                        │   doGet(?action=) / doPost(data.action)  │
-                        └──┬──────────────┬───────────────┬────────┘
-        poll + POST edits  │              │ posts review  │ server-side reads
-     ┌─────────────────────┘              │ summary       │ (White Board project:
-     │                     │              ▼               │  check-in/out + loadToday)
-┌────┴─────┐       ┌───────┴─────┐  ┌──────────┐          ▼
-│ Tablet UI│       │ TV Display  │  │ Telegram │   ┌──────────────────┐
-│index.html│       │  frmdisplay │  │  group   │   │  White Board app │
-└──────────┘       └─────────────┘  └────┬─────┘   └──────────────────┘
- staff EDIT         read-only             │ human reads + replies /send
-                                          ▼
-                                    ┌──────────┐  reads Temp tab   ┌──────────┐
-                                    │   n8n    │─────────────────▶ │ JotForm  │─▶ emails
-                                    │ workflow │  POST submission  │ (eu-api) │   parents
-                                    └──────────┘                   └──────────┘
+   THE HOT PATH  (~95% of all traffic: 4 devices, every 5s)
+┌──────────┐   ┌─────────────┐
+│ Tablet UI│   │ TV Display  │      getSessionVersion / getSession
+│index.html│   │  frmdisplay │      addDog / updateDog / deleteDog
+└────┬─────┘   └──────┬──────┘      setMealType / clearSession
+ staff EDIT      read-only
+     │                │
+     └────────┬───────┘   POST JSON   ~0.70s mean, 1.83s worst, 0 failures
+              ▼
+   ┌──────────────────────────────────────────┐
+   │  n8n VPS  /webhook/feeding-session        │
+   │  workflow hdGUbrd0PffVnwDS                │
+   │  Data Tables: feeding_session + _meta     │  ← THE AUTHORITATIVE BOARD
+   └───────────────────┬──────────────────────┘
+                       │ after responding: ONE atomic range write A2:M201
+                       ▼
+   ┌──────────────────────────────────────────────────────┐
+   │        GOOGLE SHEET                                    │
+   │  Lookup │ Session (MIRROR only) │ Temp │ Meta (legacy) │
+   └──────────────────────────────────────────────────────┘
+                       ▲
+   THE COLD PATH       │  submitReport (a few/day) · getTodayPlan · getDogList
+   ┌───────────────────┴──────────────────────┐
+   │   GAS Web App   (single /exec URL)        │  median 4.5-8.7s, 55.6s peak, flaky
+   │   doGet(?action=) / doPost(data.action)   │
+   └──┬───────────────────────────┬────────────┘
+      │ posts review summary       │ server-side reads (White Board project:
+      ▼                            ▼  check-in/out + Staff Board sheet)
+┌──────────┐                ┌──────────────────┐
+│ Telegram │                │  White Board app │
+│  group   │                └──────────────────┘
+└────┬─────┘
+     │ human reads + replies /send
+     ▼
+┌──────────┐  reads Temp tab   ┌──────────┐
+│   n8n    │─────────────────▶ │ JotForm  │─▶ emails parents
+│ yaBIrD…  │  POST submission  │ (eu-api) │
+└──────────┘                   └──────────┘
 ```
 
-Every arrow into GAS hits one endpoint (`/exec`). GAS chooses what to do by switching on
-`?action=` for reads (`doGet`) and `data.action` for writes (`doPost`). Every handler
-returns `{success, …}` — it never throws an error back to the client.
+**Reading it:** the tablet and TV talk to **n8n** for everything about the live board, and to
+**GAS** only for submit, the whiteboard roster and the dog-name lookup. `submitReport` clears the
+n8n board as well as the sheet (`liveBoardCleared`), because the TV reads n8n. Every handler on
+both sides returns `{success, …}` — neither throws back to the client.
+
+## 4a. Why the session left Apps Script (read before "improving" this)
+
+Measured live 2026-08-05, same test both sides:
+
+| | Apps Script `/exec` | n8n on the VPS |
+|---|---|---|
+| median / mean | 4.5–8.7s | **0.70s** |
+| worst | **55.6s** | **1.83s** |
+| failures | ~40% past the tablet's 12s abort, plus Google 404s | **0 / ~40 calls** |
+
+The decisive experiment: a bare `/exec` ping doing **no spreadsheet work at all** was just as slow
+(55.6s worst). So the bottleneck was **Apps Script's dispatch layer** — not the data, not the code.
+The originally-planned fix (cache `getSessionVersion` so it never opens the spreadsheet) would have
+achieved **nothing**. Apps Script allows ~30 simultaneous executions **per Google account**, shared
+with Staff Board, Training Planner, Boarding API, Grooming and Order list.
+
+Against a 12s client abort, a ~40% slow rate is exactly what staff experienced as "connection
+lost" — the tablet was aborting **itself**.
 
 ## 5. The three Sheet tabs (the state bus)
 
 | Tab | gid | Role |
 |-----|-----|------|
 | **Lookup** | `0` | Permanent. `Dog Name \| Parent Email \| Parent Name`. Source of truth for emails. |
-| **Session** | `1038940935` | Live editing state (13 columns) shared across tablets + TV. Re-synced ~every 5s. Column 13 = `Position` (within-pen feeding order). |
+| **Session** | `1038940935` | ⚠️ **MIRROR ONLY since @36** — n8n writes it as one atomic `A2:M201` block after answering the client. Same 13 columns. It exists for human readability, the `/status` command and `submitReport`'s legacy fallback. **The live board is the n8n `feeding_session` Data Table.** Never point a new reader here and never write to it. |
 | **Temp** | `1965265218` | Submission staging (7 columns) that n8n reads on `/send`. Row 1 is a load-bearing header. |
 
 (Lunch pen side is **no longer** in this sheet — as of 2026-06-09 it comes from the **external** master "Jot form Dog Details" sheet `1OD8SQR2…`, col K; see Phase 2. The old B/T pen tab `1567330092` here is retired/deleted.)
@@ -88,23 +126,33 @@ returns `{success, …}` — it never throws an error back to the client.
 ### Phase 0 — Boot (tablet load)
 `initialLoad()` runs, in order:
 1. `loadQueue()` — restore the **durable edit queue** from localStorage (`feedingManager.queue.v1`), so unsynced edits survive a refresh.
-2. **GET `?action=getDogList`** → GAS reads **Lookup** → names + parent emails.
-3. **GET `?action=getSession`** → GAS reads **Session** → `applyRemoteState()` paints the board.
-4. `flushQueue()` — push up anything queued while offline.
-5. Start the **5-second poll** (`pollForUpdates`) and a lighter **7-second heartbeat** (`getSessionVersion`).
+2. **GET `?action=getDogList`** → **GAS** reads **Lookup** → names + parent emails.
+3. **POST `{action:'getSession'}`** → **n8n** → `applyRemoteState()` paints the board.
+4. `flushQueue()` — push up anything queued while offline (POSTs to **n8n**).
+5. Start the **single 5-second version-first poll** (`pollForUpdates`) — see Phase 1. The old
+   separate 7-second heartbeat was removed in @35; the poll absorbed its job.
 
 ### Phase 1 — Every local edit (add dog, set amount, medicine, drag, change meal)
 Edits do **not** POST directly. They go through a durable queue:
 
 ```
 edit → syncAddDog/UpdateDog/DeleteDog/MealType → enqueue {op, dogId, payload}
-     → save queue to localStorage → flushQueue() → POST to GAS → GAS writes Session tab
+     → save queue to localStorage → flushQueue() → POST to n8n → n8n writes the Data Table
+                                                              → (after responding) mirrors to Sheet
 ```
+
+The **op shapes did not change** in the n8n move — `{action:'addDog', dog}`,
+`{action:'updateDog', dogId, updates}`, `{action:'deleteDog', dogId}`,
+`{action:'setMealType', mealType}` — so the durable queue itself was untouched.
 
 - The **queue owns ordering and retry**, not the call site. It drains in order, removes an
   item only after its POST succeeds, **stops on the first failure** and retries next cycle,
   and **drops an item after 5 rejections** so one bad edit can't jam the whole queue.
-- The **5s poll** GETs `?action=getSession`, and `applyRemoteState()` **merges** the server
+- The **5s poll** is **version-first**: every tick costs one cheap `getSessionVersion` and the
+  full `getSession` runs only when the version actually moved. It keeps running while **editing**
+  and while **offline** (only the board *write* is gated on the edit pause) — that is what the
+  deleted 7s heartbeat used to provide, and `tests/tablet.test.js` S13/S14 exist to stop anyone
+  re-gating it. When it does fetch, `applyRemoteState()` **merges** the server
   snapshot with your pending queue. The rule: **the server wins only for dogs you have no
   pending change on** — pending adds are kept, edits re-applied, deletes suppressed. Then it
   **sorts each pen by the `Position` column**. This merge is exactly why a ~5s poll never
@@ -193,20 +241,37 @@ responses deliberately carry **no `version`** except `clearSession` (the tablet 
 unguarded). All mutators are serialized under `LockService` (see CLAUDE.md "Session versioning is
 REAL now" for the full contract — preserve it).
 
+### 7a. n8n — `POST https://auto.thefairytails.co.uk/webhook/feeding-session` (the live board)
+
+Workflow `hdGUbrd0PffVnwDS`. Data Tables `feeding_session` (`nnbHmglWVbneFigg`) +
+`feeding_meta` (`5TGDqjRVlrczGUgm`). All calls are `POST {action, …}` JSON.
+**Every row here is asserted by `tests/live_api.test.js` — run `LIVE=1 bash tests/run.sh` after
+any workflow edit.**
+
+| Action | Reads | Writes | Returns |
+|--------|-------|--------|---------|
+| `getSessionVersion` | `feeding_meta` | — | `{success, version, count, mealType, source:'n8n'}` |
+| `getSession` | `feeding_meta` + `feeding_session` | — | `{success, dogs:[…], mealType, version, count}` — **same `version` as above; one source** |
+| `addDog` | session (match `dog_id`) | **upsert** + meta bump + mirror | `{success, count, mealType}` — **no version**. Idempotent by `dog_id` |
+| `updateDog` | session | **partial** update (only changed columns) + meta bump + mirror | `{success, count}` — **no version** |
+| `deleteDog` | session | delete row + meta bump + mirror | `{success, count, dogId}` — **no version**; deleting an absent dog still succeeds |
+| `setMealType` | meta | meta bump + mirror | `{success, mealType}` — **no version** |
+| `clearSession` | session | delete all rows + meta bump + mirror | `{success, version, count:0}` — the ONE write that keeps `version` |
+| *(unknown)* | — | — | `{success:false, code:'UNKNOWN_ACTION', retryable:false}` |
+
+### 7b. Apps Script — `/exec` (what is LEFT on GAS)
+
 | Action | Method | Reads | Writes | Returns |
 |--------|--------|-------|--------|---------|
 | `getDogList` | GET/POST | Lookup | — | `{success, dogs:[{name,email,parentName}]}` |
-| `getSession` | GET/POST | Session + Meta | (self-heal only) | `{success, dogs:[…], mealType, version, count}` |
-| `getSessionVersion` | GET | Session + Meta | (self-heal only) | `{success, version, count}` (lightweight heartbeat) |
 | `getTodayPlan` | GET/POST | Staff Board `Today` tab **direct** (web app = fallback) + check-in/out feed + master pen sheet (col K) | — | `{success, mealPeriod, today, dogs, skipped, counts, rosterSource}` — **`success:false` on a failed read, never an empty day**; `+ stale, capturedAt, upstreamError` when a last-known-good copy is served; `+ cached` on a cache hit. `?fresh=1` bypasses the cache |
-| `dedupeSession` | GET | Session | Session (deletes duplicate rows) + Meta bump | `{success, removed, remaining}` — recovery for a tab that accumulated duplicate `Dog_ID` rows |
-| `addDog` | POST | Session (id lookup) | Session (**update-or-insert**, never blind append) + Meta bump | `{success, dogId, deduped}` — **no version**. Idempotent by `Dog_ID` since @34 |
-| `updateDog` | POST | Session | Session (one row) + Meta bump | `{success, dogId}` — **no version** |
-| `deleteDog` | POST | Session | Session (delete row) + Meta bump | `{success, dogId}` — **no version** (20s lock wait) |
-| `setMealType` | POST | Session | Session (all rows) + Meta bump | `{success, mealType}` — **no version** |
-| `submitReport` | POST | POST body / Lookup / Temp | Temp (locked) → Telegram → (cond.) clear + Meta bump | `{success, telegramSent, sessionCleared, dogsProcessed}` |
-| `clearSession` | POST | — | Session (delete dogs, keep header) + Meta bump | `{success, version}` — the ONE write that keeps `version` |
+| `submitReport` | POST | POST body / Lookup / Temp | Temp (locked) → Telegram → clears **n8n board** + Session mirror | `{success, telegramSent, sessionCleared, liveBoardCleared, dogsProcessed}` |
 | `repairTemp` | GET | Temp | Temp (rebuild header, locked) | `{success, dogRows}` |
+
+**Still present on GAS but no longer on the hot path** (legacy/recovery only — the clients do not
+call them): `getSession`, `getSessionVersion`, `addDog`, `updateDog`, `deleteDog`, `setMealType`,
+`clearSession`, `dedupeSession`. They still read/write the Session **mirror**, so using them will
+put the sheet out of step with the real board until n8n's next write. Don't.
 
 ## 8. Why it's built this way (the decisions that matter)
 
