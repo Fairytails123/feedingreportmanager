@@ -65,6 +65,28 @@ Rendering verified in Chrome at 1284x800, 412x892 and 1366x768, and end-to-end a
 n8n board: add → move → portion → medicine → supplements → clear, every field read back
 server-side, both version endpoints agreeing. Board left empty.
 
+### Follow-up the same day — portion control back to a dropdown (owner request)
+
+The handoff's 5-way segmented control (`All ¾ ½ ¼ None` side by side) is one tap, but five
+targets set a **wide floor on the tile**, and the tile sets the pen width. On a phone in portrait
+that meant **one pen on screen at a time** — you could not carry a dog to the next pen without an
+off-screen drag. Owner's call: make it a `<select>`.
+
+- Portion control is now a colour-coded `<select>` (`appearance:none`, 16px so iOS does not zoom,
+  the native popup pinned back to the page palette). The tile's left edge still carries the
+  portion colour, so the board reads at a glance exactly as before. `updateDogStatus` unchanged.
+- Pens shrank accordingly: `clamp(150px, 40%, 200px)` on a phone (**2.3 pens visible, was 1**),
+  `clamp(150px, 19.5%, 200px)` in tablet portrait (~5 across at 900px, was 3). Unchanged at
+  >=1060px, where all 10 pens already fit a 5-column grid.
+- Three sizing bugs found and fixed while measuring, each of which silently defeated the change:
+  **(a)** a flex item's automatic minimum size is its *min-content* size, so the expanded panel's
+  `white-space:nowrap` "Take off the board" button overrode the pen's flex-basis and made every
+  pen 195px instead of 154px — fixed with `min-width: 0` on `.fb-pen`/`.pen-dog` and by letting
+  that button wrap; **(b)** two badges plus the chevron on the name row left the name ~34px
+  (`"De…"`), so the badges moved to the portion row; **(c)** with both badges the select squeezed
+  `"None"` into its own chevron, so `.portion-wrap` has `min-width: 88px` and the row wraps —
+  badges take their own line only when there genuinely is not room.
+
 **Still to do — the one thing a desktop browser cannot prove:** the Android drag has NOT been
 exercised on a real tablet or phone yet. That is the whole reason the engine was rewritten
 (`design_handoff_feeding_board/INTEGRATION.md` §6). Long-press a dog, carry it across the

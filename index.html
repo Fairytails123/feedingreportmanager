@@ -524,8 +524,15 @@
             display: flex;
             flex-direction: column;
             gap: 8px;
-            flex: 0 0 84%;
-            scroll-snap-align: center;
+            /* Phone portrait. The dropdown portion control let the tile get narrow, so a pen
+               no longer has to be nearly the whole screen — two and a bit are visible, which
+               is what makes carrying a dog between pens possible without an off-screen drag. */
+            flex: 0 0 clamp(150px, 40%, 200px);
+            scroll-snap-align: start;
+            /* A flex item's automatic minimum size is its MIN-CONTENT size, so without this a
+               single wide descendant (the expanded panel's "Take off the board" button) silently
+               overrode the flex-basis and made every pen wider than asked. */
+            min-width: 0;
             min-height: 148px;
             padding: 8px;
             border-radius: var(--radius-lg);
@@ -564,6 +571,7 @@
 
         /* ---------------------------------------------------------- dog tile */
         .pen-dog {
+            min-width: 0;
             border: 1px solid var(--color-divider);
             border-left: 5px solid var(--portion-all);
             border-radius: var(--radius-md);
@@ -618,7 +626,7 @@
         }
         .pen-dog-badge {
             display: grid; place-items: center;
-            width: 22px; height: 22px; flex: none;
+            width: 24px; height: 24px; flex: none;
             border-radius: 99px;
         }
         .pen-dog-badge.is-meds { background: var(--color-accent-200);   color: var(--color-accent-800); }
@@ -631,38 +639,58 @@
         }
         .pen-dog.is-expanded .pen-dog-chev { transform: rotate(180deg); }
 
-        /* The portion control — the thing staff touch 20x a round. */
-        .portion-row {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr) 1.55fr;
-            gap: 3px;
-            padding: 0 5px 5px;
-        }
-        .p-btn {
-            min-height: 38px;
-            padding: 0 1px;
+        /* The portion control.
+           This is a <select>, not the handoff's 5-way segmented control. Owner decision
+           (2026-08-05): five side-by-side targets set a wide floor on the tile, and the tile
+           sets the pen width — on a phone in portrait that meant ONE pen on screen at a time.
+           A dropdown costs one extra tap but lets a pen be ~150px, so several pens are visible
+           and staff can carry a dog between them without an off-screen drag. The portion is
+           still colour-coded on the closed control AND on the tile's left edge, so the board
+           still reads at a glance, which is what the segmented control was really buying. */
+        /* min-width is the point: the select must never be squeezed so far that "None" is
+           clipped by its own chevron. When a dog carries BOTH badges and the pen is narrow,
+           the badges wrap to their own line instead. */
+        .portion-row { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding: 0 5px 5px; }
+        .portion-wrap { position: relative; display: block; flex: 1 1 auto; min-width: 88px; }
+        .portion-select {
+            width: 100%;
+            min-height: 40px;
+            padding: 0 24px 0 10px;
+            appearance: none; -webkit-appearance: none; -moz-appearance: none;
             border: 1px solid transparent;
-            border-radius: 4px;
+            border-radius: 99px;
             background: var(--color-neutral-200);
             color: var(--color-neutral-800);
             font-family: var(--font-heading);
             font-weight: 400;
-            font-size: 15px;
+            font-size: 16px;    /* 16px so iOS does not zoom the page on focus */
             line-height: 1;
-            overflow: hidden;
             cursor: pointer;
-            transition: background .16s ease, color .16s ease, border-color .16s ease;
+            transition: background .16s ease, color .16s ease;
         }
-        /* "All" and "None" are words, not glyphs — at a 5-across pen width the 15px used
-           for the fractions clips them. "None" is what the 1.55fr column is for; "All" gets
-           a step down instead of a wider column so the four fraction targets stay equal. */
-        .p-btn:first-child { border-radius: 99px 4px 4px 99px; font-size: 12.5px; }
-        .p-btn:last-child  { border-radius: 4px 99px 99px 4px; font-size: 10.5px; }
-        .p-btn.is-on[data-s="all"]           { background: var(--portion-all);           border-color: var(--portion-all);           color: var(--color-neutral-100); }
-        .p-btn.is-on[data-s="three-quarter"] { background: var(--portion-three-quarter); border-color: var(--portion-three-quarter); color: var(--color-neutral-900); }
-        .p-btn.is-on[data-s="half"]          { background: var(--portion-half);          border-color: var(--portion-half);          color: var(--color-neutral-900); }
-        .p-btn.is-on[data-s="quarter"]       { background: var(--portion-quarter);       border-color: var(--portion-quarter);       color: var(--color-neutral-100); }
-        .p-btn.is-on[data-s="none"]          { background: var(--portion-none);          border-color: var(--portion-none);          color: var(--color-neutral-100); }
+        .portion-select:focus { outline: none; }
+        .portion-select:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+        /* The native popup inherits nothing useful from a coloured control — pin it back to
+           the page palette so the list is legible on every platform. */
+        .portion-select option { background: var(--color-neutral-100); color: var(--color-text); }
+        .portion-select[data-s="all"]           { background: var(--portion-all);           color: var(--color-neutral-100); }
+        .portion-select[data-s="three-quarter"] { background: var(--portion-three-quarter); color: var(--color-neutral-900); }
+        .portion-select[data-s="half"]          { background: var(--portion-half);          color: var(--color-neutral-900); }
+        .portion-select[data-s="quarter"]       { background: var(--portion-quarter);       color: var(--color-neutral-100); }
+        .portion-select[data-s="none"]          { background: var(--portion-none);          color: var(--color-neutral-100); }
+        .portion-wrap::after {
+            content: '';
+            position: absolute;
+            right: 12px; top: 50%;
+            width: 7px; height: 7px;
+            margin-top: -5px;
+            border-right: 2.4px solid var(--pfg);
+            border-bottom: 2.4px solid var(--pfg);
+            transform: rotate(45deg);
+            pointer-events: none;
+        }
+        .portion-wrap { --pfg: var(--color-neutral-100); }
+        .portion-wrap[data-s="three-quarter"], .portion-wrap[data-s="half"] { --pfg: var(--color-neutral-900); }
 
         .dog-panel {
             border-top: 1px dashed var(--color-divider);
@@ -673,7 +701,7 @@
         /* A pen is ~176px wide at 5-across, so two 44px pills side by side clip their own
            labels. auto-fit puts them on one row wherever there is genuinely room (phone
            tray, wide window) and stacks them inside a narrow pen. */
-        .dog-panel-toggles { display: grid; grid-template-columns: repeat(auto-fit, minmax(124px, 1fr)); gap: 6px; }
+        .dog-panel-toggles { display: grid; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: 6px; }
         .toggle-btn {
             min-width: 0;
             display: flex; align-items: center; justify-content: center; gap: 6px;
@@ -725,9 +753,10 @@
             align-self: stretch;
             display: flex; align-items: center; justify-content: center; gap: 7px;
             min-height: 44px;
-            padding: 0 12px;
-            white-space: nowrap;
-            overflow: hidden;
+            padding: 6px 12px;
+            /* Wrap rather than clip: "Take off the boa…" is worse than two lines. */
+            line-height: 1.15;
+            text-align: center;
             border: 1px solid var(--color-divider);
             border-radius: 99px;
             background: transparent;
@@ -959,7 +988,8 @@
             .fb-rail { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
             .fb-rail-wide { grid-column: 1 / -1; }
             .fb-pens { scroll-snap-type: x proximity; }
-            .fb-pen, .pen { flex: 0 0 clamp(210px, 31%, 260px); scroll-snap-align: start; }
+            /* Tablet portrait: ~5 pens across at 900px instead of 3. */
+            .fb-pen, .pen { flex: 0 0 clamp(150px, 19.5%, 200px); scroll-snap-align: start; }
         }
 
         /* ---- tablet landscape + desktop (>= 1060px): nothing hidden, no sideways scroll ---- */
@@ -3147,15 +3177,16 @@
                 const hasSupps = !!(dog.supplements && dog.supplementTypes && dog.supplementTypes.length > 0);
                 const meta = portionMeta(status);
 
+                // The badges sit on the portion row, not the name row. In a ~140px pen (phone
+                // portrait) two 22px badges plus the chevron left the name about 34px — "De…".
+                // The name is the primary identifier; it gets the whole row.
                 const badges =
-                    (dog.prescription ? `<span class="pen-dog-badge is-meds" title="Medicine">${svg(ICON.meds, 13)}</span>` : '') +
-                    (hasSupps ? `<span class="pen-dog-badge is-supp" title="Supplements">${svg(ICON.leaf, 13)}</span>` : '');
+                    (dog.prescription ? `<span class="pen-dog-badge is-meds" title="Medicine">${svg(ICON.meds, 12)}</span>` : '') +
+                    (hasSupps ? `<span class="pen-dog-badge is-supp" title="Supplements">${svg(ICON.leaf, 12)}</span>` : '');
 
-                const portions = PORTION_META.map(p => {
-                    const on = status === p.id;
-                    return `<button type="button" class="p-btn${on ? ' is-on' : ''}" data-s="${p.id}" role="radio" aria-checked="${on}" ` +
-                           `aria-label="${p.a11y}" onclick="updateDogStatus('${esc(dog.id)}', '${p.id}')">${p.label}</button>`;
-                }).join('');
+                const portions = PORTION_META.map(p =>
+                    `<option value="${p.id}"${status === p.id ? ' selected' : ''}>${p.label}</option>`
+                ).join('');
 
                 const panel = !expanded ? '' : `
                     <div class="dog-panel" data-nodrag="true">
@@ -3195,12 +3226,18 @@
                         <div class="pen-dog-row">
                             <button type="button" class="pen-dog-toggle" aria-expanded="${expanded}" onclick="toggleTile('${esc(dog.id)}')">
                                 <span class="pen-dog-name">${esc(displayName)}</span>
-                                ${badges}
                                 <span class="pen-dog-chev">${svg(ICON.chevron, 15)}</span>
                             </button>
                         </div>
-                        <div class="portion-row" data-nodrag="true" role="radiogroup" aria-label="Portion eaten by ${esc(displayName)}">
-                            ${portions}
+                        <div class="portion-row">
+                            <span class="portion-wrap" data-nodrag="true" data-s="${esc(status)}">
+                                <select class="portion-select" data-s="${esc(status)}"
+                                        aria-label="Portion eaten by ${esc(displayName)}"
+                                        onchange="updateDogStatus('${esc(dog.id)}', this.value)">
+                                    ${portions}
+                                </select>
+                            </span>
+                            ${badges}
                         </div>
                         ${panel}
                     </div>
