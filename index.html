@@ -3092,6 +3092,16 @@
             // A report with no review links in Telegram is a failed submit — don't wipe state.
             if (result && result.success && result.telegramSent) {
                 showToast(`✅ ${result.dogsProcessed} dogs submitted! Check Telegram.`, 'success');
+                // Belt-and-braces board clear (@36). GAS also clears the n8n board server-side
+                // (liveBoardCleared), which covers the case where this tablet aborted after the
+                // server had already delivered. This covers the opposite case — GAS reaching
+                // Telegram but failing to reach n8n. Whichever lands first, the other is a no-op:
+                // clearSession is idempotent. If BOTH miss, the TV would keep showing a round
+                // that has already been reported, which is the one outcome worth two attempts.
+                if (result.liveBoardCleared === false) {
+                    sessionFetch({ action: 'clearSession' }, SYNC_WRITE_TIMEOUT_MS)
+                        .catch(e => console.warn('[submit] live board clear failed', e));
+                }
                 dogs = [];
                 for (const penId of Object.keys(pens)) pens[penId] = [];
                 clearQueue();
