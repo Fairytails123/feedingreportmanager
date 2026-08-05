@@ -392,6 +392,76 @@ console.log('\n=== M. addDog is IDEMPOTENT — a retried add must not duplicate 
     `${before} -> ${h.api.getSessionState().count}`);
 }
 
+console.log('\n=== N. Session header self-heals in FULL, not just the Position column ===');
+{
+  // The live n8n `/cancel` branch clears the Session tab with a wholeSheet clear (verified on the
+  // VPS 2026-08-05: the node has no `clear` parameter, so it defaults to wholeSheet), which takes
+  // row 1 with it. GAS reads Session by INDEX so it never noticed; n8n's "Read Session (Status)"
+  // node keys rows by row 1, so a wiped header makes it promote the first DOG row to headers.
+  // Before 2026-08-05 only the Position cell was repaired, so the other 12 stayed wiped forever.
+  const H = ['Dog_ID', 'Input_Name', 'Matched_Name', 'Possible_Matches', 'Status',
+             'Prescription', 'Prescription_Comment', 'Supplements', 'Supplement_Types', 'Pen_ID',
+             'Last_Updated', 'Meal_Type', 'Position'];
+
+  {
+    const h = load(BACKEND);
+    h.api.addDogToSession({ id: 'd1', inputName: 'Leo', status: 'all', penId: 'top-1', position: 1000 });
+    h.state.tabs.Session[0] = [];                       // n8n wholeSheet clear ate row 1
+    h.api.ensureSessionTab();
+    check('a fully wiped header is fully restored',
+      JSON.stringify(h.state.tabs.Session[0]) === JSON.stringify(H),
+      JSON.stringify(h.state.tabs.Session[0]));
+  }
+  {
+    const h = load(BACKEND);
+    h.api.addDogToSession({ id: 'd1', inputName: 'Leo', status: 'all', penId: 'top-1', position: 1000 });
+    h.state.tabs.Session[0][0] = 'WRONG';                // an early header, not Position
+    h.api.ensureSessionTab();
+    check('drift in an EARLY column is repaired (the old code only checked Position)',
+      h.state.tabs.Session[0][0] === 'Dog_ID', String(h.state.tabs.Session[0][0]));
+  }
+  {
+    const h = load(BACKEND);
+    h.api.addDogToSession({ id: 'd1', inputName: 'Leo', status: 'all', penId: 'top-1', position: 1000 });
+    h.state.tabs.Session[0][12] = '';                    // the original Position-only case
+    h.api.ensureSessionTab();
+    check('the original Position repair still works', h.state.tabs.Session[0][12] === 'Position',
+      String(h.state.tabs.Session[0][12]));
+  }
+  {
+    const h = load(BACKEND);
+    h.api.addDogToSession({ id: 'd1', inputName: 'Leo', status: 'all', penId: 'top-1', position: 1000 });
+    const before = JSON.stringify(h.state.tabs.Session);
+    h.api.ensureSessionTab();
+    check('a healthy header is left completely alone (no needless write)',
+      JSON.stringify(h.state.tabs.Session) === before);
+  }
+  {
+    // Never let a hand-narrowed grid turn every endpoint into a 500.
+    const h = load(BACKEND);
+    h.api.addDogToSession({ id: 'd1', inputName: 'Leo', status: 'all', penId: 'top-1', position: 1000 });
+    h.state.tabs.Session[0] = [];
+    h.state.maxColumns = 5;                              // someone deleted columns
+    let threw = false;
+    try { h.api.ensureSessionTab(); } catch (e) { threw = true; }
+    check('a too-narrow grid degrades to a no-op instead of throwing', threw === false);
+    check('...and reads still work', h.api.getSessionState().success === true);
+  }
+  {
+    // The repair must not disturb the dog rows underneath it.
+    const h = load(BACKEND);
+    h.api.addDogToSession({ id: 'd1', inputName: 'Leo', status: 'all', penId: 'top-1', position: 1000 });
+    h.api.addDogToSession({ id: 'd2', inputName: 'Mac', status: 'half', penId: 'top-2', position: 2000 });
+    h.state.tabs.Session[0] = [];
+    h.api.ensureSessionTab();
+    const s = h.api.getSessionState();
+    check('dog rows survive the header repair', s.count === 2, `count=${s.count}`);
+    check('...with their values intact',
+      (s.dogs || []).map(d => d.id).sort().join(',') === 'd1,d2',
+      JSON.stringify((s.dogs || []).map(d => d.id)));
+  }
+}
+
 console.log('\n=== J. Unknown / missing mealPeriod unchanged ===');
 {
   const h = boot({ 'action=loadToday': [OK()] });

@@ -203,6 +203,116 @@ async function scenario(label, path, netPlan) {
     check('14:00 -> Evening Meal', at(14, 0) === 'Evening Meal', at(14, 0));
   }
 
+  // ============================================================================
+  // S11 — the version-first sync loop (2026-08-05). This replaced BOTH the 5s full
+  // getSession poll AND the independent 7s getSessionVersion heartbeat. Each check
+  // below is a property the old two-loop design provided; losing any of them is a
+  // regression, not an optimisation.
+  // ============================================================================
+  function syncBoot(opts) {
+    opts = opts || {};
+    const h = load(FIXED);
+    const calls = [];
+    const applied = [];
+    let flushes = 0;
+    h.api.stub({
+      showToast: () => {}, renderAllPens: () => {}, renderStagingArea: () => {},
+      updateConnectionUI: () => {}, updateStatus: () => {},
+      flushQueue: async () => { flushes++; },
+      applyRemoteState: r => applied.push(r),
+      loadDogList: async () => { calls.push('DOGLIST'); },
+    });
+    h.api.initPens();
+    h.api.syncState.initialLoadComplete = true;
+    h.api.syncState.lastDogListRefresh = Date.now();   // init already fetched it
+    h.api.syncState.lastSyncVersion = opts.version || 100;
+    h.api.syncState.isOnline = opts.isOnline !== false;
+    // Label each planned response so netLog can be read as a sequence of actions.
+    const origin = h.state;
+    return {
+      h, applied, calls,
+      get flushes() { return flushes; },
+      seq: () => origin.netLog.map(e =>
+        e.url.indexOf('getSessionVersion') !== -1 ? 'VERSION'
+        : e.url.indexOf('getSession') !== -1 ? 'SESSION'
+        : e.url.indexOf('getDogList') !== -1 ? 'DOGLIST' : 'OTHER'),
+    };
+  }
+  const vOK = v => ({ delayMs: 5, body: { success: true, version: v, count: 0 } });
+  const sOK = v => ({ delayMs: 5, body: { success: true, version: v, count: 1, dogs: [], mealType: 'Lunch' } });
+
+  console.log('\n=== S11 — version-first poll: unchanged board costs ONE cheap call ===');
+  {
+    const t = syncBoot({ version: 100 });
+    t.h.state.netPlan = [vOK(100)];
+    await t.h.api.pollForUpdates();
+    check('probes getSessionVersion only', JSON.stringify(t.seq()) === '["VERSION"]', JSON.stringify(t.seq()));
+    check('does NOT fetch the full session when nothing changed', t.applied.length === 0);
+    check('still confirms reachability + drains the queue', t.flushes === 1);
+  }
+
+  console.log('\n=== S12 — a real change still triggers the full read ===');
+  {
+    const t = syncBoot({ version: 100 });
+    t.h.state.netPlan = [vOK(200), sOK(200)];
+    await t.h.api.pollForUpdates();
+    check('escalates to getSession', JSON.stringify(t.seq()) === '["VERSION","SESSION"]', JSON.stringify(t.seq()));
+    check('applies the remote state', t.applied.length === 1);
+    check('advances lastSyncVersion', t.h.api.syncState.lastSyncVersion === 200);
+  }
+
+  console.log('\n=== S13 — REGRESSION GUARD: the loop must still run while EDITING ===');
+  // The old 7s heartbeat existed precisely because pollForUpdates bailed out on
+  // isSyncPaused(). If the merged loop skips while paused, an edit burst leaves the
+  // queue undrained and the connection state unproven — the exact gap the heartbeat filled.
+  {
+    const t = syncBoot({ version: 100 });
+    t.h.api.syncState.pause();
+    t.h.state.netPlan = [vOK(200), sOK(200)];
+    await t.h.api.pollForUpdates();
+    check('still probes while paused', JSON.stringify(t.seq()) === '["VERSION"]', JSON.stringify(t.seq()));
+    check('still drains the queue while paused', t.flushes === 1);
+    check('but does NOT overwrite the board mid-edit', t.applied.length === 0);
+    check('and leaves lastSyncVersion alone so the change is re-detected', t.h.api.syncState.lastSyncVersion === 100);
+  }
+
+  console.log('\n=== S14 — REGRESSION GUARD: the loop must still run while OFFLINE ===');
+  // The old poll was gated on !isOnline, so recovery depended entirely on the heartbeat.
+  // Re-adding that gate would make a dropped link unrecoverable without the manual button.
+  {
+    const t = syncBoot({ version: 100, isOnline: false });
+    t.h.state.netPlan = [vOK(100)];
+    await t.h.api.pollForUpdates();
+    check('polls even though isOnline was false', JSON.stringify(t.seq()) === '["VERSION"]', JSON.stringify(t.seq()));
+    check('a successful probe restores the connection', t.h.api.syncState.isOnline === true);
+    check('and drains whatever queued up while offline', t.flushes === 1);
+  }
+
+  console.log('\n=== S15 — failure handling is unchanged (debounced, 2 strikes) ===');
+  {
+    const t = syncBoot({ version: 100 });
+    t.h.state.netPlan = [{ delayMs: 5, body: { success: false, error: 'boom' } }];
+    await t.h.api.pollForUpdates();
+    check('one bad response does NOT declare offline', t.h.api.syncState.isOnline === true);
+    check('but it is counted', t.h.api.syncState.consecutiveFailures === 1);
+    t.h.state.netPlan = [{ delayMs: 5, body: { success: false, error: 'boom' } }];
+    await t.h.api.pollForUpdates();
+    check('two consecutive failures DO declare offline', t.h.api.syncState.isOnline === false);
+    check('a failed version probe never fetches the full session', t.applied.length === 0);
+  }
+
+  console.log('\n=== S16 — a slow call must not stack ticks behind it ===');
+  // isSyncing was vestigial before (read in the gate, never assigned). It is now the real
+  // in-flight guard that heartbeatInFlight used to provide.
+  {
+    const t = syncBoot({ version: 100 });
+    t.h.state.netPlan = [{ delayMs: 60, body: { success: true, version: 100, count: 0 } }];
+    const inFlight = t.h.api.pollForUpdates();
+    await t.h.api.pollForUpdates();          // fires while the first is still outstanding
+    await inFlight;
+    check('the overlapping tick was dropped, not queued', t.seq().length === 1, JSON.stringify(t.seq()));
+  }
+
   console.log(`\n================ ${pass} passed, ${fail} failed ================\n`);
   process.exit(fail ? 1 : 0);
 })();

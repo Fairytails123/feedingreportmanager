@@ -144,7 +144,19 @@ const CONFIG = {
   // Canonical Temp-tab header (row 1). Single source of truth — n8n's "Read Temp Tab"
   // node keys each row by row 1, so this row MUST exist or n8n promotes the first dog
   // row to headers and `Has Data?` ($json['Dog Name']) fails for every row.
-  TEMP_HEADER: ['Dog Name', 'Parent Email', 'Meal', 'Food Consumed', 'Medicine Supplement', 'Supplement Types', 'Comments']
+  TEMP_HEADER: ['Dog Name', 'Parent Email', 'Meal', 'Food Consumed', 'Medicine Supplement', 'Supplement Types', 'Comments'],
+
+  // Canonical Session-tab header (row 1) — single source of truth for ensureSessionTab's repair.
+  // GAS itself reads Session BY INDEX, so it survives a wiped header; n8n's "Read Session (Status)"
+  // node keys each row by row 1, so a missing header makes it promote the first DOG row to headers
+  // and mis-key every field. The live n8n `Clear Session (Cancel)` node is a wholeSheet clear
+  // (verified on the VPS 2026-08-05 — it has no `clear` parameter, so it defaults to wholeSheet),
+  // which is exactly what wipes this row. Order MUST match SESSION_COLS.
+  SESSION_HEADER: [
+    'Dog_ID', 'Input_Name', 'Matched_Name', 'Possible_Matches', 'Status',
+    'Prescription', 'Prescription_Comment', 'Supplements', 'Supplement_Types', 'Pen_ID',
+    'Last_Updated', 'Meal_Type', 'Position'
+  ]
 };
 
 // ============================================
@@ -188,7 +200,7 @@ function doGet(e) {
           ? { success: false, error: 'Unknown action: ' + action }
           // ⚠️ BUMP THIS STRING ON EVERY DEPLOY. It is the documented way to confirm which code
           // is serving, and it silently went stale across @30/@31/@32 while behaviour changed.
-          : { success: true, status: 'ok', message: 'Feeding Report API v2.4 - Idempotent addDog (no duplicate rows)' };
+          : { success: true, status: 'ok', message: 'Feeding Report API v2.5 - Full Session header self-heal + BUSY code' };
     }
     
     return ContentService
@@ -273,16 +285,30 @@ function ensureSessionTab() {
   
   if (!sheet) {
     sheet = ss.insertSheet(CONFIG.SESSION_TAB);
-    sheet.appendRow([
-      'Dog_ID', 'Input_Name', 'Matched_Name', 'Possible_Matches', 'Status',
-      'Prescription', 'Prescription_Comment', 'Supplements', 'Supplement_Types', 'Pen_ID',
-      'Last_Updated', 'Meal_Type', 'Position'
-    ]);
+    sheet.appendRow(CONFIG.SESSION_HEADER.slice());
     sheet.setFrozenRows(1);
-  } else if (sheet.getRange(1, CONFIG.SESSION_COLS.POSITION + 1).getValue() !== 'Position') {
-    // Self-heal: the Position column (M) was added after this tab already existed. Mirrors
-    // ensureTempHeader_ — set the header so getSessionState/updateDogInSession map column 13 cleanly.
-    sheet.getRange(1, CONFIG.SESSION_COLS.POSITION + 1).setValue('Position');
+  } else {
+    // Self-heal the WHOLE header row, not just Position (widened 2026-08-05). It used to repair
+    // only column M, so a wholeSheet clear from n8n's /cancel left the other 12 headers wiped
+    // forever — invisible to GAS (index-based) but enough to mis-key n8n's Session read.
+    // Same cost as before: one range read per call, and a write only when something is actually
+    // wrong. The width guard means a hand-narrowed grid degrades to a no-op instead of throwing
+    // out of every single endpoint.
+    const width = CONFIG.SESSION_HEADER.length;
+    if (sheet.getMaxColumns() >= width) {
+      const actual = sheet.getRange(1, 1, 1, width).getValues()[0];
+      let drift = false;
+      for (let i = 0; i < width; i++) {
+        if (actual[i] !== CONFIG.SESSION_HEADER[i]) { drift = true; break; }
+      }
+      if (drift) {
+        sheet.getRange(1, 1, 1, width).setValues([CONFIG.SESSION_HEADER.slice()]);
+        console.warn('[ensureSessionTab] Session header repaired (was: ' + JSON.stringify(actual) + ')');
+      }
+    } else {
+      console.warn('[ensureSessionTab] Session tab has only ' + sheet.getMaxColumns() +
+                   ' columns (need ' + width + ') — header repair skipped');
+    }
   }
 
   return sheet;
@@ -407,7 +433,11 @@ function withScriptLock_(label, fn, waitMs) {
   try {
     lock.waitLock(waitMs || 10000);
   } catch (e) {
-    return { success: false, error: 'Server busy, please retry (' + label + ')' };
+    // Additive machine-readable fields (2026-08-05): existing clients only read success/error, but
+    // lock contention is the ONE failure here that is always safe to retry, and until now it was
+    // indistinguishable from a real rejection in the logs. Do not repurpose `code` for anything
+    // a client should treat as terminal.
+    return { success: false, code: 'BUSY', retryable: true, error: 'Server busy, please retry (' + label + ')' };
   }
   try {
     return fn();

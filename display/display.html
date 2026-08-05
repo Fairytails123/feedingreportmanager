@@ -865,11 +865,16 @@
                 versionCheckTimer = null;
 
                 if (refreshTimer) clearInterval(refreshTimer);
+                // Fast mode probes the VERSION, it does not blindly reload. The full read still
+                // happens the instant something changes (checkForVersionChange -> loadData), so
+                // the TV is no slower — but a busy-but-unchanged board no longer costs a full
+                // getSession every 3s. lastKnownVersion only advances on a SUCCESSFUL load, so a
+                // failed load is simply re-detected on the next probe.
                 refreshTimer = setInterval(() => {
-                    loadData();
+                    checkForVersionChange();
                 }, FAST_REFRESH_INTERVAL);
 
-                console.log('[Adaptive Refresh] ⚡ Switched to FAST mode — full refresh every ' + (FAST_REFRESH_INTERVAL / 1000) + 's');
+                console.log('[Adaptive Refresh] ⚡ Switched to FAST mode — version check every ' + (FAST_REFRESH_INTERVAL / 1000) + 's');
             }
 
             updateRefreshModeDisplay();

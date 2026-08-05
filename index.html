@@ -1101,7 +1101,13 @@
         const SYNC_INTERVAL = 5000;
         const SYNC_PAUSE_DURATION = 8000;
         const INITIAL_LOAD_DELAY = 2000;
-        const DOG_LIST_REFRESH_INTERVAL = 60000; // Re-fetch Lookup tab every 60s so new dogs appear without page reload
+        // Lookup changes are rare (a dog is added to the sheet now and then), so the 60s re-fetch
+        // was the last unconditional full GAS call left on the tablet — ~1,440 requests/device/day
+        // for data that almost never moves. The "I just added a dog" case is covered better by the
+        // foreground refresh below (see DOG_LIST_FOCUS_MAX_AGE), which refreshes when a tablet is
+        // actually picked up rather than every minute on an idle screen.
+        const DOG_LIST_REFRESH_INTERVAL = 600000;    // background re-fetch of the Lookup tab
+        const DOG_LIST_FOCUS_MAX_AGE = 60000;        // on foreground, re-fetch if older than this
 
         const JOTFORM_DOG_NAMES = [
             "Aldo","Alfie","April","Argo","Arlo","Banjo","Barney Homewood","Barney Leeming","Baron","Bay","Beano","Bella","Belle","Benson","Betsy","Birdy","Blue","Bluey","Bo","Bonnie Gallagher","Bonnie Lockwood","Bramble","Branko","Bruce","Bruno","Buddy Dann","Buddy Dargan","Buddy Selby","Casper Hamilton","Casper Kukreja","Che","Chester","Chloe","Clifford","Daisy Cremin","Daisy Parsons","Darcy Campbell","Darcy Dunn","Darwin","Delphine","Dexter","Dicee","Diego Gonsavles","Diego Wojcik","Dierdra","Digby","Dolly","Dottie","Dougie","Dudley","Dusty","Echo","Eddie","Effie","Enzo","Fenton","Ferox","Flaco","Fletcher","Florence","Freddie","Fredo","Frida Walsh","George Elliston","George Jackson","George Mohammed","Gina","Goldie","Haggis","Hattie Campbell","Hattie Duncan","Henry","Holly","Hugo","Incy","Ivy","Jack","Jeff","Jessie","Keti","Kip","Koji","Leo","Lily","Lola Bowles","Lola Fenloni","Lola Hall","Luke","Luna Crockford","Luna Grimshaw","Mac","Macy","Maggie","Margo","Marli","Marloe","Marlow","Martha","Max Tigwell","Max Wang","Merlin Crowley","Merlin Mayne","Miles","Miley","Millie Bowles","Millie Carter","Millie Cartwright","Millie Ellis","Milo McVey","Missy Evans","Mocha Gasper","Mocha Kolumbajew","Mochi","Moka","Mollie","Mos Wan","Moss Harris","Naira","Nala Sands","Nala Warnes","Narla Tester","Ned","Neo","Nevis","Nina","Obie","Oliver","Otis","Peggy Gibbons","Peggy Lucas","Pepper","Petch","Pippin","Pluto","Poppy Clark","Poppy Lancaster","Poppy Lass","Poppy Pike","Ralph Goddard","Raven","Reggie Daly","Reggie Foreman","Reggie Russel","Rex","Rita","River","Rocco","Roman","Roxy","Ruby Brooker","Ruby Favell","Ruby Jones","Rudy","Ruffles","Rufus","Rupy","Sam","Sebastian","Shadow Podkalicka","Shadow Wightman","Snoopy","Sonny","Sophie","Stanley James","Star","Storm","Tallulah","Tam","Tasha","Ted Lambie","Teddy Brown","Teddy Jamison","Terry","Tilly Mills","Tokyo","Warwick","Winnie Awele","Winnie Evans","Winnie Hall","Winnie Lancaster","Winnie Ryan","Woody Johns","Woody Warren","Zero","Ziggy"
@@ -1169,7 +1175,11 @@
         // CONNECTION HEALTH (offline detection + persistence)
         // ============================================
 
-        const HEARTBEAT_INTERVAL = 7000;       // Independent ping every 7s — runs even mid-edit
+        // The separate 7s heartbeat is GONE (2026-08-05). It existed because pollForUpdates bails
+        // out while editing/offline, so something else had to keep proving reachability and
+        // draining the queue. Two independent loops against one connection meant two loops racing
+        // to set isOnline, and a full getSession every 5s on top of a ping every 7s. pollForUpdates
+        // is now version-first and absorbs the heartbeat's job — see the comment on it below.
         const QUEUE_KEY = 'feedingManager.queue.v1';   // durable outbound mutation queue
         const FETCH_TIMEOUT_MS = 12000;        // abort any GAS call that hangs longer than this
         // "Add Dogs for Today" is the one slow endpoint: getTodayPlan fans out to the Whiteboard
@@ -1180,8 +1190,6 @@
         const PLAN_FETCH_ATTEMPTS = 2;
         const OFFLINE_THRESHOLD = 2;           // consecutive failures before declaring offline (debounces flaky wifi blips)
 
-        let heartbeatInterval = null;
-        let heartbeatInFlight = false;         // skip a heartbeat if the previous ping hasn't returned (no stacking)
         let consecutiveFailures = 0;           // reset by any success; offline only at OFFLINE_THRESHOLD
         let mutationQueue = [];   // [{op:'add'|'update'|'delete'|'mealType', dogId, payload, ts}]
         let isFlushing = false;
@@ -1292,24 +1300,6 @@
             } catch (e) {
                 markSyncFailure('manual-retry');
             }
-        }
-
-        function startHeartbeat() {
-            if (heartbeatInterval) clearInterval(heartbeatInterval);
-            heartbeatInterval = setInterval(async () => {
-                if (heartbeatInFlight) return;   // previous ping still outstanding — don't stack
-                heartbeatInFlight = true;
-                try {
-                    const r = await gasFetch(APPS_SCRIPT_URL + '?action=getSessionVersion', { method: 'GET', redirect: 'follow' });
-                    const j = await r.json();
-                    if (j && j.success) markSyncSuccess();
-                    else markSyncFailure('heartbeat');
-                } catch (e) {
-                    markSyncFailure('heartbeat');
-                } finally {
-                    heartbeatInFlight = false;
-                }
-            }, HEARTBEAT_INTERVAL);
         }
 
         // ----- Durable outbound mutation queue -----
@@ -1470,7 +1460,7 @@
             setTimeout(() => {
                 initialLoadComplete = true;
                 startSyncPolling();
-                startHeartbeat();
+                startForegroundSync();
             }, INITIAL_LOAD_DELAY);
         }
 
@@ -1916,6 +1906,19 @@
             syncInterval = setInterval(pollForUpdates, SYNC_INTERVAL);
         }
 
+        // A tablet that has been face-down or on another app is the case where staff most expect
+        // the board to be right the instant they look at it — waiting out the next 5s tick reads
+        // as lag. Poll immediately on foreground, and top up the Lookup list if it has gone stale
+        // (this is what makes the 10-minute background DOG_LIST_REFRESH_INTERVAL safe: a picked-up
+        // tablet always has a list at most DOG_LIST_FOCUS_MAX_AGE old).
+        function startForegroundSync() {
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden || !initialLoadComplete) return;
+                pollForUpdates();
+                if (Date.now() - lastDogListRefresh > DOG_LIST_FOCUS_MAX_AGE) loadDogList();
+            });
+        }
+
         function stopSyncPolling() {
             if (syncInterval) {
                 clearInterval(syncInterval);
@@ -1923,38 +1926,69 @@
             }
         }
 
+        // ONE loop, version-first (2026-08-05). Replaces the old "full getSession every 5s" plus
+        // "independent getSessionVersion ping every 7s". Every tick costs one CHEAP version probe;
+        // the expensive full read happens only when the version actually moved.
+        //
+        // Three properties are load-bearing — do not reintroduce the old entry gate:
+        //  * It runs while EDITING and while OFFLINE. The old poll bailed out on isSyncPaused() and
+        //    !isOnline, which is exactly why a separate heartbeat had to exist: something had to
+        //    keep proving reachability and draining the queue during an edit, and something had to
+        //    notice the link had come back. Gating this loop on isOnline again would make offline
+        //    unrecoverable except via the manual Retry button.
+        //  * The pause still protects the BOARD, not the connection. applyRemoteState is what must
+        //    not fight an in-progress edit, so only the full read is gated on isSyncPaused() /
+        //    pendingDogIds — the probe and the queue flush are not.
+        //  * isSyncing is now a REAL in-flight guard (it was vestigial: read here, never set), so a
+        //    slow 12s call can't stack ticks behind it. That was the old heartbeatInFlight's job.
         async function pollForUpdates() {
-            if (isSyncing || isSyncPaused() || !isOnline || !initialLoadComplete || pendingDogIds.size > 0) {
-                return;
-            }
-
-            // Periodically refresh the dog name list from the Lookup tab
-            // so newly added dogs appear without a page reload
-            if (Date.now() - lastDogListRefresh > DOG_LIST_REFRESH_INTERVAL) {
-                await loadDogList();
-            }
+            if (isSyncing || !initialLoadComplete) return;
+            isSyncing = true;
 
             try {
-                const response = await gasFetch(APPS_SCRIPT_URL + '?action=getSession', {
+                const vres = await gasFetch(APPS_SCRIPT_URL + '?action=getSessionVersion', {
                     method: 'GET',
                     redirect: 'follow'
                 });
+                const version = await vres.json();
 
-                const result = await response.json();
+                if (!version || !version.success) {
+                    markSyncFailure('poll-version');
+                    return;
+                }
 
-                if (result && result.success) {
+                // Only pay for a full read when something changed AND we're not mid-edit.
+                if (version.version > lastSyncVersion && !isSyncPaused() && pendingDogIds.size === 0) {
+                    const response = await gasFetch(APPS_SCRIPT_URL + '?action=getSession', {
+                        method: 'GET',
+                        redirect: 'follow'
+                    });
+                    const result = await response.json();
+
+                    if (!result || !result.success) {
+                        markSyncFailure('poll-bad-response');
+                        return;
+                    }
+                    // Re-check against lastSyncVersion: a flush may have landed while this read was
+                    // in flight. applyRemoteState merges the queue, so it can't clobber unsynced edits.
                     if (result.version > lastSyncVersion) {
-                        applyRemoteState(result);   // merges the queue, so it can't clobber unsynced edits
+                        applyRemoteState(result);
                         lastSyncVersion = result.version;
                         updateStatus(`✓ Synced (${dogs.length} dogs)`, 'connected');
                     }
-                    markSyncSuccess();              // reachable + drain queue
-                } else {
-                    markSyncFailure('poll-bad-response');
+                }
+
+                markSyncSuccess();   // reachable + drain queue — the old heartbeat's job
+
+                // Lookup refresh piggybacks on the poll, but never while an edit is in progress.
+                if (!isSyncPaused() && Date.now() - lastDogListRefresh > DOG_LIST_REFRESH_INTERVAL) {
+                    await loadDogList();
                 }
             } catch (error) {
                 console.error('Sync poll error:', error);
                 markSyncFailure('poll');
+            } finally {
+                isSyncing = false;
             }
         }
 

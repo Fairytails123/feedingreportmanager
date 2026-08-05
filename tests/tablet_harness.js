@@ -103,7 +103,28 @@ function load(indexPath) {
       get dogs() { return dogs; },
       get pens() { return pens; },
       get currentMealType() { return currentMealType; },
+
+      // --- sync-loop surface (added 2026-08-05 for the version-first poll) ---
+      pollForUpdates,
+      syncState: {
+        get isOnline() { return isOnline; },
+        set isOnline(v) { isOnline = v; },
+        get lastSyncVersion() { return lastSyncVersion; },
+        set lastSyncVersion(v) { lastSyncVersion = v; },
+        get initialLoadComplete() { return initialLoadComplete; },
+        set initialLoadComplete(v) { initialLoadComplete = v; },
+        get consecutiveFailures() { return consecutiveFailures; },
+        get queue() { return mutationQueue; },
+        set queue(v) { mutationQueue = v; },
+        set lastDogListRefresh(v) { lastDogListRefresh = v; },
+        pause() { pauseSync(); },
+        unpause() { syncPausedUntil = 0; },
+      },
       stub(o) {
+        if (o.flushQueue) flushQueue = o.flushQueue;
+        if (o.applyRemoteState) applyRemoteState = o.applyRemoteState;
+        if (o.loadDogList) loadDogList = o.loadDogList;
+        if (o.updateStatus) updateStatus = o.updateStatus;
         if (o.showToast) showToast = o.showToast;
         if (o.syncAddDog) syncAddDog = o.syncAddDog;
         if (o.syncMealType) syncMealType = o.syncMealType;

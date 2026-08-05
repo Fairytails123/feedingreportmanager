@@ -113,6 +113,14 @@ function load(backendPath, opts) {
       getLastRow: () => grid().length,
       getLastColumn: () => (grid()[0] ? grid()[0].length : 0),
       getMaxRows: () => Math.max(1, grid().length),
+      // A real Sheets tab is 26 columns wide by default and only shrinks if someone deletes
+      // columns by hand. state.maxColumns lets a test simulate exactly that.
+      getMaxColumns: () => {
+        if (state.maxColumns != null) return state.maxColumns;
+        let w = 26;
+        for (const r of grid()) if (r.length > w) w = r.length;
+        return w;
+      },
       getRange(row, col, numRows, numCols) {
         const nR = numRows || 1, nC = numCols || 1;
         return {
@@ -255,6 +263,7 @@ function load(backendPath, opts) {
     return {
       getTodayPlan, getBoardingPlan_, getLunchPlan_, readPenMap_, fetchJson_, normName_,
       addDogToSession, getSessionState, dedupeSession, updateDogInSession, deleteDogFromSession,
+      ensureSessionTab,
       CONFIG,
       has: n => { try { return typeof eval(n) === 'function'; } catch (e) { return false; } },
     };
