@@ -10,9 +10,9 @@ replay acceptance scenarios against it:
 | File | What it does |
 | --- | --- |
 | `backend_harness.js` | Loads the real `feeding_report_backend_v2.js` with Apps Script globals stubbed — `SpreadsheetApp`, `UrlFetchApp`, `CacheService`, `LockService`, `PropertiesService`, `Utilities`, and a controllable clock. Lets a test drive a flaky upstream, a broken cache, an unreadable sheet. |
-| `backend.test.js` | 64 scenarios. |
+| `backend.test.js` | 80 scenarios. |
 | `tablet_harness.js` | Extracts the inline `<script>` from the real `index.html` and evaluates it with DOM/`fetch`/`localStorage` stubs and a scriptable fake network. |
-| `tablet.test.js` | 35 scenarios. |
+| `tablet.test.js` | 50 scenarios. |
 
 This formalises what `CLAUDE.md` already called the de-facto test step. It was throwaway before
 2026-08-04; the day's outage is why it now lives in the repo.
@@ -33,6 +33,15 @@ Every group below is a bug that reached staff. They are regression tests, not de
   blocks the thread, so a toast fired first may never paint and staff would approve a stale board
   having seen nothing.
 - **S10** — a repeat press sends `&fresh=1`, the staff gesture for "I just changed the whiteboard".
+- **S11–S16** — the version-first sync loop (@35). S11/S12 are the point of the change: an unchanged
+  board must cost ONE cheap `getSessionVersion` and a real change must still escalate to the full
+  read. **S13 and S14 are the ones that matter** — they are regression guards for the properties the
+  deleted 7s heartbeat used to provide. The old poll bailed out on `isSyncPaused()` and `!isOnline`,
+  so if the merged loop is ever re-gated on either, an edit burst stops draining the queue (S13) or
+  a dropped link becomes unrecoverable without the manual Retry button (S14). S13 also pins that the
+  *board* is still protected mid-edit and that `lastSyncVersion` is left alone so the change is
+  re-detected. S16 pins `isSyncing` as a real in-flight guard (it was vestigial before) so a slow
+  12s call cannot stack ticks behind it — `heartbeatInFlight`'s old job.
 
 **Backend — `backend.test.js`**
 - **B** — ⭐ the big one. An upstream failure must **never** be reported as a successful empty day.
@@ -50,6 +59,12 @@ Every group below is a bug that reached staff. They are regression tests, not de
   read, never throw to the client.
 - **K-P1** — zero `"Lunch Y?"` rows is a **legitimate quiet day**, not an outage. Treating it as
   one blacked the button out for a whole day with no override.
+- **N** — the Session header must self-heal in **full**, not just the `Position` column. The live
+  n8n `Clear Session (Cancel)` node is a `wholeSheet` clear (no `clear` parameter → the n8n default),
+  so it takes row 1 with it. GAS reads Session by index and never noticed; n8n's Session read keys
+  rows by row 1, so a wiped header makes it promote the first **dog** row to headers. Also pins the
+  `getMaxColumns` guard — a hand-narrowed grid must degrade to a no-op, never throw out of every
+  endpoint — and that the repair leaves the dog rows underneath untouched.
 - **L** — the lunch roster is read **straight from the Staff Board sheet**; the web app is only a
   fallback. Asserts the two produce *identical* results, that a missing tab is never created
   (this app is a read-only guest in another project's workbook), and that unrecognised headers

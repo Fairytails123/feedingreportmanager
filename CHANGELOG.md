@@ -1,5 +1,74 @@
 # Changelog
 
+## 2026-08-05 — @35 / v2.5: one version-first poll replaces the 5s full read + 7s heartbeat
+
+**Origin.** A review of an experimental "sync v3" candidate produced by Codex
+(`..\Codex Experiment\Feeding manager_Telegram`, full report in its `CLAUDE_REVIEW_FINDINGS.md`).
+The candidate was **not** deployed: it contained seven blocking defects, five of which stop staff
+completing a feeding round. What shipped here is only the subset that improves reliability without
+introducing a new failure mode.
+
+**The deliberate exclusions matter as much as the inclusions.** Everything in that candidate that
+could **latch** was left out: the quarantine/dead-letter queue (nothing ever emptied it, so one
+quarantine permanently disabled Submit on that tablet), session epochs, the OPEN/SUBMITTING state
+machine (no code path or endpoint could ever clear a stuck `SUBMITTING`), the `expectedVersion`
+submit gate (a normal single-tablet submit within ~8s of the last edit always returned `CONFLICT`),
+and the ReportBatches/ReportRows outbox (its n8n worker was never built, and staging it added ~41
+locked `appendRow`s to a submit that already races a 12s client abort). **This system's current
+failures are transient and self-recovering; every one of those changes converted a transient fault
+into a tablet that could not submit at all.**
+
+**Tablet — the two loops became one.** `pollForUpdates` is now version-first: every 5s tick costs
+one cheap `getSessionVersion`, and the full `getSession` runs only when the version actually moved.
+The independent 7s heartbeat is deleted. It only ever existed because the poll bailed out on
+`isSyncPaused()` and `!isOnline`, so *something* had to prove reachability and drain the queue
+mid-edit and notice the link coming back. The merged loop keeps running while editing and while
+offline; only the **board write** (`applyRemoteState`) stays gated on the edit pause. Two loops
+racing to set `isOnline` is gone. `isSyncing` becomes a real in-flight guard (it was vestigial —
+read in the gate, never assigned), taking over `heartbeatInFlight`'s anti-stacking job.
+
+**The cadence deliberately did NOT change.** `SYNC_INTERVAL` stays 5s. The candidate's 15s idle /
+30s hidden backoff was rejected because it regresses cross-tablet visibility from 5s to 15s+ — the
+saving here comes from making each poll *cheap*, not from polling less often. Net ~29,600 →
+~17,280 requests/device/day with the expensive call now rare.
+
+**Tablet — Lookup refresh 60s → 600s + a foreground refresh.** The 60s re-fetch was the last
+unconditional full call on an idle screen. `startForegroundSync()` now polls immediately on
+`visibilitychange` and tops the dog list up if it is over `DOG_LIST_FOCUS_MAX_AGE` (60s), so a
+picked-up tablet is *fresher* than the old loop gave, not staler.
+
+**TV — fast mode stopped blindly reloading.** After any change it was doing a full `getSession`
+every 3s for 30s. It now version-checks at that cadence and re-reads only on a further real change.
+Normal cadence stays 10s: the candidate's 3s probe would have taken one unattended screen to ~9×
+the Sheets work (3.33× the rate at 2.67× the per-probe cost, since it also called `readMeta_` twice
+per request), and could not have hit its own "p95 under 5s" target anyway — a single `/exec` round
+trip measured **2–5s live**, with 8.6s and 14.3s observed.
+
+**Backend — `ensureSessionTab` repairs the WHOLE header row, not just `Position`.** Confirmed by
+reading the live VPS workflow today: `Clear Session (Cancel)` has no `clear` parameter, so it
+defaults to n8n's `wholeSheet` and takes row 1 with it. GAS reads Session by index and never
+noticed; n8n's own Session read keys rows by row 1, so a wiped header makes it promote the first
+**dog** row to headers. Guarded on `getMaxColumns` so a hand-narrowed grid degrades to a no-op
+instead of throwing out of every endpoint. Lock-contention responses also carry
+`code:'BUSY'`/`retryable:true` (purely additive) so the one always-safe-to-retry failure stops
+looking like a rejection in the logs.
+
+**Tests.** backend 72 → 80, tablet 32 → 50. `tablet.test.js` **S13/S14 are the load-bearing ones**:
+explicit regression guards that the merged loop still runs while editing and while offline. Re-gate
+it on either and those fail. `backend.test.js` **N** covers the header repair including the
+narrow-grid no-op and that dog rows survive it.
+
+**Live read-backs taken during this work** (worth keeping): the live n8n workflow has **21 nodes**,
+not the 18 in the repo mirror — it gained a `Feeding Flood Guard` (200/run cap) — and its Google
+Sheets credential is **`K4WVdja5P4CN9Yo4`**, not the `DZAqFzkfKzaYA81D` recorded in `CLAUDE.md`.
+
+⚠️ **Unrelated but important — the live `/exec` is genuinely flaky.** Measured today: 8 GETs at 20s
+spacing returned **4 failures** (HTTP 404/302 after 33–46s) in a ~2.5-minute window, then recovered.
+A 10-sample burst at 3s spacing was clean, so it is **not** rate-induced. Two of this deploy's own
+smoke checks hit it and had to be retried. Against the tablet's 12s abort this *is* what staff
+experience as "connection lost", and **no client-side sync change fixes it** — it needs
+investigating at the Apps Script serving layer.
+
 ## 2026-08-04 (evening) — TV display: a permanent "Connection error" that was lying
 
 **Reported.** "There is a permanent connection error symbol in the top right corner" of the
