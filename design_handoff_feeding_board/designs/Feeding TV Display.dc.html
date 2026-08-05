@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/organic-3045ce80-1d04-44db-8453-a7d78cf8a2c1/styles.css">
+<script src="_ds/organic-3045ce80-1d04-44db-8453-a7d78cf8a2c1/_ds_bundle.js"></script>
+<style>
+/* Only what inline styles cannot express. Every size on this page is in cqh —
+   1% of the display's own height — so one page reads identically on the 32"
+   1366x768 set and on a 1080p or 4K panel. cqh not vh, so it stays correct
+   inside a frame. */
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:#201e1d;overflow:hidden}
+@keyframes tvLamp{0%,100%{opacity:1}50%{opacity:.32}}
+@keyframes tvAlarm{0%,100%{box-shadow:0 0 0 .12cqh #8c491a, 0 0 2.2cqh color-mix(in srgb,#f6a06b 30%,transparent)}50%{box-shadow:0 0 0 .12cqh #b2622d, 0 0 3.8cqh color-mix(in srgb,#f6a06b 55%,transparent)}}
+@keyframes tvBreathe{0%,100%{opacity:.45}50%{opacity:.95}}
+@keyframes tvIn{from{opacity:0;transform:translateY(.7cqh)}to{opacity:1;transform:translateY(0)}}
+.tv-lamp{animation:tvLamp 1.5s ease-in-out infinite}
+.tv-alarm{animation:tvAlarm 2.6s ease-in-out infinite}
+.tv-breathe{animation:tvBreathe 3.4s ease-in-out infinite}
+.tv-in{animation:tvIn .45s cubic-bezier(.22,1,.36,1)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</helmet>
+
+<div style="container-type:size;position:absolute;inset:0;overflow:hidden;background:radial-gradient(125% 95% at 50% -12%, #2e2b25 0%, #201e1d 60%);color:var(--color-neutral-100);font-family:var(--font-body);-webkit-font-smoothing:antialiased">
+
+  <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:90;background:#201e1d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3.4cqh">
+      <span class="tv-breathe" style="display:grid;place-items:center;width:14cqh;height:14cqh;border-radius:99px;border:.3cqh solid var(--color-accent-2-700);color:var(--color-accent-2-300)">
+        <svg width="58%" height="58%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11h18"></path><path d="M4.5 11a7.5 7.5 0 0 0 15 0"></path><path d="M12 18.5V21"></path></svg>
+      </span>
+      <div style="font-family:var(--font-heading);font-size:3.6cqh;color:var(--color-neutral-400)">Waking the board…</div>
+    </div>
+  </sc-if>
+
+  <!-- Warning lamp. The stale board stays visible behind it on purpose:
+       old data plus an explicit warning beats a blank screen. -->
+  <sc-if value="{{ isStale }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="position:absolute;top:0;left:0;right:0;z-index:80;display:flex;align-items:center;justify-content:center;gap:2.4cqh;padding:1.8cqh 3cqh;background:linear-gradient(180deg,#643312 0%,#402310 100%);border-bottom:.2cqh solid var(--color-accent-500)">
+      <span class="tv-lamp" style="display:grid;place-items:center;width:5.6cqh;height:5.6cqh;border-radius:99px;background:var(--color-accent-400);color:#402310;flex:none">
+        <svg width="62%" height="62%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"><path d="M12 7.5v6.2"></path><path d="M12 17.4h.01"></path></svg>
+      </span>
+      <span style="font-family:var(--font-heading);font-size:4.2cqh;letter-spacing:.07em;color:var(--color-accent-200)">NOT LIVE</span>
+      <span style="width:.15cqh;height:4.6cqh;background:var(--color-accent-600)"></span>
+      <span style="font-size:2.8cqh;font-weight:600;color:var(--color-accent-300)">Board as it stood at {{ staleAt }}</span>
+    </div>
+  </sc-if>
+
+  <div style="position:absolute;inset:0;display:flex;flex-direction:column;gap:2cqh;padding:2.6cqh 3cqh 2.2cqh;padding-top:{{ topPad }}">
+
+    <!-- ── instrument cluster ──────────────────────────────────── -->
+    <header style="flex:none;display:flex;align-items:center;gap:3cqh">
+      <div style="display:flex;align-items:center;gap:1.8cqh;min-width:0">
+        <span style="display:grid;place-items:center;width:6.6cqh;height:6.6cqh;border-radius:99px;background:var(--color-accent-2-800);color:var(--color-accent-2-300);border:.15cqh solid var(--color-accent-2-700);flex:none">
+          <svg width="56%" height="56%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11h18"></path><path d="M4.5 11a7.5 7.5 0 0 0 15 0"></path><path d="M12 18.5V21"></path></svg>
+        </span>
+        <div style="min-width:0">
+          <div style="font-size:1.9cqh;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--color-neutral-500)">Fairy Tails · Feeding</div>
+          <div style="font-family:var(--font-heading);font-size:5.3cqh;line-height:1.02">{{ meal }}</div>
+        </div>
+      </div>
+
+      <span style="flex:1"></span>
+
+      <!-- the one number worth reading from the doorway -->
+      
+
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.8cqh">
+        <span style="font-family:var(--font-heading);font-size:4.8cqh;line-height:1">{{ clock }}</span>
+        <span style="display:flex;align-items:center;gap:1cqh;padding:.7cqh 1.7cqh;border-radius:99px;background:{{ liveBg }};border:.15cqh solid {{ liveBorder }}">
+          <span class="{{ liveDotClass }}" style="width:1.4cqh;height:1.4cqh;border-radius:99px;background:{{ liveDot }};flex:none"></span>
+          <span style="font-size:1.9cqh;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:{{ liveFg }}">{{ liveLabel }}</span>
+        </span>
+      </div>
+    </header>
+
+    <!-- ── pens ────────────────────────────────────────────────── -->
+    <div style="flex:1;min-height:0;display:flex;flex-direction:column;gap:1.8cqh">
+      <sc-for list="{{ groups }}" as="group" hint-placeholder-count="2">
+        <section style="flex:1;min-height:0;display:flex;flex-direction:column;gap:1cqh">
+          <div style="flex:none;display:flex;align-items:center;gap:1.4cqh">
+            <span style="font-size:1.9cqh;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--color-neutral-500)">{{ group.label }}</span>
+            <span style="flex:1;height:.15cqh;background:var(--color-neutral-800)"></span>
+            <span style="font-size:1.9cqh;font-weight:600;color:var(--color-neutral-600)">{{ group.count }}</span>
+          </div>
+          <div style="flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1.6cqh">
+            <sc-for list="{{ group.pens }}" as="pen" hint-placeholder-count="5">
+              <div style="min-height:0;display:flex;flex-direction:column;gap:1cqh;padding:1.4cqh;border-radius:2.6cqh;background:{{ pen.bg }};border:.15cqh solid {{ pen.border }};overflow:hidden">
+                <div style="flex:none;display:flex;align-items:center;gap:.9cqh">
+                  <span style="font-family:var(--font-heading);font-size:3cqh;line-height:1;color:{{ pen.labelFg }}">{{ pen.label }}</span>
+                  <span style="flex:1"></span>
+                  <sc-if value="{{ pen.alert }}" hint-placeholder-val="{{ false }}">
+                    <span class="tv-lamp" style="display:grid;place-items:center;width:2.9cqh;height:2.9cqh;border-radius:99px;background:var(--color-accent-400);color:#402310;flex:none">
+                      <svg width="64%" height="64%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round"><path d="M12 7v7"></path><path d="M12 17.8h.01"></path></svg>
+                    </span>
+                  </sc-if>
+                  <span style="display:grid;place-items:center;min-width:3.4cqh;height:2.9cqh;padding:0 1cqh;border-radius:99px;background:{{ pen.badgeBg }};font-size:1.9cqh;font-weight:700;color:{{ pen.badgeFg }}">{{ pen.count }}</span>
+                </div>
+                <div style="flex:1;min-height:0;display:flex;flex-direction:column;gap:{{ pen.gap }};overflow:hidden">
+                  <sc-for list="{{ pen.dogs }}" as="dog" hint-placeholder-count="3">
+                    <div class="{{ dog.cls }}" style="flex:none;display:flex;align-items:center;gap:1cqh;padding:{{ dog.pad }};border-radius:1.6cqh;background:{{ dog.bg }};border-left:.7cqh solid {{ dog.edge }};box-shadow:{{ dog.glow }}">
+                      <span style="flex:1;min-width:0;font-size:{{ dog.nameSize }};font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:{{ dog.nameFg }}">{{ dog.name }}</span>
+                      <sc-if value="{{ dog.meds }}" hint-placeholder-val="{{ false }}">
+                        <span title="Medicine" style="display:grid;place-items:center;width:{{ dog.chip }};height:{{ dog.chip }};border-radius:99px;background:var(--color-accent-800);color:var(--color-accent-300);border:.12cqh solid var(--color-accent-700);flex:none">
+                          <svg width="60%" height="60%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><rect x="2.5" y="8.5" width="19" height="7" rx="3.5" transform="rotate(-45 12 12)"></rect><path d="M8.5 8.5 15.5 15.5"></path></svg>
+                        </span>
+                      </sc-if>
+                      <sc-if value="{{ dog.supps }}" hint-placeholder-val="{{ false }}">
+                        <span title="Supplements" style="display:grid;place-items:center;width:{{ dog.chip }};height:{{ dog.chip }};border-radius:99px;background:var(--color-accent-2-800);color:var(--color-accent-2-300);border:.12cqh solid var(--color-accent-2-700);flex:none">
+                          <svg width="60%" height="60%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4c0 9-5.5 13-11 13a5.5 5.5 0 0 1 0-11c5 0 8-1 11-2Z"></path><path d="M4 20c2-5 5-8 9-10"></path></svg>
+                        </span>
+                      </sc-if>
+                      <span style="flex:none;text-align:right;min-width:{{ dog.statusW }};font-family:var(--font-heading);font-size:{{ dog.statusSize }};line-height:1;color:{{ dog.statusFg }}">{{ dog.status }}</span>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ pen.empty }}" hint-placeholder-val="{{ false }}">
+                    <div style="flex:1;display:grid;place-items:center;border-radius:1.6cqh;border:.15cqh dashed var(--color-neutral-800);font-size:2cqh;color:var(--color-neutral-700)">Empty</div>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </sc-for>
+    </div>
+
+    <!-- ── bottom readout ──────────────────────────────────────── -->
+    <footer style="flex:none;display:flex;align-items:center;gap:3cqh;padding-top:1.6cqh;border-top:.15cqh solid var(--color-neutral-800)">
+      <div style="display:flex;align-items:center;gap:1.7cqh;flex:none;white-space:nowrap">
+        <sc-for list="{{ legend }}" as="l" hint-placeholder-count="5">
+          <span style="display:flex;align-items:center;gap:.8cqh;font-size:1.9cqh;font-weight:600;flex:none;color:{{ l.fg }}">
+            <span style="width:1.5cqh;height:1.5cqh;border-radius:99px;background:{{ l.dot }};box-shadow:{{ l.glow }};flex:none"></span>{{ l.label }}
+          </span>
+        </sc-for>
+      </div>
+      <span style="flex:1"></span>
+      <sc-for list="{{ stats }}" as="st" hint-placeholder-count="3">
+        <span style="display:flex;align-items:baseline;gap:.9cqh;flex:none">
+          <span style="font-family:var(--font-heading);font-size:3.2cqh;line-height:1;color:{{ st.fg }}">{{ st.value }}</span>
+          <span style="font-size:1.9cqh;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-600)">{{ st.label }}</span>
+        </span>
+      </sc-for>
+    </footer>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1366,&quot;height&quot;:768},&quot;state&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;live&quot;,&quot;stale&quot;,&quot;loading&quot;],&quot;default&quot;:&quot;live&quot;,&quot;tsType&quot;:&quot;'live' | 'stale' | 'loading'&quot;,&quot;section&quot;:&quot;Display&quot;},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;busy&quot;,&quot;quiet&quot;,&quot;packed&quot;],&quot;default&quot;:&quot;busy&quot;,&quot;tsType&quot;:&quot;'busy' | 'quiet' | 'packed'&quot;,&quot;section&quot;:&quot;Display&quot;},&quot;meal&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Morning Meal&quot;,&quot;Lunch&quot;,&quot;Evening Meal&quot;],&quot;default&quot;:&quot;Lunch&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Display&quot;}}">
+// Night-drive rule: a clean bowl is DIM, a problem GLOWS. Nothing on this
+// screen competes for attention unless somebody needs to act on it.
+const STATUS = {
+  'all':           { label: 'All',  edge: 'var(--color-accent-2-600)', nameFg: 'var(--color-neutral-300)', statusFg: 'var(--color-neutral-600)', bg: '#2e2b25', glow: 'none',  alarm: false, legendGlow: 'none' },
+  'three-quarter': { label: '¾',    edge: 'var(--color-accent-2-400)', nameFg: 'var(--color-neutral-200)', statusFg: 'var(--color-neutral-500)', bg: '#2e2b25', glow: 'none',  alarm: false, legendGlow: 'none' },
+  'half':          { label: '½',    edge: 'var(--color-accent-400)',   nameFg: 'var(--color-neutral-100)', statusFg: 'var(--color-accent-300)',  bg: '#332b23', glow: 'none',  alarm: false, legendGlow: '0 0 1.2cqh color-mix(in srgb,#f6a06b 45%,transparent)' },
+  'quarter':       { label: '¼',    edge: 'var(--color-accent-300)',   nameFg: '#fff2eb',                 statusFg: 'var(--color-accent-200)',  bg: '#3a2a1c', glow: '0 0 2cqh color-mix(in srgb,#f6a06b 26%,transparent)', alarm: false, legendGlow: '0 0 1.4cqh color-mix(in srgb,#ffc6a5 55%,transparent)' },
+  'none':          { label: 'None', edge: '#ffc6a5',                   nameFg: '#fff2eb',                 statusFg: '#ffe1d0',                  bg: '#402310', glow: 'none', alarm: true,  legendGlow: '0 0 1.6cqh color-mix(in srgb,#ffc6a5 75%,transparent)' }
+};
+const ORDER = ['all', 'three-quarter', 'half', 'quarter', 'none'];
+
+// Same five scale tiers as the live display (keyed on the busiest pen), retuned
+// in cqh so they hold on any panel instead of only the 32" set.
+const TIERS = [
+  { max: 2, name: '3.7cqh', status: '3.2cqh',  pad: '1.3cqh 1.6cqh', gap: '1.1cqh', chip: '3.2cqh', w: '6.6cqh' },
+  { max: 3, name: '3.1cqh', status: '2.7cqh',  pad: '1cqh 1.3cqh',   gap: '.85cqh', chip: '2.8cqh', w: '5.8cqh' },
+  { max: 4, name: '2.6cqh', status: '2.3cqh',  pad: '.8cqh 1.1cqh',  gap: '.7cqh',  chip: '2.5cqh', w: '5cqh' },
+  { max: 6, name: '2.2cqh', status: '2cqh',    pad: '.6cqh .9cqh',   gap: '.55cqh', chip: '2.1cqh', w: '4.4cqh' },
+  { max: 99, name: '1.9cqh', status: '1.75cqh', pad: '.45cqh .75cqh', gap: '.4cqh',  chip: '1.9cqh', w: '3.8cqh' }
+];
+
+const d = (name, pen, status, meds, supps) => ({ name, pen, status, meds: !!meds, supps: !!supps });
+
+const BOARDS = {
+  busy: [
+    d('Bella','top-1','all'), d('Dexter','top-1','half',1), d('Marli','top-1','all'),
+    d('Bramble','top-2','all'), d('Obie','top-2','quarter'),
+    d('Hattie Duncan','top-3','all',0,1), d('Mochi','top-3','three-quarter'), d('Alfie','top-3','all'),
+    d('Rufus','top-4','all'),
+    d('Casper Hamilton','top-5','none',1),
+    d('Poppy Clark','bottom-1','all'), d('Nala Sands','bottom-1','three-quarter'), d('Tilly Mills','bottom-1','all'), d('Winnie Ryan','bottom-1','all'),
+    d('Woody Warren','bottom-2','half'), d('Reggie Daly','bottom-2','all'),
+    d('Ivy','bottom-3','all'), d('Digby','bottom-3','all'), d('Margo','bottom-3','quarter',0,1),
+    d('Pepper','bottom-4','all')
+  ],
+  quiet: [
+    d('Bella','top-1','all'), d('Dexter','top-2','none',1),
+    d('Poppy Clark','bottom-1','all'), d('Nala Sands','bottom-1','three-quarter'),
+    d('Margo','bottom-3','all',0,1)
+  ],
+  packed: [
+    d('Bella','top-1','all'), d('Dexter','top-1','half',1), d('Marli','top-1','all'), d('Alfie','top-1','quarter'),
+    d('Bramble','top-2','all'), d('Obie','top-2','all'), d('Mochi','top-2','three-quarter'),
+    d('Hattie Duncan','top-3','all',0,1), d('Rufus','top-3','all'), d('Ivy','top-3','none'),
+    d('Digby','top-4','all'), d('Margo','top-4','all'),
+    d('Casper Hamilton','top-5','none',1), d('Pepper','top-5','all'),
+    d('Poppy Clark','bottom-1','all'), d('Nala Sands','bottom-1','three-quarter'), d('Tilly Mills','bottom-1','all'), d('Winnie Ryan','bottom-1','all'), d('Sonny','bottom-1','half'), d('Oliver','bottom-1','all'),
+    d('Woody Warren','bottom-2','half'), d('Reggie Daly','bottom-2','all'), d('Ted Lambie','bottom-2','all'), d('Rita','bottom-2','quarter'), d('Koji','bottom-2','all'),
+    d('Luna Grimshaw','bottom-3','all'), d('Baron','bottom-3','all'), d('Echo','bottom-3','none',1), d('Fenton','bottom-3','all'),
+    d('Goldie','bottom-4','all'), d('Haggis','bottom-4','three-quarter'), d('Incy','bottom-4','all'),
+    d('Jeff','bottom-5','all'), d('Keti','bottom-5','all')
+  ]
+};
+
+class Component extends DCLogic {
+  state = { now: new Date(2026, 7, 5, 13, 8) };
+
+  componentDidMount() {
+    // The TV sits on this page for days; the clock has to be its own truth.
+    this._t = setInterval(() => this.setState({ now: new Date() }), 20000);
+  }
+  componentWillUnmount() { clearInterval(this._t); }
+
+  hhmm(dt) {
+    const p = (n) => (n < 10 ? '0' : '') + n;
+    return p(dt.getHours()) + ':' + p(dt.getMinutes());
+  }
+
+  renderVals() {
+    const status = this.props.state || 'live';
+    const board = BOARDS[this.props.board || 'busy'] || BOARDS.busy;
+    const meal = this.props.meal || 'Lunch';
+    const stale = status === 'stale';
+
+    const byPen = (id) => board.filter(x => x.pen === id);
+    const busiest = ['top','bottom'].reduce((m, side) => {
+      for (let n = 1; n <= 5; n++) m = Math.max(m, byPen(side + '-' + n).length);
+      return m;
+    }, 0);
+    const tier = TIERS.find(t => busiest <= t.max) || TIERS[TIERS.length - 1];
+
+    const groups = [{ key: 'top', label: 'Top pens' }, { key: 'bottom', label: 'Bottom pens' }].map(g => {
+      const pens = [1, 2, 3, 4, 5].map(n => {
+        const id = g.key + '-' + n;
+        const list = byPen(id);
+        const alert = list.some(x => STATUS[x.status] && STATUS[x.status].alarm);
+        return {
+          label: (g.key === 'top' ? 'Top ' : 'Bottom ') + n,
+          count: list.length, empty: list.length === 0, alert: alert, gap: tier.gap,
+          bg: alert ? '#33261c' : '#2e2b25',
+          border: alert ? 'var(--color-accent-700)' : 'var(--color-neutral-800)',
+          labelFg: alert ? 'var(--color-accent-300)' : 'var(--color-neutral-400)',
+          badgeBg: list.length ? 'var(--color-neutral-800)' : 'transparent',
+          badgeFg: list.length ? 'var(--color-neutral-300)' : 'var(--color-neutral-700)',
+          dogs: list.map(x => {
+            const S = STATUS[x.status] || STATUS.all;
+            return {
+              name: x.name, status: S.label, meds: x.meds, supps: x.supps,
+              edge: S.edge, bg: S.bg, nameFg: S.nameFg, statusFg: S.statusFg,
+              glow: S.glow, cls: S.alarm ? 'tv-alarm tv-in' : 'tv-in',
+              nameSize: tier.name, statusSize: tier.status, statusW: tier.w,
+              pad: tier.pad, chip: tier.chip
+            };
+          })
+        };
+      });
+      return { label: g.label, count: pens.reduce((a, p) => a + p.count, 0) + ' dogs', pens: pens };
+    });
+
+    const fed = board.filter(x => x.status !== 'none').length;
+    const pensUsed = new Set(board.map(x => x.pen)).size;
+    const flagged = board.filter(x => x.status === 'none' || x.status === 'quarter').length;
+
+    return {
+      isLoading: status === 'loading', isStale: stale,
+      topPad: stale ? '11.5cqh' : '2.6cqh',
+      staleAt: this.hhmm(new Date(this.state.now.getTime() - 7 * 60000)),
+      meal: meal, clock: this.hhmm(this.state.now),
+      fedCount: fed + '', totalCount: board.length + '',
+      fedPct: (board.length ? Math.round(fed / board.length * 100) : 0) + '%',
+      liveLabel: stale ? 'Stale' : 'Live',
+      liveBg: stale ? '#402310' : 'var(--color-accent-2-900)',
+      liveBorder: stale ? 'var(--color-accent-700)' : 'var(--color-accent-2-700)',
+      liveDot: stale ? 'var(--color-accent-300)' : 'var(--color-accent-2-300)',
+      liveFg: stale ? 'var(--color-accent-200)' : 'var(--color-accent-2-300)',
+      liveDotClass: stale ? 'tv-lamp' : 'tv-breathe',
+      groups: groups,
+      legend: ORDER.map(k => ({ label: STATUS[k].label, dot: STATUS[k].edge, glow: STATUS[k].legendGlow,
+        fg: (k === 'quarter' || k === 'none') ? 'var(--color-accent-300)' : 'var(--color-neutral-500)' })),
+      stats: [
+        { value: board.length + '', label: 'Dogs', fg: 'var(--color-neutral-200)' },
+        { value: pensUsed + '', label: 'Pens', fg: 'var(--color-neutral-200)' },
+        { value: flagged + '', label: 'Need a look', fg: flagged ? 'var(--color-accent-300)' : 'var(--color-neutral-200)' },
+        { value: this.hhmm(this.state.now), label: 'Updated', fg: stale ? 'var(--color-accent-300)' : 'var(--color-neutral-200)' }
+      ]
+    };
+  }
+}
+
+</script>
+</body>
+</html>

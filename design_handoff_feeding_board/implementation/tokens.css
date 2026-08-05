@@ -1,0 +1,94 @@
+/* Feeding Report Manager — design tokens (Organic design system)
+   Replace index.html's existing :root block with this, and swap the Nunito
+   <link> for:
+   <link href="https://fonts.googleapis.com/css2?family=Caprasimo:wght@400&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
+
+   Take every colour, size and radius from these variables. Do not hard-code a
+   hex the ramp already carries. Light steps (100-300) are tinted fills, hovers
+   and subtle borders; 500/base is the role's own colour; dark steps (700-900)
+   are text on tinted fills and pressed states. */
+
+:root {
+  /* ground + roles */
+  --color-bg:        #f5ead8;   /* page */
+  --color-surface:   #ebddc5;   /* rail cards, pens */
+  --color-text:      #201e1d;
+  --color-accent:    #c67139;   /* terracotta */
+  --color-accent-2:  #7a8a5e;   /* sage */
+  --color-divider:   color-mix(in srgb, #201e1d 16%, transparent);
+
+  /* neutral ramp */
+  --color-neutral-100: #f9f4ed;  /* tiles, inputs */
+  --color-neutral-200: #eee7db;  /* unselected segment */
+  --color-neutral-300: #dcd3c4;  /* count badges */
+  --color-neutral-400: #c0b6a5;  /* dashed borders, locked submit */
+  --color-neutral-500: #a19786;
+  --color-neutral-600: #82796a;  /* secondary icons */
+  --color-neutral-700: #645c50;  /* secondary text */
+  --color-neutral-800: #474238;  /* segment label */
+  --color-neutral-900: #2e2b25;  /* toast, TV cards */
+
+  /* terracotta ramp */
+  --color-accent-100: #fff2eb;
+  --color-accent-200: #ffe1d0;   /* drop-target fill, medicine badge */
+  --color-accent-300: #ffc6a5;   /* armed ring, TV alert edge */
+  --color-accent-400: #f6a06b;   /* portion: half */
+  --color-accent-500: #d67f48;
+  --color-accent-600: #b2622d;   /* portion: quarter */
+  --color-accent-700: #8c491a;   /* accent text on the light ground */
+  --color-accent-800: #643312;   /* portion: none; offline banner */
+  --color-accent-900: #402310;
+
+  /* sage ramp */
+  --color-accent-2-100: #f0fae1;
+  --color-accent-2-200: #e1eecc;  /* supplement badge, brand mark */
+  --color-accent-2-300: #ccdbb2;
+  --color-accent-2-400: #aebf92;  /* portion: three-quarter */
+  --color-accent-2-500: #8fa073;
+  --color-accent-2-600: #728157;  /* portion: all; Submit */
+  --color-accent-2-700: #56633f;
+  --color-accent-2-800: #3d472b;
+  --color-accent-2-900: #272e1b;
+
+  /* feeding-status colours — light UI. Keys are the contract STATUS_VALUES. */
+  --portion-all:           var(--color-accent-2-600);  /* #728157 */
+  --portion-three-quarter: var(--color-accent-2-400);  /* #aebf92 */
+  --portion-half:          var(--color-accent-400);    /* #f6a06b */
+  --portion-quarter:       var(--color-accent-600);    /* #b2622d */
+  --portion-none:          var(--color-accent-800);    /* #643312 */
+
+  /* type */
+  --font-heading: "Caprasimo", system-ui, sans-serif;   /* display only */
+  --font-heading-weight: 400;
+  --font-body: "Figtree", system-ui, sans-serif;        /* all UI text */
+
+  /* spacing — density 1.10x is already baked in */
+  --space-1: 4.4px;
+  --space-2: 8.8px;
+  --space-3: 13.2px;
+  --space-4: 17.6px;
+  --space-6: 26.4px;
+  --space-8: 35.2px;
+
+  /* radii — over-round; use 999px for anything pill-shaped */
+  --radius-sm: 8px;
+  --radius-md: 16px;   /* tiles, inputs, panels */
+  --radius-lg: 28px;   /* pens, rail cards, sheets */
+
+  /* elevation — tuned to the warm ground; do not invent box-shadows */
+  --shadow-sm: 0 1px 2px  color-mix(in srgb, #2e2b25 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2e2b25 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2e2b25 22%, transparent);
+
+  /* TV display (dark ground) */
+  --tv-bg:        #201e1d;
+  --tv-card:      #2e2b25;
+  --tv-card-warn: #332b23;   /* half */
+  --tv-card-alert:#3a2a1c;   /* quarter */
+  --tv-card-stop: #402310;   /* none */
+}
+
+/* Interaction states are themed, never browser defaults. */
+*:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* Every interactive element: 44px minimum. Inputs at 16px so iOS does not zoom. */

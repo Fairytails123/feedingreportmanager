@@ -7,480 +7,430 @@
     <!--
       SOURCE FILE — do not deploy this file directly.
       The "// @@CONTRACT@@" marker below is replaced with shared/contract.js by
-      scripts/publish_display.ps1, which pushes the assembled page to the
+      scripts/publish_display.sh, which pushes the assembled page to the
       Fairytails123/frmdisplay Pages repo (the TV's URL). Opening this raw source
       in a browser will fail (FRM_CONTRACT undefined) — that is expected.
-      History: reworked 2026-07-26 (phase 2 of the tablet+TV consolidation) from
-      the original OneDrive Feedingreport_display.html: hardened fetch (12s abort),
+
+      History: reworked 2026-07-26 (phase 2 of the tablet+TV consolidation) from the
+      original OneDrive Feedingreport_display.html: hardened fetch (12s abort),
       in-flight guards, offline detection + TV-readable staleness banner, single
-      version source. CSS/branding preserved from the original.
+      version source. Restyled 2026-08-05 to the Organic design system
+      (design_handoff_feeding_board/designs/Feeding TV Display.dc.html) — all of the
+      connection-health and refresh machinery above is unchanged.
+
+      The organising idea: a car dashboard at night. A clean bowl is dim; a problem
+      glows. Nothing competes for attention unless somebody has to act on it.
     -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Caprasimo:wght@400&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-primary: #1a1a2e;
-            --bg-secondary: #16213e;
-            --bg-pen: #0f3460;
-            --fairy-tails-blue: #00acee;
-            --accent-secondary: #f39c12;
-            --text-primary: #ffffff;
-            --text-secondary: #a0a0a0;
-            --status-all: #2ecc71;
-            --status-three-quarter: #9acd32;
-            --status-half: #f1c40f;
-            --status-quarter: #e67e22;
-            --status-none: #e74c3c;
+            /* neutral ramp */
+            --color-neutral-100: #f9f4ed;
+            --color-neutral-200: #eee7db;
+            --color-neutral-300: #dcd3c4;
+            --color-neutral-400: #c0b6a5;
+            --color-neutral-500: #a19786;
+            --color-neutral-600: #82796a;
+            --color-neutral-700: #645c50;
+            --color-neutral-800: #474238;
+            --color-neutral-900: #2e2b25;
 
-            /* Enhanced TV display colours for 32" Bush HD Ready */
-            --dog-name-color: #FFF8E7;
-            --dog-card-bg: #1c2a4a;
-            --status-text-color: #d0d8e8;
-            --pen-header-color: #e8c547;
-            --text-secondary-bright: #b8c0d0;
+            /* terracotta ramp */
+            --color-accent:     #c67139;
+            --color-accent-100: #fff2eb;
+            --color-accent-200: #ffe1d0;
+            --color-accent-300: #ffc6a5;
+            --color-accent-400: #f6a06b;
+            --color-accent-500: #d67f48;
+            --color-accent-600: #b2622d;
+            --color-accent-700: #8c491a;
+            --color-accent-800: #643312;
+            --color-accent-900: #402310;
+
+            /* sage ramp */
+            --color-accent-2-200: #e1eecc;
+            --color-accent-2-300: #ccdbb2;
+            --color-accent-2-400: #aebf92;
+            --color-accent-2-600: #728157;
+            --color-accent-2-700: #56633f;
+            --color-accent-2-800: #3d472b;
+            --color-accent-2-900: #272e1b;
+
+            /* dark ground */
+            --tv-bg:         #201e1d;
+            --tv-card:       #2e2b25;
+            --tv-card-warn:  #332b23;   /* half */
+            --tv-card-alert: #3a2a1c;   /* quarter */
+            --tv-card-stop:  #402310;   /* none */
+
+            --font-heading: "Caprasimo", Georgia, serif;
+            --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         html, body {
-            width: 100%;
-            height: 100%;
+            width: 100%; height: 100%;
             overflow: hidden;
-            font-family: 'Nunito', sans-serif;
-            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
-            color: var(--text-primary);
+            background: var(--tv-bg);
+            color: var(--color-neutral-100);
+            font-family: var(--font-body);
+            -webkit-font-smoothing: antialiased;
         }
 
-        .tv-container {
-            width: 100%;
-            height: 100vh;
+        /* Every size on this page is a multiple of --u, so one page reads identically
+           on the 32" 1366x768 set, on 1080p and on 4K.
+           --u is 1cqh (1% of the display's own height) where container query units
+           exist, and falls back to 1vh where they do not. The TV browser is not ours
+           to choose, and an unsupported unit would collapse the entire layout. */
+        .tv-root { container-type: size; position: absolute; inset: 0; overflow: hidden; }
+        .tv-page { --u: 1vh; }
+        @supports (height: 1cqh) { .tv-page { --u: 1cqh; } }
+
+        .tv-page {
+            position: absolute;
+            inset: 0;
             display: flex;
             flex-direction: column;
-            padding: 20px;
-            box-sizing: border-box;
+            gap: calc(2 * var(--u));
+            padding: calc(2.6 * var(--u)) calc(3 * var(--u)) calc(2.2 * var(--u));
+            background: radial-gradient(125% 95% at 50% -12%, #2e2b25 0%, #201e1d 60%);
         }
+        .tv-page.is-stale { padding-top: calc(11.5 * var(--u)); }
 
-        /* Staleness / connection banner — must be readable from across the room.
-           Shown when the display has NOT confirmed the board is current recently
-           (connection lost, or polling silently failing). The stale board stays
-           visible behind it: data + explicit warning beats a blank screen. */
+        @keyframes tvLamp    { 0%, 100% { opacity: 1 } 50% { opacity: .32 } }
+        @keyframes tvBreathe { 0%, 100% { opacity: .45 } 50% { opacity: .95 } }
+        @keyframes tvIn      { from { opacity: 0; transform: translateY(calc(.7 * var(--u))) } to { opacity: 1; transform: translateY(0) } }
+        @keyframes tvAlarm {
+            0%, 100% { box-shadow: 0 0 0 calc(.12 * var(--u)) #8c491a, 0 0 calc(2.2 * var(--u)) rgba(246, 160, 107, .30) }
+            50%      { box-shadow: 0 0 0 calc(.12 * var(--u)) #b2622d, 0 0 calc(3.8 * var(--u)) rgba(246, 160, 107, .55) }
+        }
+        @keyframes tvSpin { to { transform: rotate(360deg) } }
+        .tv-lamp    { animation: tvLamp 1.5s ease-in-out infinite; }
+        .tv-breathe { animation: tvBreathe 3.4s ease-in-out infinite; }
+        .tv-alarm   { animation: tvAlarm 2.6s ease-in-out infinite; }
+        .tv-in      { animation: tvIn .45s cubic-bezier(.22,1,.36,1); }
+        @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+
+        /* ---------------------------------------------------------- banner
+           The stale board stays visible behind it on purpose: old data plus an
+           explicit warning beats a blank screen. */
         .stale-banner {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 2000;
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            z-index: 80;
             display: none;
             align-items: center;
             justify-content: center;
-            gap: 18px;
-            padding: 14px 20px;
-            background: #c0392b;
-            color: #fff;
-            font-size: 1.6rem;
-            font-weight: 800;
-            letter-spacing: 1px;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
-            box-shadow: 0 3px 12px rgba(0,0,0,0.5);
-            animation: stalePulse 1.6s infinite;
+            gap: calc(2.4 * var(--u));
+            padding: calc(1.8 * var(--u)) calc(3 * var(--u));
+            background: linear-gradient(180deg, #643312 0%, #402310 100%);
+            border-bottom: calc(.2 * var(--u)) solid var(--color-accent-500);
         }
-
         .stale-banner.visible { display: flex; }
-
-        @keyframes stalePulse {
-            0%, 100% { background: #c0392b; }
-            50% { background: #922b21; }
+        .stale-lamp {
+            display: grid; place-items: center;
+            width: calc(5.6 * var(--u)); height: calc(5.6 * var(--u));
+            flex: none;
+            border-radius: 99px;
+            background: var(--color-accent-400);
+            color: #402310;
         }
-
-        /* Header */
-        .header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding-bottom: 15px;
-            border-bottom: 2px solid var(--bg-pen);
-            flex-shrink: 0;
+        .stale-title {
+            font-family: var(--font-heading);
+            font-size: calc(4.2 * var(--u));
+            letter-spacing: .07em;
+            color: var(--color-accent-200);
         }
+        .stale-divider { width: calc(.15 * var(--u)); height: calc(4.6 * var(--u)); background: var(--color-accent-600); }
+        .stale-text { font-size: calc(2.8 * var(--u)); font-weight: 600; color: var(--color-accent-300); }
 
-        .header-left {
-            display: flex;
-            align-items: center;
-            gap: 15px;
+        /* --------------------------------------------------- instrument cluster */
+        .tv-header { flex: none; display: flex; align-items: center; gap: calc(3 * var(--u)); }
+        .tv-brand { display: flex; align-items: center; gap: calc(1.8 * var(--u)); min-width: 0; }
+        .tv-mark {
+            display: grid; place-items: center;
+            width: calc(6.6 * var(--u)); height: calc(6.6 * var(--u));
+            flex: none;
+            border-radius: 99px;
+            background: var(--color-accent-2-800);
+            color: var(--color-accent-2-300);
+            border: calc(.15 * var(--u)) solid var(--color-accent-2-700);
         }
-
-        .logo {
-            width: 60px;
-            height: 60px;
-            border-radius: 10px;
-            object-fit: cover;
-        }
-
-        .title {
-            font-size: 2rem;
-            font-weight: 800;
-            color: var(--fairy-tails-blue);
-            text-transform: uppercase;
-            letter-spacing: 3px;
-        }
-
-        .header-right {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end;
-            gap: 8px;
-        }
-
-        .meal-display {
-            font-size: 1.4rem;
+        .tv-eyebrow {
+            font-size: calc(1.9 * var(--u));
             font-weight: 700;
-            color: var(--accent-secondary);
-            background: var(--bg-pen);
-            padding: 8px 20px;
-            border-radius: 8px;
+            letter-spacing: .22em;
+            text-transform: uppercase;
+            color: var(--color-neutral-500);
         }
-
-        .status-display {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 0.9rem;
-            color: var(--text-secondary);
+        .tv-meal { font-family: var(--font-heading); font-size: calc(5.3 * var(--u)); line-height: 1.02; }
+        .tv-header-right { display: flex; flex-direction: column; align-items: flex-end; gap: calc(.8 * var(--u)); }
+        .tv-clock { font-family: var(--font-heading); font-size: calc(4.8 * var(--u)); line-height: 1; }
+        .tv-live {
+            display: flex; align-items: center; gap: calc(1 * var(--u));
+            padding: calc(.7 * var(--u)) calc(1.7 * var(--u));
+            border-radius: 99px;
+            background: var(--color-accent-2-900);
+            border: calc(.15 * var(--u)) solid var(--color-accent-2-700);
         }
-
-        .refresh-indicator {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
         .refresh-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: var(--status-all);
-            animation: pulse 2s infinite;
+            width: calc(1.4 * var(--u)); height: calc(1.4 * var(--u));
+            flex: none;
+            border-radius: 99px;
+            background: var(--color-accent-2-300);
+            animation: tvBreathe 3.4s ease-in-out infinite;
         }
-
-        .refresh-dot.syncing {
-            background: var(--fairy-tails-blue);
-            animation: pulse 0.5s infinite;
-        }
-
-        .refresh-dot.error {
-            background: var(--status-none);
-            animation: none;
-        }
-
-        .refresh-dot.fast-mode {
-            background: var(--accent-secondary);
-            animation: fastPulse 0.8s infinite;
-        }
-
-        @keyframes fastPulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(1.4); }
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.6; transform: scale(1.2); }
-        }
-
-        /* Pens Grid */
-        .pens-container {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            padding-top: 15px;
-            min-height: 0;
-            overflow: hidden;
-        }
-
-        .pen-section {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            min-height: 0;
-        }
-
-        .pen-section-label {
+        .refresh-dot.syncing   { background: var(--color-accent-300); animation: tvLamp 1.2s ease-in-out infinite; }
+        .refresh-dot.fast-mode { background: var(--color-accent-400); animation: tvLamp .8s ease-in-out infinite; }
+        .refresh-dot.error     { background: var(--color-accent-300); animation: tvLamp 1.5s ease-in-out infinite; }
+        .tv-live-label {
+            font-size: calc(1.9 * var(--u));
             font-weight: 700;
-            color: var(--accent-secondary);
+            letter-spacing: .14em;
             text-transform: uppercase;
-            letter-spacing: 2px;
-            margin-bottom: 10px;
-            flex-shrink: 0;
-            font-size: 1.1rem;
-            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+            color: var(--color-accent-2-300);
+            white-space: nowrap;
         }
+        .tv-live.is-error { background: #402310; border-color: var(--color-accent-700); }
+        .tv-live.is-error .tv-live-label { color: var(--color-accent-200); }
+
+        /* ------------------------------------------------------------- pens */
+        .pens-container { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: calc(1.8 * var(--u)); }
+        .pen-section { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: calc(1 * var(--u)); }
+        .pen-section-head { flex: none; display: flex; align-items: center; gap: calc(1.4 * var(--u)); }
+        .pen-section-label {
+            font-size: calc(1.9 * var(--u));
+            font-weight: 700;
+            letter-spacing: .2em;
+            text-transform: uppercase;
+            color: var(--color-neutral-500);
+        }
+        .pen-section-rule { flex: 1; height: calc(.15 * var(--u)); background: var(--color-neutral-800); }
+        .pen-section-count { font-size: calc(1.9 * var(--u)); font-weight: 600; color: var(--color-neutral-600); }
 
         .pen-row {
-            flex: 1;
+            flex: 1; min-height: 0;
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 15px;
-            min-height: 0;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: calc(1.6 * var(--u));
         }
-
         .pen {
-            background: var(--bg-pen);
-            border-radius: 12px;
-            padding: 12px;
-            display: flex;
-            flex-direction: column;
+            min-height: 0;
+            display: flex; flex-direction: column;
+            gap: calc(1 * var(--u));
+            padding: calc(1.4 * var(--u));
+            border-radius: calc(2.6 * var(--u));
+            background: var(--tv-card);
+            border: calc(.15 * var(--u)) solid var(--color-neutral-800);
             overflow: hidden;
         }
-
-        .pen-header {
-            font-weight: 700;
-            text-align: center;
-            padding-bottom: 8px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-            margin-bottom: 8px;
-            flex-shrink: 0;
-            color: var(--pen-header-color);
-            font-size: 1rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .pen-dogs {
+        /* A pen holding a refusal lights up as a whole, so it is findable from the doorway. */
+        .pen.has-alert { background: #33261c; border-color: var(--color-accent-700); }
+        .pen-header { flex: none; display: flex; align-items: center; gap: calc(.9 * var(--u)); }
+        .pen-label {
+            font-family: var(--font-heading);
+            font-size: calc(3 * var(--u));
+            line-height: 1;
+            color: var(--color-neutral-400);
             flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            overflow: hidden;
         }
+        .pen.has-alert .pen-label { color: var(--color-accent-300); }
+        .pen-alert {
+            display: grid; place-items: center;
+            width: calc(2.9 * var(--u)); height: calc(2.9 * var(--u));
+            flex: none;
+            border-radius: 99px;
+            background: var(--color-accent-400);
+            color: #402310;
+        }
+        .pen-count {
+            display: grid; place-items: center;
+            min-width: calc(3.4 * var(--u)); height: calc(2.9 * var(--u));
+            padding: 0 calc(1 * var(--u));
+            border-radius: 99px;
+            background: var(--color-neutral-800);
+            color: var(--color-neutral-300);
+            font-size: calc(1.9 * var(--u));
+            font-weight: 700;
+        }
+        .pen-count.is-zero { background: transparent; color: var(--color-neutral-700); }
 
+        .pen-dogs { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: calc(var(--gap) * var(--u)); overflow: hidden; }
         .pen-empty {
             flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.8rem;
-            font-style: italic;
-            color: var(--text-secondary-bright);
-            opacity: 0.4;
+            display: grid; place-items: center;
+            border-radius: calc(1.6 * var(--u));
+            border: calc(.15 * var(--u)) dashed var(--color-neutral-800);
+            font-size: calc(2 * var(--u));
+            color: var(--color-neutral-700);
         }
 
-        /* Dog Cards */
         .dog-card {
-            border-radius: 8px;
-            padding: 8px 10px;
-            border-left: 4px solid var(--status-all);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-            flex-shrink: 0;
-            background: var(--dog-card-bg);
-            border-left-width: 5px;
-            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+            flex: none;
+            display: flex; align-items: center;
+            gap: calc(1 * var(--u));
+            padding: calc(var(--padv) * var(--u)) calc(var(--padh) * var(--u));
+            border-radius: calc(1.6 * var(--u));
+            background: var(--tv-card);
+            border-left: calc(.7 * var(--u)) solid var(--color-accent-2-600);
         }
-
-        .dog-card.status-all { border-left-color: var(--status-all); }
-        .dog-card.status-three-quarter { border-left-color: var(--status-three-quarter); }
-        .dog-card.status-half { border-left-color: var(--status-half); }
-        .dog-card.status-quarter { border-left-color: var(--status-quarter); }
-        .dog-card.status-none { border-left-color: var(--status-none); }
-
         .dog-name {
-            font-size: 0.85rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            flex: 1;
-            color: var(--dog-name-color);
-            font-weight: 800;
-            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-            letter-spacing: 0.3px;
+            flex: 1; min-width: 0;
+            font-size: calc(var(--name) * var(--u));
+            font-weight: 700;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            color: var(--color-neutral-300);
         }
-
-        .dog-indicators {
-            display: flex;
-            gap: 4px;
-            flex-shrink: 0;
-        }
-
-        .indicator {
-            font-size: 0.6rem;
-            padding: 2px 5px;
-            border-radius: 4px;
-            text-transform: uppercase;
-            font-weight: 800;
-            letter-spacing: 0.5px;
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-        }
-
-        .indicator-p {
-            background: var(--fairy-tails-blue);
-            color: white;
-        }
-
-        .indicator-s {
-            background: var(--accent-secondary);
-            color: white;
-        }
-
         .dog-status {
-            font-size: 0.7rem;
-            flex-shrink: 0;
-            color: var(--status-text-color);
-            font-weight: 700;
+            flex: none;
+            text-align: right;
+            min-width: calc(var(--sw) * var(--u));
+            font-family: var(--font-heading);
+            font-size: calc(var(--status) * var(--u));
+            line-height: 1;
+            color: var(--color-neutral-600);
         }
+        .indicator {
+            display: grid; place-items: center;
+            width: calc(var(--chip) * var(--u)); height: calc(var(--chip) * var(--u));
+            flex: none;
+            border-radius: 99px;
+            border: calc(.12 * var(--u)) solid transparent;
+        }
+        .indicator-p { background: var(--color-accent-800);   color: var(--color-accent-300);   border-color: var(--color-accent-700); }
+        .indicator-s { background: var(--color-accent-2-800); color: var(--color-accent-2-300); border-color: var(--color-accent-2-700); }
 
-        /* Footer Stats */
+        /* A clean bowl is dim. A problem glows. */
+        .dog-card.status-all           { background: var(--tv-card);       border-left-color: var(--color-accent-2-600); }
+        .dog-card.status-three-quarter { background: var(--tv-card);       border-left-color: var(--color-accent-2-400); }
+        .dog-card.status-three-quarter .dog-name   { color: var(--color-neutral-200); }
+        .dog-card.status-three-quarter .dog-status { color: var(--color-neutral-500); }
+        .dog-card.status-half          { background: var(--tv-card-warn);  border-left-color: var(--color-accent-400); }
+        .dog-card.status-half .dog-name   { color: var(--color-neutral-100); }
+        .dog-card.status-half .dog-status { color: var(--color-accent-300); }
+        .dog-card.status-quarter       { background: var(--tv-card-alert); border-left-color: var(--color-accent-300);
+                                         box-shadow: 0 0 calc(2 * var(--u)) rgba(246, 160, 107, .26); }
+        .dog-card.status-quarter .dog-name   { color: var(--color-accent-100); }
+        .dog-card.status-quarter .dog-status { color: var(--color-accent-200); }
+        .dog-card.status-none          { background: var(--tv-card-stop);  border-left-color: var(--color-accent-300); }
+        .dog-card.status-none .dog-name   { color: var(--color-accent-100); }
+        .dog-card.status-none .dog-status { color: var(--color-accent-200); }
+
+        /* ----------------------------------------------------------- footer */
         .footer {
-            display: flex;
-            justify-content: center;
-            gap: 30px;
-            padding-top: 15px;
-            border-top: 2px solid var(--bg-pen);
-            flex-shrink: 0;
-            margin-top: 10px;
+            flex: none;
+            display: flex; align-items: center;
+            gap: calc(3 * var(--u));
+            padding-top: calc(1.6 * var(--u));
+            border-top: calc(.15 * var(--u)) solid var(--color-neutral-800);
         }
-
-        .stat {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 1rem;
+        .legend { display: flex; align-items: center; gap: calc(1.7 * var(--u)); flex: none; white-space: nowrap; }
+        .legend-item {
+            display: flex; align-items: center; gap: calc(.8 * var(--u));
+            font-size: calc(1.9 * var(--u)); font-weight: 600;
+            color: var(--color-neutral-500);
         }
-
-        .stat-value {
-            font-size: 1.4rem;
-            font-weight: 800;
-            color: var(--fairy-tails-blue);
-        }
-
+        .legend-item.is-hot { color: var(--color-accent-300); }
+        .legend-dot { width: calc(1.5 * var(--u)); height: calc(1.5 * var(--u)); border-radius: 99px; flex: none; }
+        .footer-spacer { flex: 1; }
+        .stat { display: flex; align-items: baseline; gap: calc(.9 * var(--u)); flex: none; }
+        .stat-value { font-family: var(--font-heading); font-size: calc(3.2 * var(--u)); line-height: 1; color: var(--color-neutral-200); }
+        .stat-value.is-hot { color: var(--color-accent-300); }
         .stat-label {
-            color: var(--text-secondary);
+            font-size: calc(1.9 * var(--u)); font-weight: 600;
+            letter-spacing: .1em; text-transform: uppercase;
+            color: var(--color-neutral-600);
         }
 
-        /* Dynamic Scaling Based on Dog Count — tiers tuned for a 32" HD Ready TV */
-        .scale-xl .dog-card { padding: 14px 18px; }
-        .scale-xl .dog-name { font-size: 1.6rem; }
-        .scale-xl .indicator { font-size: 0.85rem; padding: 4px 8px; }
-        .scale-xl .dog-status { font-size: 1.1rem; }
-        .scale-xl .pen-dogs { gap: 12px; }
+        /* -------------------------------------- scale tiers (busiest pen wins)
+           The same five tiers the proven display used, re-expressed in --u so they
+           hold on any panel instead of only the 32" set. */
+        .scale-xl { --name: 3.7;  --status: 3.2;  --padv: 1.3;  --padh: 1.6;  --gap: 1.1;  --chip: 3.2; --sw: 6.6; }
+        .scale-lg { --name: 3.1;  --status: 2.7;  --padv: 1;    --padh: 1.3;  --gap: .85;  --chip: 2.8; --sw: 5.8; }
+        .scale-md { --name: 2.6;  --status: 2.3;  --padv: .8;   --padh: 1.1;  --gap: .7;   --chip: 2.5; --sw: 5; }
+        .scale-sm { --name: 2.2;  --status: 2;    --padv: .6;   --padh: .9;   --gap: .55;  --chip: 2.1; --sw: 4.4; }
+        .scale-xs { --name: 1.9;  --status: 1.75; --padv: .45;  --padh: .75;  --gap: .4;   --chip: 1.9; --sw: 3.8; }
 
-        .scale-lg .dog-card { padding: 12px 15px; }
-        .scale-lg .dog-name { font-size: 1.35rem; }
-        .scale-lg .indicator { font-size: 0.75rem; padding: 3px 7px; }
-        .scale-lg .dog-status { font-size: 0.95rem; }
-        .scale-lg .pen-dogs { gap: 10px; }
-
-        .scale-md .dog-card { padding: 10px 13px; }
-        .scale-md .dog-name { font-size: 1.15rem; }
-        .scale-md .indicator { font-size: 0.7rem; padding: 3px 6px; }
-        .scale-md .dog-status { font-size: 0.85rem; }
-        .scale-md .pen-dogs { gap: 8px; }
-
-        .scale-sm .dog-card { padding: 8px 10px; }
-        .scale-sm .dog-name { font-size: 0.95rem; }
-        .scale-sm .indicator { font-size: 0.6rem; padding: 2px 5px; }
-        .scale-sm .dog-status { font-size: 0.75rem; }
-        .scale-sm .pen-dogs { gap: 6px; }
-
-        .scale-xs .dog-card { padding: 6px 8px; }
-        .scale-xs .dog-name { font-size: 0.8rem; }
-        .scale-xs .indicator { font-size: 0.55rem; padding: 2px 4px; }
-        .scale-xs .dog-status { font-size: 0.65rem; }
-        .scale-xs .pen-dogs { gap: 4px; }
-
-        /* Loading State */
+        /* ---------------------------------------------------------- loading */
         .loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: var(--bg-primary);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 20px;
-            z-index: 1000;
-            transition: opacity 0.5s ease;
+            position: absolute;
+            inset: 0;
+            z-index: 90;
+            background: var(--tv-bg);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: calc(3.4 * var(--u));
+            transition: opacity .5s ease;
         }
-
-        .loading-overlay.hidden {
-            opacity: 0;
-            pointer-events: none;
+        .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+        .loading-mark {
+            display: grid; place-items: center;
+            width: calc(14 * var(--u)); height: calc(14 * var(--u));
+            border-radius: 99px;
+            border: calc(.3 * var(--u)) solid var(--color-accent-2-700);
+            color: var(--color-accent-2-300);
         }
-
-        .loading-logo {
-            width: 120px;
-            height: 120px;
-            border-radius: 20px;
-            animation: pulse 1.5s infinite;
-        }
-
-        .loading-text {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--fairy-tails-blue);
-        }
+        .loading-text { font-family: var(--font-heading); font-size: calc(3.6 * var(--u)); color: var(--color-neutral-400); }
     </style>
 </head>
 <body>
-    <!-- Staleness / connection banner (hidden while confirmed live) -->
-    <div class="stale-banner" id="staleBanner">
-        <span>⚠</span>
-        <span id="staleBannerText">NOT LIVE</span>
-        <span>⚠</span>
-    </div>
+    <div class="tv-root">
+        <div class="tv-page scale-lg" id="tvContainer">
 
-    <!-- Loading Overlay -->
-    <div class="loading-overlay" id="loadingOverlay">
-        <img src="https://i.ibb.co/whdBKp0L/Logo-1.jpg" alt="Fairy Tails" class="loading-logo">
-        <div class="loading-text">Loading Feeding Report...</div>
-    </div>
-
-    <div class="tv-container" id="tvContainer">
-        <!-- Header -->
-        <div class="header">
-            <div class="header-left">
-                <img src="https://i.ibb.co/whdBKp0L/Logo-1.jpg" alt="Fairy Tails" class="logo">
-                <div class="title">🍽️ Feeding Report</div>
+            <!-- Staleness / connection banner (hidden while confirmed live) -->
+            <div class="stale-banner" id="staleBanner" role="alert">
+                <span class="stale-lamp tv-lamp" aria-hidden="true">
+                    <svg width="62%" height="62%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"><path d="M12 7.5v6.2"></path><path d="M12 17.4h.01"></path></svg>
+                </span>
+                <span class="stale-title">NOT LIVE</span>
+                <span class="stale-divider"></span>
+                <span class="stale-text" id="staleBannerText">Board as it stood earlier</span>
             </div>
-            <div class="header-right">
-                <div class="meal-display" id="mealDisplay">Loading...</div>
-                <div class="status-display">
-                    <div class="refresh-indicator">
-                        <div class="refresh-dot" id="refreshDot"></div>
-                        <span id="statusText">Connecting...</span>
+
+            <!-- Loading overlay -->
+            <div class="loading-overlay" id="loadingOverlay">
+                <span class="loading-mark tv-breathe" aria-hidden="true">
+                    <svg width="58%" height="58%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11h18"></path><path d="M4.5 11a7.5 7.5 0 0 0 15 0"></path><path d="M12 18.5V21"></path></svg>
+                </span>
+                <div class="loading-text">Waking the board…</div>
+            </div>
+
+            <!-- Instrument cluster -->
+            <header class="tv-header">
+                <div class="tv-brand">
+                    <span class="tv-mark" aria-hidden="true">
+                        <svg width="56%" height="56%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11h18"></path><path d="M4.5 11a7.5 7.5 0 0 0 15 0"></path><path d="M12 18.5V21"></path></svg>
+                    </span>
+                    <div>
+                        <div class="tv-eyebrow">Fairy Tails · Feeding</div>
+                        <div class="tv-meal" id="mealDisplay">Loading…</div>
                     </div>
                 </div>
-            </div>
-        </div>
+                <span class="footer-spacer"></span>
+                <div class="tv-header-right">
+                    <span class="tv-clock" id="tvClock">--:--</span>
+                    <span class="tv-live" id="tvLive">
+                        <span class="refresh-dot" id="refreshDot"></span>
+                        <span class="tv-live-label" id="statusText">Connecting…</span>
+                    </span>
+                </div>
+            </header>
 
-        <!-- Pens Container -->
-        <div class="pens-container" id="pensContainer">
-            <!-- Populated by JavaScript -->
-        </div>
+            <!-- Pens -->
+            <div class="pens-container" id="pensContainer"></div>
 
-        <!-- Footer Stats -->
-        <div class="footer">
-            <div class="stat">
-                <span class="stat-value" id="totalDogs">0</span>
-                <span class="stat-label">Dogs Today</span>
-            </div>
-            <div class="stat">
-                <span class="stat-value" id="pensUsed">0</span>
-                <span class="stat-label">Pens Used</span>
-            </div>
-            <div class="stat">
-                <span class="stat-value" id="lastUpdate">--:--</span>
-                <span class="stat-label">Last Update</span>
-            </div>
+            <!-- Bottom readout -->
+            <footer class="footer">
+                <div class="legend" id="legend"></div>
+                <span class="footer-spacer"></span>
+                <span class="stat"><span class="stat-value" id="totalDogs">0</span><span class="stat-label">Dogs</span></span>
+                <span class="stat"><span class="stat-value" id="pensUsed">0</span><span class="stat-label">Pens</span></span>
+                <span class="stat"><span class="stat-value" id="needLook">0</span><span class="stat-label">Need a look</span></span>
+                <span class="stat"><span class="stat-value" id="lastUpdate">--:--</span><span class="stat-label">Updated</span></span>
+            </footer>
         </div>
     </div>
 
@@ -501,10 +451,11 @@
         const STALE_AFTER_MS = 60000;         // banner when nothing confirmed for this long
         const OFFLINE_THRESHOLD = 2;          // consecutive failures before "connection lost"
         const BANNER_TICK_MS = 5000;          // staleness banner refresh cadence
+        const CLOCK_TICK_MS = 20000;          // the TV sits on this page for days
         const REFRESH_MODE_NORMAL = 'normal';
         const REFRESH_MODE_FAST = 'fast';
 
-        // Per-surface presentation of the contract's status VALUES (tablet shows
+        // Per-surface presentation of the contract's status VALUES (the tablet shows
         // ASCII fractions, the TV shows glyphs — only the value set is shared).
         const STATUS_LABELS = {
             'all': 'All',
@@ -514,7 +465,28 @@
             'none': 'None'
         };
 
+        // Night-drive rule: a clean bowl is DIM, a problem GLOWS. `alarm` is what makes a
+        // pen light its warning lamp; `hot` is what turns a legend entry terracotta.
+        const STATUS_STYLE = {
+            'all':           { dot: 'var(--color-accent-2-600)', glow: 'none', alarm: false, hot: false },
+            'three-quarter': { dot: 'var(--color-accent-2-400)', glow: 'none', alarm: false, hot: false },
+            'half':          { dot: 'var(--color-accent-400)',   glow: '0 0 calc(1.2 * var(--u)) rgba(246,160,107,.45)', alarm: false, hot: false },
+            'quarter':       { dot: 'var(--color-accent-300)',   glow: '0 0 calc(1.4 * var(--u)) rgba(255,198,165,.55)', alarm: false, hot: true },
+            'none':          { dot: '#ffc6a5',                   glow: '0 0 calc(1.6 * var(--u)) rgba(255,198,165,.75)', alarm: true,  hot: true }
+        };
+
         const gasFetch = frmMakeGasFetch(FRM_CONTRACT.FETCH_TIMEOUT_MS);
+
+        function esc(value) {
+            return String(value === null || value === undefined ? '' : value)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        function hhmm(dt) {
+            const p = n => (n < 10 ? '0' : '') + n;
+            return p(dt.getHours()) + ':' + p(dt.getMinutes());
+        }
 
         // ============================================
         // STATE
@@ -524,7 +496,7 @@
         const pens = {};
         FRM_CONTRACT.PEN_ORDER.forEach(penId => { pens[penId] = []; });
 
-        let currentMealType = 'Loading...';
+        let currentMealType = 'Loading…';
         let isFirstLoad = true;
 
         // Change gating: advanced ONLY after a successful full load, so a failed
@@ -536,9 +508,8 @@
         let consecutiveFailures = 0;
         let lastSuccessAt = Date.now();   // last successful fetch of ANY kind (boot grace)
 
-        // In-flight guards — slow GAS responses must not stack overlapping
-        // requests (the pre-2026-07-26 display had none and could apply
-        // out-of-order responses).
+        // In-flight guards — slow responses must not stack overlapping requests
+        // (the pre-2026-07-26 display had none and could apply out-of-order responses).
         let loadInFlight = false;
         let versionCheckInFlight = false;
 
@@ -553,9 +524,12 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             renderPensStructure();
+            renderLegend();
+            updateClock();
             loadData();
             startAutoRefresh();
             setInterval(updateStaleBanner, BANNER_TICK_MS);
+            setInterval(updateClock, CLOCK_TICK_MS);
         });
 
         function renderPensStructure() {
@@ -564,23 +538,46 @@
                 const label = penId.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase());
                 return `
                     <div class="pen" id="pen-${penId}">
-                        <div class="pen-header">${label}</div>
+                        <div class="pen-header">
+                            <span class="pen-label">${label}</span>
+                            <span class="pen-alert tv-lamp" id="alert-${penId}" style="display:none" aria-hidden="true">
+                                <svg width="64%" height="64%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round"><path d="M12 7v7"></path><path d="M12 17.8h.01"></path></svg>
+                            </span>
+                            <span class="pen-count is-zero" id="count-${penId}">0</span>
+                        </div>
                         <div class="pen-dogs" id="dogs-${penId}"></div>
                     </div>
                 `;
             };
             const top = FRM_CONTRACT.PEN_ORDER.filter(p => p.indexOf('top-') === 0);
             const bottom = FRM_CONTRACT.PEN_ORDER.filter(p => p.indexOf('bottom-') === 0);
-            container.innerHTML = `
+            const section = (key, label, ids) => `
                 <div class="pen-section">
-                    <div class="pen-section-label">Top Pens</div>
-                    <div class="pen-row" id="topPensRow">${top.map(penCell).join('')}</div>
-                </div>
-                <div class="pen-section">
-                    <div class="pen-section-label">Bottom Pens</div>
-                    <div class="pen-row" id="bottomPensRow">${bottom.map(penCell).join('')}</div>
+                    <div class="pen-section-head">
+                        <span class="pen-section-label">${label}</span>
+                        <span class="pen-section-rule"></span>
+                        <span class="pen-section-count" id="${key}Count">0 dogs</span>
+                    </div>
+                    <div class="pen-row" id="${key}PensRow">${ids.map(penCell).join('')}</div>
                 </div>
             `;
+            container.innerHTML = section('top', 'Top pens', top) + section('bottom', 'Bottom pens', bottom);
+        }
+
+        function renderLegend() {
+            const el = document.getElementById('legend');
+            if (!el) return;
+            el.innerHTML = FRM_CONTRACT.STATUS_VALUES.map(v => {
+                const s = STATUS_STYLE[v] || STATUS_STYLE.all;
+                return `<span class="legend-item${s.hot ? ' is-hot' : ''}">` +
+                       `<span class="legend-dot" style="background:${s.dot};box-shadow:${s.glow}"></span>` +
+                       `${STATUS_LABELS[v] || v}</span>`;
+            }).join('');
+        }
+
+        function updateClock() {
+            const el = document.getElementById('tvClock');
+            if (el) el.textContent = hhmm(new Date());
         }
 
         // ============================================
@@ -616,21 +613,24 @@
         function updateStaleBanner() {
             const banner = document.getElementById('staleBanner');
             const text = document.getElementById('staleBannerText');
+            const page = document.getElementById('tvContainer');
             const disconnected = consecutiveFailures >= OFFLINE_THRESHOLD;
             const unconfirmedMs = Date.now() - lastSuccessAt;
             const stale = unconfirmedMs > STALE_AFTER_MS;
 
             if (!disconnected && !stale) {
                 banner.classList.remove('visible');
+                if (page) page.classList.remove('is-stale');
                 return;
             }
 
             const ageMin = Math.round(unconfirmedMs / 60000);
             const ageText = ageMin < 1 ? 'moments ago' : ageMin + ' min ago';
-            const asOf = new Date(lastSuccessAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-            text.textContent = (disconnected ? 'CONNECTION LOST — ' : 'NOT LIVE — ')
-                + 'showing data from ' + asOf + ' (' + ageText + ')';
+            const asOf = hhmm(new Date(lastSuccessAt));
+            text.textContent = (disconnected ? 'Connection lost — showing the board from ' : 'Board as it stood at ')
+                + asOf + ' (' + ageText + ')';
             banner.classList.add('visible');
+            if (page) page.classList.add('is-stale');
         }
 
         // ============================================
@@ -675,7 +675,7 @@
 
         function applyData(result) {
             currentMealType = result.mealType || 'Lunch';
-            document.getElementById('mealDisplay').textContent = '🕐 ' + currentMealType;
+            document.getElementById('mealDisplay').textContent = currentMealType;
 
             dogs = result.dogs || [];
 
@@ -693,20 +693,44 @@
                 frmSortPenByPosition(pens[penId]);
             }
 
+            // Scale BEFORE rendering: the tier drives the CSS custom properties every card
+            // reads, so setting it after a render leaves one frame at the wrong size.
+            calculateScale();
             renderAllPens();
             updateStats();
-            calculateScale();
         }
 
         function renderAllPens() {
             for (const penId of FRM_CONTRACT.PEN_ORDER) {
                 renderPen(penId);
             }
+            const countIn = side => FRM_CONTRACT.PEN_ORDER
+                .filter(p => p.indexOf(side + '-') === 0)
+                .reduce((a, p) => a + pens[p].length, 0);
+            const top = document.getElementById('topCount');
+            const bottom = document.getElementById('bottomCount');
+            if (top) top.textContent = countIn('top') + ' dogs';
+            if (bottom) bottom.textContent = countIn('bottom') + ' dogs';
         }
 
         function renderPen(penId) {
             const container = document.getElementById(`dogs-${penId}`);
+            const penEl = document.getElementById(`pen-${penId}`);
+            const countEl = document.getElementById(`count-${penId}`);
+            const alertEl = document.getElementById(`alert-${penId}`);
             const penDogs = pens[penId];
+
+            const hasAlert = penDogs.some(d => (STATUS_STYLE[d.status] || {}).alarm);
+            if (penEl) {
+                if (hasAlert) penEl.classList.add('has-alert');
+                else penEl.classList.remove('has-alert');
+            }
+            if (alertEl && alertEl.style) alertEl.style.display = hasAlert ? 'grid' : 'none';
+            if (countEl) {
+                countEl.textContent = penDogs.length;
+                countEl.className = 'pen-count' + (penDogs.length ? '' : ' is-zero');
+            }
+            if (!container) return;
 
             if (penDogs.length === 0) {
                 container.innerHTML = '<div class="pen-empty">Empty</div>';
@@ -715,20 +739,24 @@
 
             container.innerHTML = penDogs.map(dog => {
                 const displayName = dog.matchedName || dog.inputName || 'Unknown';
-                const statusLabel = STATUS_LABELS[dog.status] || dog.status;
+                const status = dog.status || 'all';
+                const statusLabel = STATUS_LABELS[status] || status;
+                const style = STATUS_STYLE[status] || STATUS_STYLE.all;
 
                 let indicators = '';
                 if (dog.prescription) {
-                    indicators += '<span class="indicator indicator-p">+P</span>';
+                    indicators += '<span class="indicator indicator-p" title="Medicine">' +
+                        '<svg width="60%" height="60%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><rect x="2.5" y="8.5" width="19" height="7" rx="3.5" transform="rotate(-45 12 12)"></rect><path d="M8.5 8.5 15.5 15.5"></path></svg></span>';
                 }
                 if (dog.supplements) {
-                    indicators += '<span class="indicator indicator-s">+S</span>';
+                    indicators += '<span class="indicator indicator-s" title="Supplements">' +
+                        '<svg width="60%" height="60%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4c0 9-5.5 13-11 13a5.5 5.5 0 0 1 0-11c5 0 8-1 11-2Z"></path><path d="M4 20c2-5 5-8 9-10"></path></svg></span>';
                 }
 
                 return `
-                    <div class="dog-card status-${dog.status || 'all'}">
-                        <span class="dog-name">${displayName}</span>
-                        <div class="dog-indicators">${indicators}</div>
+                    <div class="dog-card status-${esc(status)} tv-in${style.alarm ? ' tv-alarm' : ''}">
+                        <span class="dog-name">${esc(displayName)}</span>
+                        ${indicators}
                         <span class="dog-status">${statusLabel}</span>
                     </div>
                 `;
@@ -738,18 +766,26 @@
         function updateStats() {
             let totalDogs = 0;
             let pensUsed = 0;
+            let needLook = 0;
 
             for (const penDogs of Object.values(pens)) {
                 totalDogs += penDogs.length;
                 if (penDogs.length > 0) pensUsed++;
+                penDogs.forEach(d => {
+                    const s = d.status || 'all';
+                    // Refusals plus quarters — the only number anyone has to act on.
+                    if (s === 'none' || s === 'quarter') needLook++;
+                });
             }
 
             document.getElementById('totalDogs').textContent = totalDogs;
             document.getElementById('pensUsed').textContent = pensUsed;
-            document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('en-GB', {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
+            const nl = document.getElementById('needLook');
+            if (nl) {
+                nl.textContent = needLook;
+                nl.className = 'stat-value' + (needLook ? ' is-hot' : '');
+            }
+            document.getElementById('lastUpdate').textContent = hhmm(new Date());
         }
 
         // ============================================
@@ -758,7 +794,8 @@
 
         function calculateScale() {
             const container = document.getElementById('tvContainer');
-            container.classList.remove('scale-xl', 'scale-lg', 'scale-md', 'scale-sm', 'scale-xs');
+            ['scale-xl', 'scale-lg', 'scale-md', 'scale-sm', 'scale-xs']
+                .forEach(c => container.classList.remove(c));
 
             let maxDogsInPen = 0;
             for (const penDogs of Object.values(pens)) {
@@ -787,8 +824,8 @@
         // AUTO REFRESH (adaptive, version-gated)
         // ============================================
         // Normal mode: getSessionVersion every 10s. On a confirmed change: full
-        // load + fast mode (full reload every 3s) for 30s, then revert.
-        // Since backend @29 both endpoints serve the SAME Meta-tab version, so an
+        // load + fast mode (version probe every 3s) for 30s, then revert.
+        // Since backend @29 both endpoints serve the SAME stored version, so an
         // idle board stays in normal mode (pre-@29 the mismatched version sources
         // kept this loop permanently in fast mode).
         // On failure: count it (banner) but do NOT fall back to full loads — the
@@ -845,7 +882,6 @@
                         switchToFastMode();
                     } else {
                         // Board unchanged AND the probe answered — connectivity is confirmed.
-                        // (The stray `false` argument here was never read by noteSuccess.)
                         noteSuccess();
                     }
                 } else {
@@ -909,32 +945,37 @@
         function updateRefreshModeDisplay() {
             const text = document.getElementById('statusText');
             const dot = document.getElementById('refreshDot');
+            const live = document.getElementById('tvLive');
 
             dot.className = 'refresh-dot';
+            if (live) live.classList.remove('is-error');
 
             if (currentRefreshMode === REFRESH_MODE_FAST) {
-                text.textContent = 'Live • ⚡ Rapid sync 3s';
+                text.textContent = 'Live · fast';
                 dot.classList.add('fast-mode');
             } else {
-                text.textContent = 'Live • Auto-refresh 10s';
+                text.textContent = 'Live';
             }
         }
 
         function setRefreshStatus(status, message = null) {
             const dot = document.getElementById('refreshDot');
             const text = document.getElementById('statusText');
+            const live = document.getElementById('tvLive');
 
             dot.className = 'refresh-dot';
 
             switch (status) {
                 case 'syncing':
+                    if (live) live.classList.remove('is-error');
                     dot.classList.add('syncing');
-                    text.textContent = 'Refreshing...';
+                    text.textContent = 'Refreshing…';
                     break;
                 case 'connected':
                     updateRefreshModeDisplay();
                     break;
                 case 'error':
+                    if (live) live.classList.add('is-error');
                     dot.classList.add('error');
                     text.textContent = message || 'Error';
                     break;

@@ -6,25 +6,80 @@
     <title>Feeding Report - Editor</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Caprasimo:wght@400&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
+        /* ============================================================
+           DESIGN TOKENS — Organic design system
+           Source of truth: design_handoff_feeding_board/implementation/tokens.css
+           Deviation (deliberate): the handoff expresses --color-divider and the
+           shadows with color-mix(). They are written here as the exact equivalent
+           rgba() values instead — color-mix() needs Chrome 111+, and this page has
+           to render on whatever browser the staff tablet is carrying. Same pixels,
+           no compatibility cliff.
+           ============================================================ */
         :root {
-            --bg-primary: #1a1a2e;
-            --bg-secondary: #16213e;
-            --bg-pen: #0f3460;
-            --accent-primary: #e94560;
-            --accent-secondary: #f39c12;
-            --fairy-tails-blue: #00acee;
-            --text-primary: #ffffff;
-            --text-secondary: #a0a0a0;
-            --status-all: #2ecc71;
-            --status-three-quarter: #9acd32;
-            --status-half: #f1c40f;
-            --status-quarter: #e67e22;
-            --status-none: #e74c3c;
-            --shadow: 0 4px 15px rgba(0,0,0,0.3);
-            --radius: 12px;
-            --sync-active: #00acee;
+            /* ground + roles */
+            --color-bg:        #f5ead8;
+            --color-surface:   #ebddc5;
+            --color-text:      #201e1d;
+            --color-accent:    #c67139;   /* terracotta */
+            --color-accent-2:  #7a8a5e;   /* sage */
+            --color-divider:   rgba(32, 30, 29, 0.16);
+
+            /* neutral ramp */
+            --color-neutral-100: #f9f4ed;
+            --color-neutral-200: #eee7db;
+            --color-neutral-300: #dcd3c4;
+            --color-neutral-400: #c0b6a5;
+            --color-neutral-500: #a19786;
+            --color-neutral-600: #82796a;
+            --color-neutral-700: #645c50;
+            --color-neutral-800: #474238;
+            --color-neutral-900: #2e2b25;
+
+            /* terracotta ramp */
+            --color-accent-100: #fff2eb;
+            --color-accent-200: #ffe1d0;
+            --color-accent-300: #ffc6a5;
+            --color-accent-400: #f6a06b;
+            --color-accent-500: #d67f48;
+            --color-accent-600: #b2622d;
+            --color-accent-700: #8c491a;
+            --color-accent-800: #643312;
+            --color-accent-900: #402310;
+
+            /* sage ramp */
+            --color-accent-2-100: #f0fae1;
+            --color-accent-2-200: #e1eecc;
+            --color-accent-2-300: #ccdbb2;
+            --color-accent-2-400: #aebf92;
+            --color-accent-2-500: #8fa073;
+            --color-accent-2-600: #728157;
+            --color-accent-2-700: #56633f;
+            --color-accent-2-800: #3d472b;
+            --color-accent-2-900: #272e1b;
+
+            /* feeding-status colours — keys are the contract STATUS_VALUES */
+            --portion-all:           var(--color-accent-2-600);
+            --portion-three-quarter: var(--color-accent-2-400);
+            --portion-half:          var(--color-accent-400);
+            --portion-quarter:       var(--color-accent-600);
+            --portion-none:          var(--color-accent-800);
+
+            /* type */
+            --font-heading: "Caprasimo", system-ui, sans-serif;
+            --font-body:    "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+            /* radii + elevation */
+            --radius-sm: 8px;
+            --radius-md: 16px;
+            --radius-lg: 28px;
+            --shadow-sm: 0 1px 2px  rgba(46, 43, 37, 0.14);
+            --shadow-md: 0 3px 10px rgba(46, 43, 37, 0.16);
+            --shadow-lg: 0 12px 32px rgba(46, 43, 37, 0.22);
+
+            /* measured at runtime: how much room the phone tray needs */
+            --tray-h: 0px;
         }
 
         * {
@@ -34,1068 +89,1062 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        html {
-            overflow-x: hidden;
-        }
+        html { overflow-x: hidden; }
 
-        /* ANDROID FIX: Allow default touch actions on body */
         body {
-            font-family: 'Nunito', sans-serif;
-            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+            font-family: var(--font-body);
+            background: var(--color-bg);
+            color: var(--color-text);
+            font-size: 15px;
+            line-height: 1.4;
             min-height: 100vh;
-            color: var(--text-primary);
             width: 100%;
-            overflow-y: auto;
             overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
             -webkit-overflow-scrolling: touch;
+            overscroll-behavior: none;   /* no pull-to-refresh eating a drag */
             touch-action: auto;
         }
 
-        /* ANDROID FIX: Prevent scroll during drag - NO position fixed (causes jump) */
-        body.is-dragging {
-            overflow: hidden !important;
-            touch-action: none !important;
+        /* ⚠️ There is deliberately NO `body.is-dragging { overflow:hidden }` rule.
+           That lock is what made the page jump under the finger on Android. Scrolling
+           during a drag is prevented by the document-level non-passive touchmove
+           handler in FRMDrag; the board auto-scrolls at the edges instead. */
+
+        button { font-family: inherit; color: inherit; }
+        input  { font-family: inherit; }
+        :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+        .fb-scroll { scrollbar-width: thin; scrollbar-color: var(--color-neutral-400) transparent; }
+        .fb-scroll::-webkit-scrollbar { height: 8px; width: 8px; }
+        .fb-scroll::-webkit-scrollbar-thumb { background: var(--color-neutral-400); border-radius: 99px; }
+        .fb-scroll::-webkit-scrollbar-track { background: transparent; }
+
+        .sr-only {
+            position: absolute; width: 1px; height: 1px;
+            overflow: hidden; clip-path: inset(50%); white-space: nowrap;
         }
 
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 15px;
-            min-height: 100vh;
-            width: 100%;
-            overflow-x: hidden;
+        /* ---------------------------------------------------------- motion */
+        @keyframes fbPop   { from { transform: translateX(-50%) scale(.94); opacity: 0 } to { transform: translateX(-50%) scale(1); opacity: 1 } }
+        @keyframes fbRise  { from { transform: translateY(14px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+        @keyframes fbPulse { 0%, 100% { opacity: 1 } 50% { opacity: .45 } }
+        @keyframes fbSpin  { to { transform: rotate(360deg) } }
+        @keyframes fbFlash { 0% { background: var(--color-accent-200) } 100% { background: var(--color-neutral-100) } }
+        .fb-rise  { animation: fbRise .3s cubic-bezier(.22,1,.36,1); }
+        .fb-pulse { animation: fbPulse 1.5s ease-in-out infinite; }
+        .fb-spin  { animation: fbSpin .9s linear infinite; }
+        .newly-added { animation: fbFlash .9s ease-out; }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: .01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: .01ms !important;
+            }
         }
 
-        /* Header with branding */
-        .header {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            margin-bottom: 8px;
-        }
-
-        .header-logo {
-            width: 40px;
-            height: 40px;
-            border-radius: 8px;
-            object-fit: cover;
-        }
-
-        h1 {
-            text-align: center;
-            font-size: 1.4rem;
-            font-weight: 800;
-            color: var(--fairy-tails-blue);
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-
-        .status-bar {
-            text-align: center;
-            font-size: 0.8rem;
-            margin-bottom: 15px;
-            padding: 6px 12px;
-            border-radius: 8px;
-            background: var(--bg-secondary);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .status-bar.connected { color: var(--status-all); }
-        .status-bar.syncing { color: var(--sync-active); }
-        .status-bar.offline { color: var(--accent-secondary); }
-        .status-bar.error { color: var(--status-none); }
-        .status-bar.paused { color: var(--accent-secondary); }
-
-        .sync-indicator {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: var(--status-all);
-            flex-shrink: 0;
-        }
-
-        .sync-indicator.syncing {
-            background: var(--sync-active);
-            animation: pulse 1s infinite;
-        }
-
-        .sync-indicator.paused {
-            background: var(--accent-secondary);
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(1.2); }
-        }
-
-        /* OFFLINE BANNER — full-width, top of viewport, must not be missed */
+        /* ============================================================
+           OFFLINE BANNER — position:fixed on purpose so it never reflows
+           the drag layout. It pushes the board down with padding instead.
+           ============================================================ */
         .offline-banner {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
+            top: 0; left: 0; right: 0;
             z-index: 9999;
-            min-height: 56px;
-            padding: 12px 16px;
-            background: #c0392b;
-            color: #ffffff;
             display: flex;
             align-items: center;
-            justify-content: center;
             gap: 12px;
-            font-size: 0.95rem;
-            font-weight: 700;
-            text-align: center;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.35);
-            animation: bannerPulse 2.5s ease-in-out infinite;
-            pointer-events: auto;
+            padding: 12px 16px;
+            background: linear-gradient(90deg, var(--color-accent-800), var(--color-accent-700));
+            color: var(--color-accent-100);
+            box-shadow: var(--shadow-lg);
+            animation: fbRise .3s cubic-bezier(.22,1,.36,1);
         }
         .offline-banner.hidden { display: none; }
-        .offline-banner .offline-icon {
-            font-size: 1.4rem;
-            line-height: 1;
+        .offline-lamp {
+            display: grid; place-items: center;
+            width: 34px; height: 34px; flex: none;
+            border-radius: 99px;
+            background: var(--color-accent-700);
         }
-        .offline-banner #offlineBannerText {
-            flex: 1 1 auto;
-            max-width: 700px;
-            line-height: 1.3;
-        }
+        .offline-copy { flex: 1; min-width: 0; }
+        .offline-title { font-weight: 700; font-size: 15px; }
+        .offline-sub   { font-size: 13px; opacity: .82; }
         .offline-banner button {
-            background: #ffffff;
-            color: #c0392b;
-            border: none;
-            border-radius: 6px;
-            padding: 8px 14px;
-            font-weight: 800;
-            font-size: 0.9rem;
-            cursor: pointer;
-            flex-shrink: 0;
-        }
-        .offline-banner button:active { transform: scale(0.96); }
-        @keyframes bannerPulse {
-            0%, 100% { background: #c0392b; }
-            50% { background: #e74c3c; }
-        }
-        body.offline-active { padding-top: 60px; }
-
-        /* Disabled submit button visual */
-        .btn[disabled], .btn:disabled {
-            opacity: 0.45;
-            cursor: not-allowed;
-            filter: grayscale(0.5);
-        }
-
-        /* ============================================
-           MOBILE-FIRST LAYOUT
-           ============================================ */
-
-        .layout {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        /* Desktop: Sidebar + Main */
-        @media (min-width: 900px) {
-            .layout {
-                display: grid;
-                grid-template-columns: 280px 1fr;
-                gap: 20px;
-                align-items: start;
-            }
-
-            .sidebar {
-                position: sticky;
-                top: 15px;
-            }
-        }
-
-        .sidebar {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .entry-section {
-            background: var(--bg-secondary);
-            border-radius: var(--radius);
-            padding: 15px;
-            box-shadow: var(--shadow);
-        }
-
-        .section-title {
-            font-size: 0.8rem;
+            flex: none;
+            min-height: 44px;
+            padding: 0 18px;
+            border: 0;
+            border-radius: 99px;
+            background: var(--color-accent-100);
+            color: var(--color-accent-800);
             font-weight: 700;
-            color: var(--accent-secondary);
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .offline-banner button:active { transform: scale(.97); }
+
+        /* ============================================================
+           SHELL
+           ============================================================ */
+        .fb-root {
+            container-type: inline-size;   /* future-proofing for an embed */
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            padding: 14px;
+            min-height: 100vh;
+            transition: padding-top .2s ease;
+        }
+        body.offline-active .fb-root { padding-top: 86px; }
+
+        .fb-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            flex: none;
+        }
+        .fb-mark {
+            display: grid; place-items: center;
+            width: 44px; height: 44px; flex: none;
+            border-radius: 99px;
+            background: var(--color-accent-2-200);
+            color: var(--color-accent-2-700);
+            box-shadow: var(--shadow-sm);
+        }
+        .fb-title-wrap { min-width: 0; flex: 1; }
+        .fb-title-wrap h1 {
+            font-family: var(--font-heading);
+            font-weight: 400;
+            font-size: 23px;
+            line-height: 1.05;
+            letter-spacing: -.01em;
+        }
+        .fb-subtitle { font-size: 13px; color: var(--color-neutral-700); }
+        .fb-status {
+            font-size: 12.5px;
+            color: var(--color-neutral-600);
+            max-width: 32ch;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .fb-conn {
+            display: flex; align-items: center; gap: 8px;
+            min-height: 44px;
+            padding: 8px 14px 8px 10px;
+            border-radius: 99px;
+            font-size: 13.5px;
+            font-weight: 600;
+            background: var(--color-accent-2-200);
+            color: var(--color-accent-2-800);
+            flex: none;
+        }
+        .fb-conn-dot { width: 10px; height: 10px; border-radius: 99px; background: currentColor; flex: none; }
+        .fb-conn.is-syncing { background: var(--color-neutral-200); color: var(--color-neutral-800); }
+        .fb-conn.is-offline { background: var(--color-accent-200);  color: var(--color-accent-800); }
+        .fb-conn.is-syncing .fb-conn-dot,
+        .fb-conn.is-offline .fb-conn-dot { animation: fbPulse 1.5s ease-in-out infinite; }
+
+        .fb-shell { display: grid; gap: 14px; min-height: 0; flex: 1; }
+
+        /* ---------------------------------------------------------- rail */
+        .fb-rail { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+        .fb-card {
+            background: var(--color-surface);
+            border-radius: var(--radius-lg);
+            padding: 14px;
+            box-shadow: var(--shadow-sm);
+        }
+        .fb-card-title {
+            font-family: var(--font-heading);
+            font-weight: 400;
+            font-size: 15px;
             margin-bottom: 10px;
         }
-
-        .entry-row {
-            display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 8px;
+        .fb-card-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+        .fb-card-head .fb-card-title { flex: 1; margin-bottom: 0; }
+        .fb-tag {
+            display: inline-grid; place-items: center;
+            min-width: 26px; height: 24px; padding: 0 9px;
+            border-radius: 99px;
+            background: var(--color-accent-200);
+            color: var(--color-accent-800);
+            font-size: 12.5px; font-weight: 700;
         }
 
-        .entry-row input {
-            padding: 14px 12px;
-            border: 2px solid var(--bg-pen);
-            border-radius: 8px;
-            font-size: 16px;
-            font-family: inherit;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            min-width: 0;
-            transition: border-color 0.2s ease;
-        }
-
-        .entry-row input:focus {
-            outline: none;
-            border-color: var(--accent-primary);
-        }
-
-        .entry-row input::placeholder { color: var(--text-secondary); }
-
-        .btn {
-            padding: 14px 18px;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 700;
-            font-family: inherit;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            white-space: nowrap;
+        .fb-add-row { display: flex; gap: 8px; }
+        .fb-input {
+            flex: 1; min-width: 0;
             min-height: 48px;
-            min-width: 48px;
+            padding: 0 16px;
+            border: 1px solid var(--color-divider);
+            border-radius: 99px;
+            background: var(--color-neutral-100);
+            color: var(--color-text);
+            font-size: 16px;   /* 16px so iOS does not zoom the page */
+        }
+        .fb-input::placeholder { color: var(--color-neutral-600); }
+        .fb-input:focus { outline: none; border-color: var(--color-accent-400); }
+
+        .fb-icon-btn {
+            display: grid; place-items: center;
+            min-width: 48px; min-height: 48px;
+            flex: none;
+            border: 1px solid var(--color-divider);
+            border-radius: 99px;
+            background: var(--color-neutral-100);
+            color: var(--color-text);
+            cursor: pointer;
+        }
+        .fb-icon-btn-primary {
+            background: var(--color-accent);
+            border-color: var(--color-accent);
+            color: var(--color-accent-100);
+        }
+        .fb-icon-btn:active { transform: scale(.96); }
+
+        .fb-suggest { display: none; flex-direction: column; gap: 4px; margin-top: 8px; max-height: 172px; overflow-y: auto; }
+        .fb-suggest.has-items { display: flex; }
+        .fb-suggest button {
+            display: flex; align-items: center;
+            min-height: 44px;
+            padding: 0 12px;
+            text-align: left;
+            border: 1px solid var(--color-divider);
+            border-radius: var(--radius-md);
+            background: var(--color-neutral-100);
+            font-size: 15px; font-weight: 600;
+            cursor: pointer;
+        }
+        .fb-suggest button:active { background: var(--color-accent-200); border-color: var(--color-accent-400); }
+
+        .fb-seg {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            padding: 5px;
+            border-radius: 99px;
+            background: var(--color-neutral-200);
+        }
+        .fb-seg button {
+            border: 0;
+            border-radius: 99px;
+            min-height: 44px;
+            padding: 0 6px;
+            background: transparent;
+            color: var(--color-neutral-700);
+            font-family: var(--font-heading);
+            font-weight: 400;
+            font-size: 13.5px;
+            cursor: pointer;
+            transition: background .18s ease, color .18s ease;
+        }
+        .fb-seg button.is-on {
+            background: var(--color-neutral-100);
+            color: var(--color-text);
+            box-shadow: var(--shadow-sm);
         }
 
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        .fb-btn {
+            display: flex; align-items: center; justify-content: center;
+            gap: 8px;
+            width: 100%;
+            min-height: 48px;
+            padding: 0 16px;
+            border: 1px solid var(--color-divider);
+            border-radius: 99px;
+            background: var(--color-neutral-100);
+            color: var(--color-text);
+            font-size: 14px; font-weight: 700;
+            cursor: pointer;
+            transition: background .18s ease, color .18s ease, box-shadow .18s ease;
         }
-
-        .btn:active { transform: translateY(0); }
-
-        .btn:disabled {
-            opacity: 0.5;
+        .fb-btn:active { transform: scale(.985); }
+        .fb-btn svg { flex: none; }
+        .fb-btn-today { margin-top: 10px; }
+        /* The empty board has exactly one sensible next move. */
+        .fb-btn-today.is-primary {
+            min-height: 56px;
+            background: var(--color-accent);
+            border-color: var(--color-accent);
+            color: var(--color-accent-100);
+            box-shadow: var(--shadow-md);
+        }
+        .fb-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        .fb-actions .fb-btn { flex: 1; min-height: 52px; width: auto; }
+        .fb-btn-submit {
+            background: var(--color-accent-2-600);
+            border-color: var(--color-accent-2-600);
+            color: var(--color-neutral-100);
+        }
+        .fb-btn[disabled], .fb-btn:disabled {
+            background: var(--color-neutral-400);
+            border-color: var(--color-neutral-400);
+            color: var(--color-neutral-700);
             cursor: not-allowed;
-            transform: none !important;
+            box-shadow: none;
         }
+        .fb-btn-quiet {
+            flex: 0 0 auto !important;
+            min-height: 44px !important;
+            padding: 0 14px;
+            background: transparent;
+            color: var(--color-accent-800);
+            font-weight: 700;
+            font-size: 13px;
+        }
+        .fb-btn-quiet:active { background: var(--color-accent-200); border-color: var(--color-accent-400); }
 
-        .btn-primary { background: var(--accent-primary); color: white; }
-        .btn-primary:hover:not(:disabled) { background: #d63850; }
-        .btn-secondary { background: var(--bg-pen); color: var(--text-primary); }
-        .btn-secondary:hover:not(:disabled) { background: #1a4a7a; }
-        .btn-success { background: var(--status-all); color: white; }
-        .btn-success:hover:not(:disabled) { background: #27ae60; }
-
-        /* Delete Bin */
-        .bin-section {
-            background: var(--bg-secondary);
-            border-radius: var(--radius);
-            padding: 12px;
-            box-shadow: var(--shadow);
+        /* ---------------------------------------------------- staging + bin */
+        .staging-area {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: flex-start;
+            align-content: flex-start;
+            min-height: 96px;
+            padding: 8px;
+            border-radius: var(--radius-md);
+            background: var(--color-neutral-100);
+            border: 2px dashed transparent;
+            transition: background .18s ease, border-color .18s ease;
+        }
+        .staging-area.drop-ready { border-color: var(--color-neutral-400); }
+        .staging-area.drag-over  { border-color: var(--color-accent); background: var(--color-accent-200); }
+        .empty-message {
+            margin: auto;
+            padding: 8px;
+            width: 100%;
+            text-align: center;
+            font-size: 13.5px;
+            color: var(--color-neutral-600);
         }
 
         .bin {
-            width: 100%;
-            height: 55px;
-            background: var(--bg-primary);
-            border: 2px dashed var(--status-none);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: flex; align-items: center; justify-content: center;
             gap: 10px;
-            color: var(--text-secondary);
-            font-size: 0.85rem;
-            transition: background-color 0.15s ease, border-color 0.15s ease;
+            min-height: 52px;
+            margin-top: 10px;
+            border-radius: var(--radius-md);
+            border: 2px dashed var(--color-neutral-400);
+            background: transparent;
+            color: var(--color-neutral-700);
+            font-size: 13.5px; font-weight: 700;
+            transition: all .18s ease;
         }
-
-        .bin.drop-ready {
-            border-color: var(--status-none);
-            background: rgba(231, 76, 60, 0.1);
-        }
-
+        .bin.drop-ready { min-height: 64px; }
         .bin.drag-over {
-            border-color: var(--status-none);
-            background: rgba(231, 76, 60, 0.3);
-            color: var(--status-none);
+            min-height: 64px;
+            border-color: var(--color-accent-700);
+            background: var(--color-accent-700);
+            color: var(--color-accent-100);
         }
 
-        .bin-icon { font-size: 1.3rem; }
-
-        /* Meal Select */
-        .meal-select {
-            width: 100%;
-            padding: 14px 12px;
-            border: 2px solid var(--bg-pen);
-            border-radius: 8px;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            font-family: inherit;
-            font-size: 16px;
-            cursor: pointer;
-        }
-
-        .meal-select:focus {
-            outline: none;
-            border-color: var(--accent-secondary);
-        }
-
-        /* Staging Area */
-        .staging-section {
-            background: var(--bg-secondary);
-            border-radius: var(--radius);
-            padding: 15px;
-            box-shadow: var(--shadow);
-        }
-
-        .staging-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-
-        .staging-area {
-            min-height: 80px;
-            background: var(--bg-primary);
-            border-radius: 8px;
-            padding: 10px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            align-content: flex-start;
-            border: 2px solid transparent;
-            transition: border-color 0.2s ease, background-color 0.2s ease;
-        }
-
-        .staging-area.drop-ready {
-            border-color: var(--fairy-tails-blue);
-            background: rgba(0, 172, 238, 0.05);
-        }
-
-        .staging-area.drag-over {
-            border-color: var(--fairy-tails-blue);
-            background: rgba(0, 172, 238, 0.15);
-        }
-
-        /* Dog Cards - ANDROID FIX: touch-action:none blocks browser gestures on tiles */
+        /* ---------------------------------------------------- staging tiles */
         .dog-card {
-            background: var(--bg-pen);
-            border-radius: 10px;
-            padding: 12px 16px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-height: 48px;
+            padding: 2px 6px 2px 12px;
+            border: 1px solid var(--color-divider);
+            border-left: 5px solid var(--portion-all);
+            border-radius: var(--radius-md);
+            background: var(--color-neutral-100);
+            box-shadow: var(--shadow-sm);
             cursor: grab;
-            user-select: none;
-            -webkit-user-select: none;
-            -webkit-touch-callout: none;
-            touch-action: none;  /* CRITICAL: Must be none for Android drag to work */
-            border-left: 4px solid var(--status-all);
-            font-size: 0.9rem;
-            font-weight: 600;
+            touch-action: pan-y;
+            user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+            transition: opacity .15s ease, transform .12s ease, box-shadow .12s ease;
+        }
+        .dog-card-row { display: flex; align-items: center; gap: 6px; }
+        .dog-card-name {
+            flex: 1;
             min-height: 44px;
-            display: flex;
-            align-items: center;
+            display: flex; align-items: center;
+            font-size: 15px; font-weight: 700;
+            white-space: nowrap;
         }
-        
-        .dog-card:active {
-            background: #1a4a7a;
-        }
-
-        /* NEW-DOG FIX: Highlight animation for newly-added cards to draw attention */
-        @keyframes newCardHighlight {
-            0% { background: var(--fairy-tails-blue); transform: scale(1.05); }
-            100% { background: var(--bg-pen); transform: scale(1); }
-        }
-        
-        .dog-card.newly-added {
-            animation: newCardHighlight 0.6s ease-out forwards;
-        }
-
-        /* Hover only on devices with fine pointer (mouse) */
-        @media (hover: hover) and (pointer: fine) {
-            .dog-card:hover { background: #1a4a7a; }
-        }
-
-        .dog-card.dragging {
-            opacity: 0.4;
-            transform: scale(0.95);
-        }
-
-        .dog-card.unmatched {
-            border-left: 4px solid var(--accent-secondary);
-            min-width: 140px;
-            max-width: 170px;
-        }
-
-        .unmatched-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-        }
-
-        .unmatched-name {
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: var(--accent-secondary);
-        }
-
-        .unmatched-remove {
-            background: var(--status-none);
-            border: none;
-            color: white;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
+        .dog-card-remove {
+            display: grid; place-items: center;
+            width: 32px; height: 44px; flex: none;
+            border: 0; border-radius: var(--radius-sm);
+            background: transparent;
+            color: var(--color-neutral-600);
             cursor: pointer;
-            font-size: 1rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 44px;
-            min-height: 44px;
         }
-
+        .dog-card-remove:active { background: var(--color-neutral-300); color: var(--color-accent-800); }
+        .dog-card.unmatched { border-left-color: var(--color-accent); cursor: default; max-width: 240px; }
+        .unmatched-hint { font-size: 12px; font-weight: 700; color: var(--color-accent-700); }
+        .unmatched-picks { display: flex; flex-direction: column; gap: 5px; padding: 0 4px 6px 0; }
+        .unmatched-picks button {
+            text-align: left;
+            min-height: 42px;
+            padding: 0 12px;
+            border: 1px solid var(--color-accent-400);
+            border-radius: 99px;
+            background: var(--color-accent-100);
+            color: var(--color-accent-800);
+            font-size: 14px; font-weight: 700;
+            cursor: pointer;
+        }
+        .unmatched-picks button:active { background: var(--color-accent-200); }
         .unmatched-select {
             width: 100%;
-            padding: 10px 8px;
-            border: 1px solid var(--accent-secondary);
-            border-radius: 6px;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            font-family: inherit;
+            min-height: 44px;
+            padding: 0 10px;
+            border: 1px solid var(--color-accent-400);
+            border-radius: var(--radius-sm);
+            background: var(--color-accent-100);
+            color: var(--color-accent-800);
             font-size: 16px;
+            font-family: inherit;
         }
+        .unmatched-error { font-size: 12.5px; color: var(--color-accent-700); padding-bottom: 6px; }
 
-        .unmatched-error {
-            font-size: 0.7rem;
-            color: var(--status-none);
-            text-align: center;
-            padding: 5px;
-        }
+        /* ============================================================
+           PENS
+           ============================================================ */
+        .fb-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; }
+        .fb-group { display: flex; flex-direction: column; gap: 8px; }
+        .fb-group-head { display: flex; align-items: center; gap: 10px; }
+        .fb-group-head h2 { font-family: var(--font-heading); font-weight: 400; font-size: 17px; }
+        .fb-group-count { font-size: 13px; color: var(--color-neutral-700); }
+        .fb-rule { flex: 1; height: 1px; background: var(--color-divider); }
+        .fb-group-hint { font-size: 12px; color: var(--color-neutral-600); }
 
-        .count-badge {
-            background: var(--accent-primary);
-            color: white;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 0.8rem;
-            font-weight: 700;
-        }
+        .fb-pens { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 6px; }
+        body.is-dragging .fb-pens { scroll-snap-type: none; scroll-behavior: auto; }
 
-        .empty-message {
-            color: var(--text-secondary);
-            font-size: 0.85rem;
-            text-align: center;
-            padding: 20px;
-            font-style: italic;
-            width: 100%;
-        }
-
-        /* ============================================
-           PENS SECTION
-           ============================================ */
-
-        .main-content {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            min-width: 0;
-        }
-
-        .pens-section {
-            background: var(--bg-secondary);
-            border-radius: var(--radius);
-            padding: 15px;
-            box-shadow: var(--shadow);
-        }
-
-        .pen-row-label {
-            font-size: 0.85rem;
-            font-weight: 700;
-            color: var(--accent-secondary);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin: 0 0 10px 5px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .pen-row-label:not(:first-child) { margin-top: 15px; }
-
-        .swipe-hint {
-            font-size: 0.7rem;
-            color: var(--text-secondary);
-            font-weight: 400;
-            text-transform: none;
-            letter-spacing: 0;
-        }
-
-        /* ANDROID FIX: Horizontal scroll - allow BOTH x and y panning */
-        .pen-row-scroll {
-            overflow-x: auto;
-            overflow-y: hidden;
-            -webkit-overflow-scrolling: touch;
-            scroll-snap-type: x proximity;
-            scrollbar-width: thin;
-            scrollbar-color: var(--bg-pen) transparent;
-            padding-bottom: 8px;
-            margin: 0 -5px;
-            padding-left: 5px;
-            padding-right: 5px;
-            touch-action: pan-x pan-y !important;
-            display: flex;
-        }
-
-        .pen-row-scroll::-webkit-scrollbar {
-            height: 6px;
-        }
-
-        .pen-row-scroll::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        .pen-row-scroll::-webkit-scrollbar-thumb {
-            background: var(--bg-pen);
-            border-radius: 3px;
-        }
-
-        .pen-row {
-            display: flex;
-            gap: 12px;
-            min-width: max-content;
-        }
-
-        .pen {
-            background: var(--bg-pen);
-            border-radius: var(--radius);
-            width: 160px;
-            min-width: 160px;
-            min-height: 200px;
-            padding: 10px;
+        .fb-pen, .pen {
             display: flex;
             flex-direction: column;
             gap: 8px;
-            border: 2px solid transparent;
-            transition: border-color 0.2s ease, background-color 0.2s ease;
-            scroll-snap-align: start;
-            flex-shrink: 0;
+            flex: 0 0 84%;
+            scroll-snap-align: center;
+            min-height: 148px;
+            padding: 8px;
+            border-radius: var(--radius-lg);
+            background: var(--color-surface);
+            box-shadow: var(--shadow-sm);
+            transition: background .18s ease, box-shadow .18s ease;
         }
-
-        /* Hover only on devices with fine pointer (mouse) */
-        @media (hover: hover) and (pointer: fine) {
-            .pen:hover { border-color: rgba(233, 69, 96, 0.3); }
-        }
-
-        .pen.drop-ready {
-            border-color: rgba(0, 172, 238, 0.3);
-        }
-
+        .pen.drop-ready { box-shadow: inset 0 0 0 2px var(--color-neutral-300); }
         .pen.drag-over {
-            border-color: var(--fairy-tails-blue);
-            background: rgba(0, 172, 238, 0.2);
-            box-shadow: 0 0 20px rgba(0, 172, 238, 0.4);
+            background: var(--color-accent-200);
+            box-shadow: 0 0 0 3px var(--color-accent), var(--shadow-md);
         }
-
-        /* Within-pen drop indicator. Inset box-shadow (not border/margin) so it never reflows the
-           column or shifts the card midpoints computeDropIndex reads mid-drag. */
-        .pen-dog.drop-before { box-shadow: inset 0 3px 0 0 var(--fairy-tails-blue); }
-        .pen-dogs.drop-at-end > .pen-dog:last-child { box-shadow: inset 0 -3px 0 0 var(--fairy-tails-blue); }
-
-        .pen-header {
-            font-size: 0.8rem;
-            font-weight: 700;
-            color: var(--text-secondary);
+        .fb-pen-head { display: flex; align-items: center; gap: 6px; padding: 2px 4px 0; }
+        .fb-pen-label { font-family: var(--font-heading); font-weight: 400; font-size: 14px; flex: 1; }
+        .fb-pen-count {
+            display: grid; place-items: center;
+            min-width: 24px; height: 24px; padding: 0 7px;
+            border-radius: 99px;
+            background: var(--color-neutral-300);
+            color: var(--color-neutral-800);
+            font-size: 12px; font-weight: 700;
+        }
+        .fb-pen-count.is-zero { background: transparent; color: var(--color-neutral-600); }
+        .pen-dogs { flex: 1; display: flex; flex-direction: column; gap: 7px; }
+        .pen-empty {
+            display: grid; place-items: center;
+            min-height: 64px;
+            padding: 8px;
+            border-radius: var(--radius-md);
+            border: 2px dashed var(--color-neutral-400);
+            color: var(--color-neutral-600);
+            font-size: 12.5px;
             text-align: center;
-            padding-bottom: 8px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
         }
+        .pen.drag-over .pen-empty { border-color: var(--color-accent); color: var(--color-accent-700); }
 
-        .pen-dogs {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            overflow: visible;
-        }
-
-        /* Pen dog tile - touch-action auto allows scroll, only the name handle has none */
+        /* ---------------------------------------------------------- dog tile */
         .pen-dog {
-            background: var(--bg-secondary);
-            border-radius: 10px;
-            padding: 10px;
-            border-left: 5px solid var(--status-all);
-            transition: opacity 0.15s ease, border-left-color 0.15s ease;
-            touch-action: auto;  /* Allow scroll - drag handle (.pen-dog-name) has none */
-        }
-
-        /* Hover only on devices with fine pointer (mouse) */
-        @media (hover: hover) and (pointer: fine) {
-            .pen-dog:hover { background: rgba(22, 33, 62, 0.8); }
-        }
-        .pen-dog.status-all { border-left-color: var(--status-all); }
-        .pen-dog.status-three-quarter { border-left-color: var(--status-three-quarter); }
-        .pen-dog.status-half { border-left-color: var(--status-half); }
-        .pen-dog.status-quarter { border-left-color: var(--status-quarter); }
-        .pen-dog.status-none { border-left-color: var(--status-none); }
-
-        .pen-dog.dragging {
-            opacity: 0.4;
-            transform: scale(0.95);
-        }
-
-        .pen-dog-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-            gap: 8px;
-        }
-
-        /* Dog name - DRAG HANDLE with touch-action: none for Android compatibility */
-        .pen-dog-name {
-            font-size: 0.8rem;
-            font-weight: 700;
-            color: var(--text-primary);
+            border: 1px solid var(--color-divider);
+            border-left: 5px solid var(--portion-all);
+            border-radius: var(--radius-md);
+            background: var(--color-neutral-100);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
             cursor: grab;
-            touch-action: none;  /* CRITICAL: Must be none on drag handle */
-            user-select: none;
-            -webkit-user-select: none;
-            -webkit-touch-callout: none;
+            touch-action: pan-y;
+            user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+            transition: opacity .15s ease, box-shadow .18s ease, border-color .18s ease;
+        }
+        .pen-dog.is-expanded { box-shadow: var(--shadow-md); }
+        .pen-dog.status-all           { border-left-color: var(--portion-all); }
+        .pen-dog.status-three-quarter { border-left-color: var(--portion-three-quarter); }
+        .pen-dog.status-half          { border-left-color: var(--portion-half); }
+        .pen-dog.status-quarter       { border-left-color: var(--portion-quarter); }
+        .pen-dog.status-none          { border-left-color: var(--portion-none); }
+        .dog-card.status-all           { border-left-color: var(--portion-all); }
+        .dog-card.status-three-quarter { border-left-color: var(--portion-three-quarter); }
+        .dog-card.status-half          { border-left-color: var(--portion-half); }
+        .dog-card.status-quarter       { border-left-color: var(--portion-quarter); }
+        .dog-card.status-none          { border-left-color: var(--portion-none); }
+
+        /* Armed: the press has landed but has not yet become a drag. Written
+           straight to the DOM by FRMDrag, never through a re-render. */
+        .pen-dog[data-armed="true"], .dog-card[data-armed="true"] {
+            transform: scale(.975);
+            box-shadow: 0 0 0 3px var(--color-accent-300), var(--shadow-md);
+        }
+        .pen-dog.dragging, .dog-card.dragging { opacity: .35; filter: saturate(.4); }
+        body.is-dragging .pen-dog, body.is-dragging .dog-card { touch-action: none; }
+
+        /* A <button> is shrink-to-fit even at display:flex, so without a flex parent the
+           name row sized to its content and long names overflowed the tile. */
+        .pen-dog-row { display: flex; align-items: center; gap: 2px; padding: 2px 2px 2px 0; }
+        .pen-dog-toggle {
             flex: 1;
-            padding: 4px 0;
-            min-height: 28px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
+            min-width: 0;
+            display: flex; align-items: center; gap: 6px;
+            min-height: 44px;
+            padding: 0 8px;
+            border: 0;
+            background: transparent;
+            color: inherit;
+            text-align: left;
+            cursor: grab;
         }
-        
-        /* Drag grip icon - visual indicator for drag handle */
-        .pen-dog-name::before {
-            content: '⋮⋮';
-            font-size: 0.7rem;
-            color: var(--text-secondary);
-            letter-spacing: -3px;
-            opacity: 0.6;
+        .pen-dog-name {
+            flex: 1; min-width: 0;
+            font-size: 14.5px; font-weight: 700;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        
-        .pen-dog-name:active {
-            background: rgba(0, 172, 238, 0.1);
+        .pen-dog-badge {
+            display: grid; place-items: center;
+            width: 22px; height: 22px; flex: none;
+            border-radius: 99px;
+        }
+        .pen-dog-badge.is-meds { background: var(--color-accent-200);   color: var(--color-accent-800); }
+        .pen-dog-badge.is-supp { background: var(--color-accent-2-200); color: var(--color-accent-2-800); }
+        .pen-dog-chev {
+            display: grid; place-items: center;
+            width: 22px; height: 22px; flex: none;
+            color: var(--color-neutral-600);
+            transition: transform .2s ease;
+        }
+        .pen-dog.is-expanded .pen-dog-chev { transform: rotate(180deg); }
+
+        /* The portion control — the thing staff touch 20x a round. */
+        .portion-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr) 1.55fr;
+            gap: 3px;
+            padding: 0 5px 5px;
+        }
+        .p-btn {
+            min-height: 38px;
+            padding: 0 1px;
+            border: 1px solid transparent;
             border-radius: 4px;
-        }
-
-        .pen-dog-remove {
-            width: 28px;
-            height: 28px;
-            background: var(--status-none);
-            border: none;
-            border-radius: 50%;
-            color: white;
-            font-size: 0.9rem;
+            background: var(--color-neutral-200);
+            color: var(--color-neutral-800);
+            font-family: var(--font-heading);
+            font-weight: 400;
+            font-size: 15px;
+            line-height: 1;
+            overflow: hidden;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            transition: all 0.2s ease;
-            min-width: 36px;
-            min-height: 36px;
+            transition: background .16s ease, color .16s ease, border-color .16s ease;
         }
+        /* "All" and "None" are words, not glyphs — at a 5-across pen width the 15px used
+           for the fractions clips them. "None" is what the 1.55fr column is for; "All" gets
+           a step down instead of a wider column so the four fraction targets stay equal. */
+        .p-btn:first-child { border-radius: 99px 4px 4px 99px; font-size: 12.5px; }
+        .p-btn:last-child  { border-radius: 4px 99px 99px 4px; font-size: 10.5px; }
+        .p-btn.is-on[data-s="all"]           { background: var(--portion-all);           border-color: var(--portion-all);           color: var(--color-neutral-100); }
+        .p-btn.is-on[data-s="three-quarter"] { background: var(--portion-three-quarter); border-color: var(--portion-three-quarter); color: var(--color-neutral-900); }
+        .p-btn.is-on[data-s="half"]          { background: var(--portion-half);          border-color: var(--portion-half);          color: var(--color-neutral-900); }
+        .p-btn.is-on[data-s="quarter"]       { background: var(--portion-quarter);       border-color: var(--portion-quarter);       color: var(--color-neutral-100); }
+        .p-btn.is-on[data-s="none"]          { background: var(--portion-none);          border-color: var(--portion-none);          color: var(--color-neutral-100); }
 
-        .pen-dog-remove:hover { background: #c0392b; transform: scale(1.1); }
-
-        .pen-dog-controls {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 5px;
-            align-items: center;
+        .dog-panel {
+            border-top: 1px dashed var(--color-divider);
+            padding: 8px;
+            display: flex; flex-direction: column; gap: 8px;
+            animation: fbRise .3s cubic-bezier(.22,1,.36,1);
         }
-
-        .pen-dog-controls select {
-            padding: 8px 6px;
-            border: 1px solid var(--bg-pen);
-            border-radius: 6px;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            font-family: inherit;
-            font-size: 14px;
-            cursor: pointer;
-            min-width: 50px;
-            min-height: 36px;
-        }
-
+        /* A pen is ~176px wide at 5-across, so two 44px pills side by side clip their own
+           labels. auto-fit puts them on one row wherever there is genuinely room (phone
+           tray, wide window) and stacks them inside a narrow pen. */
+        .dog-panel-toggles { display: grid; grid-template-columns: repeat(auto-fit, minmax(124px, 1fr)); gap: 6px; }
         .toggle-btn {
-            padding: 8px 10px;
-            border: 1px solid var(--bg-pen);
-            border-radius: 6px;
-            background: var(--bg-primary);
-            color: var(--text-secondary);
-            font-family: inherit;
-            font-size: 0.7rem;
-            font-weight: 700;
+            min-width: 0;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+            min-height: 44px;
+            white-space: nowrap;
+            overflow: hidden;
+            border: 1px solid var(--color-divider);
+            border-radius: 99px;
+            background: var(--color-neutral-100);
+            color: var(--color-neutral-700);
+            font-size: 13px; font-weight: 700;
             cursor: pointer;
-            transition: all 0.2s ease;
-            min-height: 36px;
-            min-width: 40px;
         }
-
-        .toggle-btn:hover { border-color: var(--accent-secondary); }
-        .toggle-btn.active { background: var(--accent-secondary); border-color: var(--accent-secondary); color: white; }
-
-        .prescription-panel {
-            display: none;
-            margin-top: 8px;
-            padding-top: 8px;
-            border-top: 1px dashed rgba(255,255,255,0.1);
-        }
-
-        .prescription-panel.active { display: block; }
-
+        .toggle-btn.is-meds.active { background: var(--color-accent-200);   color: var(--color-accent-800);   border-color: var(--color-accent-400); }
+        .toggle-btn.is-supp.active { background: var(--color-accent-2-200); color: var(--color-accent-2-800); border-color: var(--color-accent-2-400); }
         .prescription-input {
             width: 100%;
-            padding: 10px;
-            border: 1px solid var(--accent-primary);
-            border-radius: 6px;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            font-family: inherit;
-            font-size: 14px;
+            min-height: 46px;
+            padding: 0 14px;
+            border: 1px solid var(--color-divider);
+            border-radius: var(--radius-md);
+            background: var(--color-neutral-100);
+            color: var(--color-text);
+            font-size: 16px;
         }
-
-        .prescription-input::placeholder { color: var(--text-secondary); }
-
-        .supplement-panel {
-            display: none;
-            margin-top: 8px;
-            padding-top: 8px;
-            border-top: 1px dashed rgba(255,255,255,0.1);
-        }
-
-        .supplement-panel.active { display: block; }
-
-        .supplement-checkboxes {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .supplement-checkbox {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            font-size: 0.7rem;
-            color: var(--text-secondary);
+        .prescription-input:focus { outline: none; border-color: var(--color-accent-400); }
+        /* Two per row inside a pen, four across in the phone tray — a wrapping flex row
+           put each chip on its own line at pen width and made the panel 4 rows tall. */
+        .supplement-chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); gap: 6px; }
+        .supplement-chips button {
+            min-height: 40px;
+            padding: 0 8px;
+            min-width: 0;
+            overflow: hidden;
+            white-space: nowrap;
+            border: 1px solid var(--color-divider);
+            border-radius: 99px;
+            background: var(--color-neutral-100);
+            color: var(--color-neutral-800);
+            font-size: 13px; font-weight: 700;
             cursor: pointer;
-            padding: 4px 8px;
-            background: var(--bg-primary);
-            border-radius: 4px;
         }
-
-        .supplement-checkbox input {
-            accent-color: var(--accent-secondary);
-            min-width: 18px;
-            min-height: 18px;
+        .supplement-chips button.is-on {
+            background: var(--color-accent-2-600);
+            border-color: var(--color-accent-2-600);
+            color: var(--color-neutral-100);
         }
-
-        /* Action Bar */
-        .action-bar {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            background: var(--bg-secondary);
-            border-radius: var(--radius);
-            padding: 15px;
-            box-shadow: var(--shadow);
+        .dog-remove-btn {
+            align-self: stretch;
+            display: flex; align-items: center; justify-content: center; gap: 7px;
+            min-height: 44px;
+            padding: 0 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            border: 1px solid var(--color-divider);
+            border-radius: 99px;
+            background: transparent;
+            color: var(--color-accent-800);
+            font-size: 13px; font-weight: 700;
+            cursor: pointer;
         }
+        .dog-remove-btn:active { background: var(--color-accent-200); border-color: var(--color-accent-400); }
 
-        /* Drag Ghost - MUST block touch */
+        /* Within-pen drop indicator. Inset box-shadow (not border/margin) so it can
+           never reflow the column or shift the card midpoints computeDropIndex reads
+           mid-drag. */
+        .pen-dog.drop-before { box-shadow: inset 0 3px 0 0 var(--color-accent), var(--shadow-sm); }
+        .pen-dogs.drop-at-end > .pen-dog:last-child { box-shadow: inset 0 -3px 0 0 var(--color-accent), var(--shadow-sm); }
+
+        /* ---------------------------------------------------------- ghost */
         .drag-ghost {
             position: fixed;
-            padding: 12px 20px;
-            background: var(--fairy-tails-blue);
-            color: white;
-            border-radius: 8px;
-            font-weight: 700;
-            font-size: 0.9rem;
-            pointer-events: none;
+            top: 0; left: 0;
             z-index: 10000;
-            box-shadow: 0 8px 25px rgba(0, 172, 238, 0.5);
-            transform: translate(-50%, -50%);
-            touch-action: none;
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 14px;
+            border-radius: var(--radius-md);
+            background: var(--color-neutral-100);
+            border: 1px solid var(--color-accent-400);
+            border-left: 5px solid var(--color-accent);
+            box-shadow: var(--shadow-lg);
+            font-size: 15px; font-weight: 700;
+            color: var(--color-text);
+            pointer-events: none;
+            will-change: transform;
+            transform-origin: top left;
+            white-space: nowrap;
         }
+        .drag-ghost > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+        .drag-ghost-hint { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--color-accent-700); }
 
-        /* Modal */
-        .modal-overlay {
+        /* ============================================================
+           BOTTOM SHEETS
+           ============================================================ */
+        .sheet-overlay {
             display: none;
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.8);
+            inset: 0;
             z-index: 5000;
-            padding: 20px;
-            overflow-y: auto;
+            background: rgba(46, 43, 37, 0.46);
+            align-items: flex-end;
+            justify-content: center;
         }
-
-        .modal-overlay.active { display: flex; align-items: center; justify-content: center; }
-
-        .modal {
-            background: var(--bg-secondary);
-            border-radius: var(--radius);
-            max-width: 600px;
+        .sheet-overlay.active { display: flex; }
+        .sheet {
             width: 100%;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px;
-            border-bottom: 1px solid var(--bg-pen);
-        }
-
-        .modal-header h2 {
-            font-size: 1.2rem;
-            color: var(--accent-primary);
-        }
-
-        .modal-close {
-            background: none;
-            border: none;
-            color: var(--text-secondary);
-            font-size: 1.5rem;
-            cursor: pointer;
-            min-width: 44px;
-            min-height: 44px;
-        }
-
-        .modal-body {
-            padding: 20px;
-            font-size: 0.9rem;
-            line-height: 1.6;
-        }
-
-        .modal-footer {
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-            padding: 20px;
-            border-top: 1px solid var(--bg-pen);
-        }
-
-        /* Toast */
-        .toast-container {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 9999;
+            max-width: 560px;
+            max-height: 92%;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            background: var(--color-bg);
+            border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+            box-shadow: var(--shadow-lg);
+            overflow: hidden;
+            animation: fbRise .3s cubic-bezier(.22,1,.36,1);
         }
-
-        .toast {
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            animation: slideUp 0.3s ease;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        .sheet-head {
+            display: flex; align-items: center; gap: 12px;
+            padding: 16px 16px 12px;
+            border-bottom: 1px solid var(--color-divider);
         }
-
-        .toast.success { background: var(--status-all); color: white; }
-        .toast.error { background: var(--status-none); color: white; }
-        .toast.info { background: var(--fairy-tails-blue); color: white; }
-
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+        .sheet-titles { flex: 1; min-width: 0; }
+        .sheet-titles h2 { font-family: var(--font-heading); font-weight: 400; font-size: 21px; }
+        .sheet-sub { font-size: 13px; color: var(--color-neutral-700); }
+        .sheet-close {
+            display: grid; place-items: center;
+            width: 44px; height: 44px; flex: none;
+            border: 1px solid var(--color-divider);
+            border-radius: 99px;
+            background: var(--color-neutral-100);
+            cursor: pointer;
         }
-
-        /* Preview Styling */
-        .preview-pen {
-            margin-bottom: 15px;
+        .sheet-body { flex: 1; overflow-y: auto; padding: 14px 16px; }
+        .sheet-foot {
+            display: flex; gap: 10px;
+            padding: 12px 16px 16px;
+            border-top: 1px solid var(--color-divider);
         }
+        .sheet-foot .fb-btn { min-height: 52px; white-space: nowrap; padding: 0 12px; }
+        .sheet-foot .fb-btn-submit { flex: 1.4; }
 
-        .preview-pen-title {
-            font-weight: 700;
-            color: var(--accent-secondary);
-            margin-bottom: 8px;
-            padding-bottom: 5px;
-            border-bottom: 1px solid var(--bg-pen);
-        }
-
-        .preview-dog {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px;
-            background: var(--bg-primary);
-            border-radius: 6px;
+        .sheet-block { margin-bottom: 14px; }
+        .sheet-block-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+        .sheet-block-head span:first-child { font-family: var(--font-heading); font-weight: 400; font-size: 14px; }
+        .sheet-block-count { font-size: 12.5px; color: var(--color-neutral-700); }
+        .sheet-row {
+            display: flex; align-items: center; gap: 10px;
+            padding: 9px 12px;
             margin-bottom: 5px;
+            border-radius: var(--radius-md);
+            background: var(--color-neutral-100);
+            border: 1px solid var(--color-divider);
+            border-left: 5px solid var(--portion-all);
+        }
+        .sheet-row-main { flex: 1; min-width: 0; }
+        .sheet-row-name { font-size: 14.5px; font-weight: 700; }
+        .sheet-row-extra { font-size: 12.5px; color: var(--color-accent-700); }
+        .sheet-pill {
+            font-family: var(--font-heading);
+            font-weight: 400;
+            font-size: 13px;
+            padding: 5px 11px;
+            border-radius: 99px;
+            flex: none;
+        }
+        .sheet-note {
+            padding: 12px 14px;
+            border-radius: var(--radius-md);
+            background: var(--color-accent-2-100);
+            border: 1px solid var(--color-accent-2-300);
+            font-size: 13.5px;
+            color: var(--color-accent-2-800);
+        }
+        .sheet-loading { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 36px 0; }
+        .sheet-spinner {
+            width: 38px; height: 38px;
+            border-radius: 99px;
+            border: 4px solid var(--color-neutral-300);
+            border-top-color: var(--color-accent);
+        }
+        .sheet-loading p { font-size: 14.5px; color: var(--color-neutral-700); text-align: center; max-width: 32ch; }
+
+        /* ============================================================
+           TOASTS
+           ============================================================ */
+        .toast-container {
+            position: fixed;
+            left: 50%;
+            bottom: 24px;
+            transform: translateX(-50%);
+            z-index: 9000;
+            display: flex;
+            flex-direction: column-reverse;
+            align-items: center;
+            gap: 8px;
+            max-width: 92%;
+            pointer-events: none;
+            transition: bottom .18s ease;
+        }
+        /* Raised while dragging so the ghost and the toast never fight. */
+        body.is-dragging .toast-container { bottom: 150px; }
+        .toast {
+            padding: 11px 18px;
+            border-radius: 99px;
+            background: var(--color-neutral-900);
+            color: var(--color-neutral-100);
+            box-shadow: var(--shadow-lg);
+            font-size: 14px; font-weight: 600;
+            text-align: center;
+            animation: fbPop .22s cubic-bezier(.22,1,.36,1);
+        }
+        .toast.success { box-shadow: 0 0 0 2px var(--color-accent-2-400), var(--shadow-lg); }
+        .toast.error   { background: var(--color-accent-800); box-shadow: 0 0 0 2px var(--color-accent-400), var(--shadow-lg); }
+        .toast.info    { box-shadow: 0 0 0 2px var(--color-neutral-600), var(--shadow-lg); }
+
+        /* ============================================================
+           LAYOUT — one markup tree, three shapes.
+           Deliberate deviation from the handoff: these are viewport @media
+           queries rather than @container queries on the board root. The board IS
+           the page here (no wrapper), so the two are pixel-identical — and @media
+           has no support cliff on an older tablet browser, where an unsupported
+           @container block would silently drop the ENTIRE layout. The root still
+           declares container-type, so an embed can switch these over later.
+           ============================================================ */
+
+        /* ---- phone portrait (base, <= 719px): the rail becomes a fixed tray ---- */
+        @media (max-width: 719px) {
+            .fb-shell { grid-template-columns: minmax(0, 1fr); }
+            .fb-main { padding-bottom: calc(var(--tray-h) + 24px); }
+            .fb-status { display: none; }
+
+            .fb-rail {
+                position: fixed;
+                left: 0; right: 0; bottom: 0;
+                z-index: 40;
+                gap: 8px;
+                max-height: 62vh;
+                overflow-y: auto;
+                padding: 10px 12px 12px;
+                background: var(--color-surface);
+                border-top: 1px solid var(--color-divider);
+                border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+                box-shadow: var(--shadow-lg);
+            }
+            /* The tray order the design calls for: meal, add, actions, staging. */
+            .fb-card-meal   { order: 1; }
+            .fb-card-add    { order: 2; }
+            .fb-actions     { order: 3; }
+            .fb-card-assign { order: 4; }
+
+            .fb-rail .fb-card {
+                background: transparent;
+                box-shadow: none;
+                border-radius: 0;
+                padding: 0;
+            }
+            .fb-rail .fb-card-title { display: none; }
+            .fb-card-meal { display: flex; align-items: center; gap: 8px; }
+            .fb-card-meal .fb-seg { flex: 1; }
+            .fb-btn-today { margin-top: 0; width: 44px; min-width: 44px; min-height: 44px; padding: 0; flex: none; }
+            .fb-btn-today.is-primary { min-height: 44px; }
+            .fb-btn-today span { display: none; }
+            .fb-card-assign .fb-card-head { margin-bottom: 6px; }
+            .fb-card-assign .fb-card-title { display: block; font-size: 14px; }
+            .staging-area {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                min-height: 64px;
+                align-items: center;
+            }
+            .staging-area .dog-card { flex: none; }
+            .staging-area .empty-message { white-space: nowrap; }
+            .bin { display: none; }
+            body.is-dragging .bin { display: flex; }
+            #previewBtn { display: none; }
+            .fb-clear-label { display: none; }
+            .fb-btn-quiet { min-width: 44px; padding: 0 12px; }
         }
 
-        .preview-dog-name { font-weight: 600; }
-        .preview-dog-status { color: var(--text-secondary); font-size: 0.85rem; }
-
-        .preview-extras {
-            margin-top: 3px;
-            font-size: 0.75rem;
-            color: var(--accent-secondary);
+        /* ---- tablet portrait / small windows (720px - 1059px) ---- */
+        @media (min-width: 720px) {
+            .fb-shell { grid-template-columns: minmax(0, 1fr); }
+            .fb-rail { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+            .fb-rail-wide { grid-column: 1 / -1; }
+            .fb-pens { scroll-snap-type: x proximity; }
+            .fb-pen, .pen { flex: 0 0 clamp(210px, 31%, 260px); scroll-snap-align: start; }
         }
 
-        /* Mobile Adjustments */
-        @media (max-width: 600px) {
-            .container { padding: 10px; }
-            h1 { font-size: 1.2rem; }
-            .header-logo { width: 32px; height: 32px; }
-            
-            .pen {
-                width: 150px;
-                min-width: 150px;
-                min-height: 180px;
+        /* ---- tablet landscape + desktop (>= 1060px): nothing hidden, no sideways scroll ---- */
+        @media (min-width: 1060px) {
+            html, body { height: 100%; overflow: hidden; }
+            .fb-root { height: 100%; min-height: 0; overflow: hidden; }
+            .fb-shell { grid-template-columns: 312px minmax(0, 1fr); }
+            .fb-rail {
+                display: flex; flex-direction: column; gap: 12px;
+                min-height: 0; max-height: 100%; overflow-y: auto; padding-right: 2px;
             }
-            
-            .action-bar {
-                grid-template-columns: 1fr 1fr;
+            .fb-main { overflow-y: auto; }
+            /* Preview + Submit must never be below the rail's fold. The rail scrolls (a
+               busy staging list with an unmatched dog is tall), so the actions ride the
+               bottom of it instead of scrolling away. */
+            .fb-actions {
+                position: sticky;
+                bottom: 0;
+                z-index: 2;
+                padding: 8px 0 2px;
+                margin-top: auto;
+                background: linear-gradient(to bottom, rgba(245,234,216,0), var(--color-bg) 34%);
             }
-            
-            .action-bar .btn:last-child {
-                grid-column: span 2;
+            .fb-pens {
+                display: grid;
+                grid-template-columns: repeat(5, minmax(0, 1fr));
+                overflow-x: visible;
+                scroll-snap-type: none;
+                padding-bottom: 0;
             }
+            .fb-pen, .pen { flex: initial; scroll-snap-align: none; }
+        }
+
+        @media (min-width: 1400px) {
+            .fb-shell { grid-template-columns: 340px minmax(0, 1fr); gap: 20px; }
         }
     </style>
 </head>
 <body>
     <div id="offlineBanner" class="offline-banner hidden" role="alert" aria-live="assertive">
-        <span class="offline-icon">⚠</span>
-        <span id="offlineBannerText">Connection lost. Your changes are saved on this device but NOT synced. Do not submit yet.</span>
+        <span class="offline-lamp fb-pulse" aria-hidden="true">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><path d="M2 8.8A16 16 0 0 1 22 8.8"></path><path d="M5.5 12.6A11 11 0 0 1 18.5 12.6"></path><path d="M9 16.4a6 6 0 0 1 6 0"></path><path d="m2 2 20 20"></path></svg>
+        </span>
+        <div class="offline-copy">
+            <div class="offline-title" id="offlineBannerText">Not synced — changes waiting</div>
+            <div class="offline-sub">Your edits are safe on this tablet. Submit is locked until they land.</div>
+        </div>
         <button type="button" id="offlineRetryBtn" onclick="retryConnection()">Retry now</button>
     </div>
-    <div class="container">
-        <div class="header">
-            <img src="https://i.ibb.co/whdBKp0L/Logo-1.jpg" alt="Fairy Tails" class="header-logo">
-            <h1>🍽️ Feeding Report</h1>
-        </div>
-        
-        <div class="status-bar connected" id="statusBar">
-            <div class="sync-indicator" id="syncIndicator"></div>
-            <span id="statusText">Connecting...</span>
-        </div>
 
-        <div class="layout">
-            <div class="sidebar">
-                <!-- Add Dog -->
-                <div class="entry-section">
-                    <div class="section-title">➕ Add Dog</div>
-                    <div class="entry-row">
-                        <input type="text" id="dogNameInput" placeholder="Type dog name..." autocomplete="off">
-                        <button class="btn btn-primary" onclick="addDog()" id="addDogBtn">Add</button>
-                    </div>
-                </div>
-
-                <!-- Quick Start: auto-add today's dogs from the Whiteboard -->
-                <div class="entry-section">
-                    <div class="section-title">⚡ Quick Start</div>
-                    <button class="btn btn-primary" id="addTodayBtn" onclick="addDogsForToday()" style="width:100%;">🐶 Add Dogs for Today</button>
-                </div>
-
-                <!-- Delete Bin -->
-                <div class="bin-section">
-                    <div class="bin" id="deleteBin">
-                        <span class="bin-icon">🗑️</span>
-                        <span>Drop here to delete</span>
-                    </div>
-                </div>
-
-                <!-- Meal Type -->
-                <div class="entry-section">
-                    <div class="section-title">🕐 Meal Type</div>
-                    <select id="mealType" class="meal-select" onchange="updateMealType()">
-                        <option value="Morning Meal">Morning Meal (Breakfast)</option>
-                        <option value="Lunch" selected>Lunch</option>
-                        <option value="Evening Meal">Evening Meal (Dinner)</option>
-                    </select>
-                </div>
-
-                <!-- Staging Area -->
-                <div class="staging-section">
-                    <div class="staging-header">
-                        <span class="section-title">🐕 Dogs to Assign</span>
-                        <span class="count-badge" id="stagingCount">0</span>
-                    </div>
-                    <div class="staging-area" id="stagingArea">
-                        <div class="empty-message">Type a dog name above to get started</div>
-                    </div>
-                </div>
+    <div class="fb-root" id="fbRoot">
+        <header class="fb-header">
+            <span class="fb-mark" aria-hidden="true">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11h18"></path><path d="M4.5 11a7.5 7.5 0 0 0 15 0"></path><path d="M12 18.5V21"></path></svg>
+            </span>
+            <div class="fb-title-wrap">
+                <h1>Feeding round</h1>
+                <div class="fb-subtitle" id="fbSubtitle">Lunch</div>
             </div>
+            <div class="fb-status" id="statusText">Connecting…</div>
+            <div class="fb-conn" id="connPill">
+                <span class="fb-conn-dot" id="syncIndicator"></span>
+                <span id="connLabel">Connecting…</span>
+            </div>
+        </header>
 
-            <div class="main-content">
-                <!-- Pens Section -->
-                <div class="pens-section">
-                    <div class="pen-row-label">
-                        Top Pens
-                        <span class="swipe-hint">← swipe →</span>
+        <div class="fb-shell">
+            <aside class="fb-rail" id="fbRail">
+                <section class="fb-card fb-card-add">
+                    <h2 class="fb-card-title">Add a dog</h2>
+                    <div class="fb-add-row">
+                        <input type="text" id="dogNameInput" class="fb-input" placeholder="Type a name…" autocomplete="off" aria-label="Add a dog">
+                        <button class="fb-icon-btn fb-icon-btn-primary" id="addDogBtn" onclick="addDog()" aria-label="Add dog">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+                        </button>
                     </div>
-                    <div class="pen-row-scroll">
-                        <div class="pen-row" id="topPens"></div>
-                    </div>
-                    
-                    <div class="pen-row-label">
-                        Bottom Pens
-                        <span class="swipe-hint">← swipe →</span>
-                    </div>
-                    <div class="pen-row-scroll">
-                        <div class="pen-row" id="bottomPens"></div>
-                    </div>
-                </div>
+                    <div class="fb-suggest" id="addSuggestions" role="listbox" aria-label="Matching dogs"></div>
+                </section>
 
-                <!-- Action Buttons -->
-                <div class="action-bar">
-                    <button class="btn btn-secondary" onclick="showPreview()">📋 Preview</button>
-                    <button class="btn btn-success" id="submitBtn" onclick="submitReport()">✅ Submit</button>
-                    <button class="btn btn-secondary" onclick="clearAll()">🗑️ Clear All</button>
+                <section class="fb-card fb-card-meal">
+                    <h2 class="fb-card-title">Meal</h2>
+                    <div class="fb-seg" id="mealSegments" role="radiogroup" aria-label="Meal type"></div>
+                    <button class="fb-btn fb-btn-today" id="addTodayBtn" onclick="addDogsForToday()">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.1 13.4a.7.7 0 0 0 .55 1.13h5.2l-1.35 7.2a.35.35 0 0 0 .62.28L18.9 10.6a.7.7 0 0 0-.55-1.13h-5.2l1.35-7.2A.35.35 0 0 0 13 2Z"></path></svg>
+                        <span>Add today&rsquo;s dogs</span>
+                    </button>
+                </section>
+
+                <section class="fb-card fb-card-assign fb-rail-wide">
+                    <div class="fb-card-head">
+                        <h2 class="fb-card-title">To assign</h2>
+                        <span class="fb-tag" id="stagingCount">0</span>
+                    </div>
+                    <div class="staging-area" id="stagingArea"></div>
+                    <div class="bin" id="deleteBin">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"></path></svg>
+                        <span id="binLabel">Drop to remove</span>
+                    </div>
+                </section>
+
+                <section class="fb-actions fb-rail-wide">
+                    <button class="fb-btn" id="previewBtn" onclick="showPreview()">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="3"></rect><path d="M8 8h8M8 12h8M8 16h4"></path></svg>
+                        <span>Preview</span>
+                    </button>
+                    <button class="fb-btn fb-btn-submit" id="submitBtn" onclick="submitReport()">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12.5 5 5L20 6.5"></path></svg>
+                        <span>Submit</span>
+                    </button>
+                    <button class="fb-btn fb-btn-quiet" id="clearAllBtn" onclick="clearAll()" title="Clear the whole board on every device" aria-label="Clear the board">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"></path></svg>
+                        <span class="fb-clear-label">Clear board</span>
+                    </button>
+                </section>
+            </aside>
+
+            <main class="fb-main fb-scroll" id="fbMain">
+                <section class="fb-group">
+                    <div class="fb-group-head">
+                        <h2>Top pens</h2>
+                        <span class="fb-group-count" id="topCount">0 dogs</span>
+                        <span class="fb-rule"></span>
+                        <span class="fb-group-hint">up to 3 dogs</span>
+                    </div>
+                    <div class="fb-pens fb-scroll" id="topPens"></div>
+                </section>
+
+                <section class="fb-group">
+                    <div class="fb-group-head">
+                        <h2>Bottom pens</h2>
+                        <span class="fb-group-count" id="bottomCount">0 dogs</span>
+                        <span class="fb-rule"></span>
+                        <span class="fb-group-hint">up to 5 dogs</span>
+                    </div>
+                    <div class="fb-pens fb-scroll" id="bottomPens"></div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <!-- Ready-to-submit sheet -->
+    <div class="sheet-overlay" id="previewModal" role="dialog" aria-modal="true" aria-labelledby="previewSheetTitle">
+        <div class="sheet">
+            <div class="sheet-head">
+                <div class="sheet-titles">
+                    <h2 id="previewSheetTitle">Ready to submit</h2>
+                    <div class="sheet-sub" id="previewSheetSub"></div>
                 </div>
+                <button class="sheet-close" onclick="closePreview()" aria-label="Close">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="sheet-body fb-scroll" id="previewContent"></div>
+            <div class="sheet-foot">
+                <button class="fb-btn" onclick="closePreview()">Keep editing</button>
+                <button class="fb-btn fb-btn-submit" id="confirmSubmitBtn" onclick="confirmSubmit()">Submit report</button>
             </div>
         </div>
     </div>
 
-    <!-- Preview Modal -->
-    <div class="modal-overlay" id="previewModal">
-        <div class="modal">
-            <div class="modal-header">
-                <h2>📋 Report Preview</h2>
-                <button class="modal-close" onclick="closePreview()">×</button>
+    <!-- Today's dogs sheet (progress + result; the add decision stays a blocking confirm) -->
+    <div class="sheet-overlay" id="todaySheet" role="dialog" aria-modal="true" aria-labelledby="todaySheetTitle">
+        <div class="sheet">
+            <div class="sheet-head">
+                <div class="sheet-titles">
+                    <h2 id="todaySheetTitle">Today&rsquo;s dogs</h2>
+                    <div class="sheet-sub" id="todaySheetSub">Checking the whiteboard…</div>
+                </div>
+                <button class="sheet-close" onclick="closeTodaySheet()" aria-label="Close">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+                </button>
             </div>
-            <div class="modal-body" id="previewContent"></div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closePreview()">Back</button>
-                <button class="btn btn-success" id="confirmSubmitBtn" onclick="confirmSubmit()">Submit</button>
-            </div>
+            <div class="sheet-body fb-scroll" id="todaySheetBody"></div>
+            <div class="sheet-foot" id="todaySheetFoot"></div>
         </div>
     </div>
 
     <div class="toast-container" id="toastContainer"></div>
+    <div id="dragLiveRegion" class="sr-only" aria-live="polite"></div>
 
     <script>
         // ============================================
         // CONFIGURATION
         // ============================================
-        
+
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwP74AXOe1cZmHKTxi9KbMhZJU48EHRFI7NQ6Og65_FcTVB1sMQuqgkPKIkr7Fm7e40mw/exec';
 
         // ⚠️ THE LIVE SESSION MOVED OFF APPS SCRIPT (@36, 2026-08-05) — see shared/contract.js.
@@ -1105,7 +1154,7 @@
         // 0.70s, worst 1.83s, zero failures. A bare GAS ping doing no spreadsheet work was
         // equally slow, so the fault was Google's dispatch layer, not the data.
         const SESSION_API_URL = 'https://auto.thefairytails.co.uk/webhook/feeding-session';
-        
+
         const SYNC_INTERVAL = 5000;
         const SYNC_PAUSE_DURATION = 8000;
         const INITIAL_LOAD_DELAY = 2000;
@@ -1128,6 +1177,10 @@
             { id: 'probiotics', label: 'Probiotics', jotformValue: 'FortiFlora Probiotics' }
         ];
 
+        // The backend's plain-text labels for each status value. Used for aria-labels and the
+        // Telegram-side wording; the on-screen glyphs live in PORTION_META below. The VALUES
+        // ('all' | 'three-quarter' | 'half' | 'quarter' | 'none') are shared contract —
+        // shared/contract.js STATUS_VALUES — the glyphs deliberately are not.
         const FEEDING_STATUS_MAP = {
             'all': 'All',
             'three-quarter': '3/4',
@@ -1136,32 +1189,66 @@
             'none': 'None'
         };
 
+        // Per-surface presentation of those same values, in canonical order (the order the
+        // portion control renders in). `pillBg`/`pillFg` are the submit-sheet pill colours.
+        const PORTION_META = [
+            { id: 'all',           label: 'All',  a11y: 'Ate all',            pillBg: 'var(--color-accent-2-200)', pillFg: 'var(--color-accent-2-800)' },
+            { id: 'three-quarter', label: '¾', a11y: 'Ate three quarters', pillBg: 'var(--color-accent-2-100)', pillFg: 'var(--color-accent-2-800)' },
+            { id: 'half',          label: '½', a11y: 'Ate half',           pillBg: 'var(--color-accent-200)',   pillFg: 'var(--color-accent-800)' },
+            { id: 'quarter',       label: '¼', a11y: 'Ate a quarter',      pillBg: 'var(--color-accent-300)',   pillFg: 'var(--color-accent-900)' },
+            { id: 'none',          label: 'None', a11y: 'Ate nothing',        pillBg: 'var(--color-accent-700)',   pillFg: 'var(--color-accent-100)' }
+        ];
+
+        const MEAL_TYPES = [
+            { id: 'Morning Meal', short: 'Morning' },
+            { id: 'Lunch',        short: 'Lunch' },
+            { id: 'Evening Meal', short: 'Evening' }
+        ];
+
+        // Lucide-style outlines, stroke-width 2.75, currentColor. No emoji, no icon font.
+        const ICON = {
+            plus:    '<path d="M12 5v14M5 12h14"></path>',
+            chevron: '<path d="m6 9 6 6 6-6"></path>',
+            close:   '<path d="M18 6 6 18M6 6l12 12"></path>',
+            trash:   '<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"></path>',
+            meds:    '<rect x="2.5" y="8.5" width="19" height="7" rx="3.5" transform="rotate(-45 12 12)"></rect><path d="M8.5 8.5 15.5 15.5"></path>',
+            leaf:    '<path d="M20 4c0 9-5.5 13-11 13a5.5 5.5 0 0 1 0-11c5 0 8-1 11-2Z"></path><path d="M4 20c2-5 5-8 9-10"></path>'
+        };
+
+        function svg(paths, size, extra) {
+            return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+                   'stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"' +
+                   (extra ? ' ' + extra : '') + '>' + paths + '</svg>';
+        }
+
+        // Every string that reaches innerHTML from data (dog names, medicine text, roster
+        // names) goes through this. The old build interpolated names raw.
+        function esc(value) {
+            return String(value === null || value === undefined ? '' : value)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
         // ============================================
         // STATE
         // ============================================
-        
+
         let dogNameList = JOTFORM_DOG_NAMES;
         let masterDogList = [];
         let dogs = [];
         let pens = {};
+
+        // Kept as module state because showDropIndicator() reads them while a drag is live.
+        // FRMDrag owns their lifetime (set at lift, cleared at release).
         let draggedDogId = null;
         let draggedFromPen = null;
-        let ghostElement = null;
-        let dragTimeout = null;
-        let touchStartPos = null;
-        let isDragging = false;
-        let pendingDragInfo = null;
-        
-        // TOUCH EVENT FIX: Store the element being dragged
-        let dragSourceElement = null;
-        
-        // Settings - PROVEN VALUES
-        const LONG_PRESS_DURATION = 300;  // Longer for reliable detection
-        const SCROLL_THRESHOLD = 8;       // Balance between scroll detection and finger squish
-        
+
+        // View-only, never synced: which tile is open (one at a time).
+        let expandedDogId = null;
+
         let isOnline = true;   // optimistic; flipped false only after OFFLINE_THRESHOLD consecutive failures
         let currentMealType = 'Lunch';
-        
+
         let lastSyncVersion = 0;
         let syncInterval = null;
         let isSyncing = false;
@@ -1169,15 +1256,6 @@
         let pendingDogIds = new Set();
         let initialLoadComplete = false;
         let lastDogListRefresh = 0;
-        
-        // Store scroll position when locking body
-        let scrollPositionBeforeDrag = 0;
-        
-        // Bound function references for proper removal
-        let boundTouchMove = null;
-        let boundTouchEnd = null;
-        let boundMouseMove = null;
-        let boundMouseUp = null;
 
         // ============================================
         // CONNECTION HEALTH (offline detection + persistence)
@@ -1282,27 +1360,39 @@
             });
         }
 
-        // Single owner of the banner + Submit-button state. "Safe to submit" requires BOTH
-        // a reachable server AND an empty outbound queue, so a cheap heartbeat ping can never
-        // re-enable Submit while local edits are still unsynced.
+        // Single owner of the banner + Submit-button state + the header connection pill.
+        // "Safe to submit" requires BOTH a reachable server AND an empty outbound queue, so a
+        // cheap heartbeat ping can never re-enable Submit while local edits are still unsynced.
+        // ⚠️ Do not add a second writer for the pill or the banner — one owner is the invariant.
         function updateConnectionUI() {
             const pending = mutationQueue.length;
             const healthy = isOnline && pending === 0;
             if (!isOnline) {
-                showOfflineBanner('⚠ Connection lost. Your changes are saved on this device but NOT synced. Do not submit yet.');
+                showOfflineBanner('Not synced — ' + pending + ' change' + (pending === 1 ? '' : 's') + ' waiting');
                 disableSubmitButton('Cannot submit while disconnected');
-                updateStatus('⚠ DISCONNECTED — changes saved on this device', 'error');
+                updateStatus('Disconnected — changes saved on this device', 'error');
+                setConnectionPill('offline', 'Offline');
             } else if (pending > 0) {
                 // Reachable but still flushing local edits — don't alarm, but block submit.
                 hideOfflineBanner();
                 disableSubmitButton('Waiting for ' + pending + ' change(s) to sync');
                 updateStatus('Syncing ' + pending + ' change(s)…', 'syncing');
+                setConnectionPill('syncing', 'Syncing ' + pending + '…');
             } else {
                 hideOfflineBanner();
                 enableSubmitButton();
+                setConnectionPill('ok', 'All saved');
             }
-            if (healthy && !lastHealthy) showToast('✓ Reconnected & synced', 'success');
+            if (healthy && !lastHealthy) showToast('Reconnected & synced', 'success');
             lastHealthy = healthy;
+        }
+
+        function setConnectionPill(state, label) {
+            const pill = document.getElementById('connPill');
+            const text = document.getElementById('connLabel');
+            if (text) text.textContent = label;
+            if (!pill) return;
+            pill.className = 'fb-conn' + (state === 'ok' ? '' : ' is-' + state);
         }
 
         // Debounced: a single transient blip won't raise the banner / block Submit. The connection
@@ -1339,7 +1429,7 @@
         }
 
         // ----- Durable outbound mutation queue -----
-        // Every local edit is recorded here and flushed to the Session sheet IN ORDER.
+        // Every local edit is recorded here and flushed to the live session IN ORDER.
         // This queue is the single source of truth for unsynced work and survives reloads/
         // crashes, so applyRemoteState's server snapshot can never silently destroy local edits.
 
@@ -1479,6 +1569,8 @@
         document.addEventListener('DOMContentLoaded', () => {
             initPens();
             setupEventListeners();
+            renderMealSegments();
+            renderBoardChrome();
             initialLoad();
         });
 
@@ -1517,418 +1609,533 @@
                 topPensContainer.innerHTML += createPenHTML(`top-${i}`, `Top ${i}`);
                 bottomPensContainer.innerHTML += createPenHTML(`bottom-${i}`, `Bottom ${i}`);
             }
-
-            document.querySelectorAll('.pen').forEach(pen => {
-                pen.addEventListener('pointerenter', handlePenEnter);
-                pen.addEventListener('pointerleave', handlePenLeave);
-            });
-
-            const bin = document.getElementById('deleteBin');
-            bin.addEventListener('pointerenter', handleBinEnter);
-            bin.addEventListener('pointerleave', handleBinLeave);
-
-            const staging = document.getElementById('stagingArea');
-            staging.addEventListener('pointerenter', handleStagingEnter);
-            staging.addEventListener('pointerleave', handleStagingLeave);
         }
 
         function createPenHTML(penId, label) {
             return `
-                <div class="pen" data-pen-id="${penId}">
-                    <div class="pen-header">${label}</div>
+                <div class="fb-pen pen" data-pen-id="${penId}">
+                    <div class="fb-pen-head">
+                        <span class="fb-pen-label">${label}</span>
+                        <span class="fb-pen-count is-zero" id="pencount-${penId}">0</span>
+                    </div>
                     <div class="pen-dogs" id="pen-${penId}"></div>
                 </div>
             `;
         }
 
         function setupEventListeners() {
-            document.getElementById('dogNameInput').addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') addDog();
+            const input = document.getElementById('dogNameInput');
+            if (input) {
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); addDog(); }
+                    if (e.key === 'Escape') { input.value = ''; renderSuggestions(); }
+                });
+                input.addEventListener('input', renderSuggestions);
+            }
+
+            // Close a sheet by tapping the scrim (not the sheet itself).
+            ['previewModal', 'todaySheet'].forEach(id => {
+                const overlay = document.getElementById(id);
+                if (!overlay || !overlay.addEventListener) return;
+                overlay.addEventListener('click', (e) => {
+                    if (e.target === overlay) {
+                        if (id === 'previewModal') closePreview(); else closeTodaySheet();
+                    }
+                });
             });
-            
-            // ANDROID FIX: Prevent native context menu (Download/Share/Print) on long-press
-            // This fires on ALL elements but we only preventDefault on draggable targets
-            document.addEventListener('contextmenu', function(e) {
-                const draggable = e.target.closest('[data-draggable="true"]');
-                const dogCard = e.target.closest('.dog-card');
-                const penDog = e.target.closest('.pen-dog');
-                if (draggable || dogCard || penDog) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    return false;
+            document.addEventListener('keydown', (e) => {
+                if (e.key !== 'Escape') return;
+                closePreview();
+                closeTodaySheet();
+            });
+
+            if (window.addEventListener) {
+                window.addEventListener('resize', measureTray);
+                window.addEventListener('orientationchange', measureTray);
+            }
+
+            // The rewritten drag engine. It registers its own document-level listeners —
+            // there is no separate touchstart/mousedown/contextmenu wiring any more.
+            FRMDrag.init();
+        }
+
+        // The phone tray is position:fixed, so the pen column needs to know how tall it is or
+        // the last pen sits underneath it. Measured rather than guessed — the tray's height
+        // changes with the suggestion list, the staging strip and the delete bin.
+        function measureTray() {
+            const rail = document.getElementById('fbRail');
+            const root = document.getElementById('fbRoot');
+            if (!rail || !root || !root.style || !root.style.setProperty) return;
+            const h = (rail.getBoundingClientRect && rail.getBoundingClientRect().height) || 0;
+            root.style.setProperty('--tray-h', Math.round(h) + 'px');
+        }
+
+        // ============================================================================
+        // DRAG ENGINE  (FRMDrag)
+        // ============================================================================
+        // Replaces the whole 2026-06 touch/mouse handler block. Three specific causes of
+        // the Android failure are removed, and each removal is load-bearing:
+        //
+        //  1. The non-passive `touchmove` listener is registered ONCE AT INIT, not when a
+        //     drag starts. Chrome decides whether a gesture is a scroll on its first moves;
+        //     a listener attached 300ms later can no longer cancel one.
+        //  2. `setPointerCapture` is taken WHEN THE DRAG STARTS, never on pointerdown.
+        //     Capturing on pointerdown retargets pointerup, so the browser resolves the
+        //     click against the tile instead of the button inside it — that silently kills
+        //     every tap on the portion segments and the expand chevron.
+        //  3. No `body { overflow: hidden }`. That lock is what makes the page jump under
+        //     the finger. Scrolling is prevented by cancelling touchmove, and the board
+        //     auto-scrolls at the edges instead, so an off-screen pen is reachable in one
+        //     gesture.
+        //
+        // Deviation from the handoff engine, on purpose: the pointermove/up/cancel listeners
+        // live on DOCUMENT, not on the tile. An element-level listener dies if the node is
+        // replaced mid-gesture (a poll, a re-render), and that is precisely when a drag must
+        // not be dropped. Pointer capture still retargets the events, and they still bubble
+        // to document, so both properties hold at once.
+        //
+        // It reuses, and does not reimplement: computeDropIndex, moveDogToPen, deleteDog,
+        // showDropZones, hideDropZones, showDropIndicator, clearDropIndicator, triggerHaptic,
+        // showToast, getDogDisplayName.
+        var FRMDrag = (function () {
+            'use strict';
+
+            var LONG_PRESS_MS     = 300;   // hold before a touch becomes a drag
+            var SCROLL_CANCEL_PX  = 10;    // movement before the press lands = it was a scroll
+            var CLICK_SUPPRESS_MS = 320;   // ignore the click that follows a completed drag
+            var EDGE = 84;                 // auto-scroll trigger zone, px from a scroller's edge
+            var MAX_SPEED = 24;            // auto-scroll px per frame at full push
+            var EDGE_PAD = 48;             // tolerance when testing if the pointer is beside a scroller
+
+            var press = null;      // {dogId, fromPen, pointerId, sx, sy, ox, oy, w, tile}
+            var drag = null;       // {dogId, fromPen}
+            var pt = null;         // latest pointer position, client coords
+            var ghost = null;
+            var raf = null;
+            var timer = null;
+            var scrollers = null;  // measured once at lift
+            var over = null;       // {kind:'pen'|'bin'|'stage', id, index}
+            var suppressClickUntil = 0;
+            var bound = false;
+
+            function isDragging() { return !!drag; }
+
+            function clearTimer() { if (timer) { clearTimeout(timer); timer = null; } }
+            function armedOn(el)  { if (el && el.setAttribute) el.setAttribute('data-armed', 'true'); }
+            function armedOff(el) { if (el && el.removeAttribute) el.removeAttribute('data-armed'); }
+
+            function bindMoves() {
+                if (bound) return;
+                document.addEventListener('pointermove', onMove);
+                document.addEventListener('pointerup', onUp);
+                document.addEventListener('pointercancel', onCancel);
+                bound = true;
+            }
+
+            function unbind() {
+                if (bound) {
+                    document.removeEventListener('pointermove', onMove);
+                    document.removeEventListener('pointerup', onUp);
+                    document.removeEventListener('pointercancel', onCancel);
+                    bound = false;
                 }
-            }, { passive: false });
-            
-            // TOUCH EVENTS - Use separate touch and mouse handlers
-            // Touch events for mobile
-            document.addEventListener('touchstart', handleTouchStart, { passive: true });
-            // Mouse events for desktop fallback
-            document.addEventListener('mousedown', handleMouseDown, { passive: true });
-        }
-        
-        // ============================================
-        // TOUCH HANDLERS (Mobile)
-        // ============================================
-        
-        function handleTouchStart(e) {
-            if (e.touches.length !== 1) return; // Only single touch
-            
-            const touch = e.touches[0];
-            const draggable = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('[data-draggable="true"]');
-            if (!draggable) return;
-            
-            const dogId = draggable.dataset.dogId;
-            const penId = draggable.dataset.penId || null;
-            if (!dogId) return;
-            
-            touchStartPos = { x: touch.clientX, y: touch.clientY };
-            dragSourceElement = draggable;
-            pendingDragInfo = { 
-                dogId, 
-                fromPen: penId, 
-                coords: { x: touch.clientX, y: touch.clientY }
-            };
-            
-            if (dragTimeout) clearTimeout(dragTimeout);
-            
-            // Start long-press timer
-            dragTimeout = setTimeout(() => {
-                if (pendingDragInfo && touchStartPos) {
-                    startDragTouch(pendingDragInfo);
-                }
-            }, LONG_PRESS_DURATION);
-            
-            // Listen for movement/cancel (passive to allow scroll initially)
-            document.addEventListener('touchmove', checkTouchScroll, { passive: true });
-            document.addEventListener('touchend', cancelTouchDrag);
-            document.addEventListener('touchcancel', cancelTouchDrag);
-        }
-        
-        function checkTouchScroll(e) {
-            if (!touchStartPos || isDragging) return;
-            
-            const touch = e.touches[0];
-            const dx = Math.abs(touch.clientX - touchStartPos.x);
-            const dy = Math.abs(touch.clientY - touchStartPos.y);
-            
-            // If moved too much before timer, it's a scroll - cancel drag
-            if (dx > SCROLL_THRESHOLD || dy > SCROLL_THRESHOLD) {
-                cancelTouchDrag();
-            }
-        }
-        
-        function cancelTouchDrag() {
-            if (dragTimeout) {
-                clearTimeout(dragTimeout);
-                dragTimeout = null;
-            }
-            touchStartPos = null;
-            pendingDragInfo = null;
-            dragSourceElement = null;
-            
-            // GHOST FIX: Clean up any ghost elements or dragging classes left from interrupted drags
-            removeGhostElement();
-            document.querySelectorAll('.drag-ghost').forEach(el => el.remove());
-            document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
-            clearDropIndicator();
-
-            document.removeEventListener('touchmove', checkTouchScroll);
-            document.removeEventListener('touchend', cancelTouchDrag);
-            document.removeEventListener('touchcancel', cancelTouchDrag);
-        }
-        
-        function startDragTouch(dragInfo) {
-            // Remove the scroll-checking listeners
-            document.removeEventListener('touchmove', checkTouchScroll);
-            document.removeEventListener('touchend', cancelTouchDrag);
-            document.removeEventListener('touchcancel', cancelTouchDrag);
-            
-            // Now we're dragging - set up state
-            isDragging = true;
-            draggedDogId = dragInfo.dogId;
-            draggedFromPen = dragInfo.fromPen;
-            
-            // Lock body scroll (no position fixed - prevents visual jump)
-            document.body.classList.add('is-dragging');
-            
-            triggerHaptic('medium');
-            
-            // Mark source element visually
-            if (dragSourceElement) {
-                const parent = dragSourceElement.closest('.dog-card, .pen-dog');
-                if (parent) parent.classList.add('dragging');
-            }
-            
-            // Create ghost and show drop zones
-            createGhostElement(dragInfo.dogId, dragInfo.coords.x, dragInfo.coords.y);
-            showDropZones();
-            
-            // CRITICAL: Add NON-PASSIVE touchmove listener to block scrolling
-            // This is the key - we call preventDefault() to stop scroll
-            boundTouchMove = handleTouchMove;
-            boundTouchEnd = handleTouchEnd;
-            document.addEventListener('touchmove', boundTouchMove, { passive: false });
-            document.addEventListener('touchend', boundTouchEnd);
-            document.addEventListener('touchcancel', boundTouchEnd);
-        }
-        
-        function handleTouchMove(e) {
-            if (!isDragging) return;
-            
-            // CRITICAL: Prevent default to STOP scrolling
-            e.preventDefault();
-            
-            const touch = e.touches[0];
-            
-            if (ghostElement) {
-                ghostElement.style.left = touch.clientX + 'px';
-                ghostElement.style.top = touch.clientY + 'px';
-            }
-            
-            // Check drop targets
-            updateDropTargetHighlight(touch.clientX, touch.clientY);
-        }
-        
-        async function handleTouchEnd(e) {
-            // Remove listeners
-            document.removeEventListener('touchmove', boundTouchMove);
-            document.removeEventListener('touchend', boundTouchEnd);
-            document.removeEventListener('touchcancel', boundTouchEnd);
-            
-            // Get final position from changedTouches
-            const touch = e.changedTouches[0];
-            const finalX = touch.clientX;
-            const finalY = touch.clientY;
-            
-            // Clean up and process drop
-            await finishDrag(finalX, finalY);
-        }
-        
-        // ============================================
-        // MOUSE HANDLERS (Desktop fallback)
-        // ============================================
-        
-        function handleMouseDown(e) {
-            // Skip if touch device or not left click
-            if (e.button !== 0) return;
-            
-            const draggable = e.target.closest('[data-draggable="true"]');
-            if (!draggable) return;
-            
-            const dogId = draggable.dataset.dogId;
-            const penId = draggable.dataset.penId || null;
-            if (!dogId) return;
-            
-            touchStartPos = { x: e.clientX, y: e.clientY };
-            dragSourceElement = draggable;
-            pendingDragInfo = { 
-                dogId, 
-                fromPen: penId, 
-                coords: { x: e.clientX, y: e.clientY }
-            };
-            
-            if (dragTimeout) clearTimeout(dragTimeout);
-            
-            // For mouse, we can start drag immediately on movement
-            // Or use long press - let's use long press for consistency
-            dragTimeout = setTimeout(() => {
-                if (pendingDragInfo && touchStartPos) {
-                    startDragMouse(pendingDragInfo);
-                }
-            }, LONG_PRESS_DURATION);
-            
-            document.addEventListener('mousemove', checkMouseScroll);
-            document.addEventListener('mouseup', cancelMouseDrag);
-        }
-        
-        function checkMouseScroll(e) {
-            if (!touchStartPos || isDragging) return;
-            
-            const dx = Math.abs(e.clientX - touchStartPos.x);
-            const dy = Math.abs(e.clientY - touchStartPos.y);
-            
-            if (dx > SCROLL_THRESHOLD || dy > SCROLL_THRESHOLD) {
-                cancelMouseDrag();
-            }
-        }
-        
-        function cancelMouseDrag() {
-            if (dragTimeout) {
-                clearTimeout(dragTimeout);
-                dragTimeout = null;
-            }
-            touchStartPos = null;
-            pendingDragInfo = null;
-            dragSourceElement = null;
-            
-            // GHOST FIX: Clean up any ghost elements or dragging classes left from interrupted drags
-            removeGhostElement();
-            document.querySelectorAll('.drag-ghost').forEach(el => el.remove());
-            document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
-            clearDropIndicator();
-
-            document.removeEventListener('mousemove', checkMouseScroll);
-            document.removeEventListener('mouseup', cancelMouseDrag);
-        }
-        
-        function startDragMouse(dragInfo) {
-            document.removeEventListener('mousemove', checkMouseScroll);
-            document.removeEventListener('mouseup', cancelMouseDrag);
-            
-            isDragging = true;
-            draggedDogId = dragInfo.dogId;
-            draggedFromPen = dragInfo.fromPen;
-            
-            // Lock body scroll (no position fixed - prevents visual jump)
-            document.body.classList.add('is-dragging');
-            
-            triggerHaptic('medium');
-            
-            if (dragSourceElement) {
-                const parent = dragSourceElement.closest('.dog-card, .pen-dog');
-                if (parent) parent.classList.add('dragging');
-            }
-            
-            createGhostElement(dragInfo.dogId, dragInfo.coords.x, dragInfo.coords.y);
-            showDropZones();
-            
-            boundMouseMove = handleMouseMove;
-            boundMouseUp = handleMouseUp;
-            document.addEventListener('mousemove', boundMouseMove);
-            document.addEventListener('mouseup', boundMouseUp);
-        }
-        
-        function handleMouseMove(e) {
-            if (!isDragging) return;
-            
-            if (ghostElement) {
-                ghostElement.style.left = e.clientX + 'px';
-                ghostElement.style.top = e.clientY + 'px';
-            }
-            
-            updateDropTargetHighlight(e.clientX, e.clientY);
-        }
-        
-        async function handleMouseUp(e) {
-            document.removeEventListener('mousemove', boundMouseMove);
-            document.removeEventListener('mouseup', boundMouseUp);
-            
-            await finishDrag(e.clientX, e.clientY);
-        }
-        
-        // ============================================
-        // SHARED DRAG FUNCTIONS
-        // ============================================
-        
-        function updateDropTargetHighlight(x, y) {
-            if (!ghostElement) return;
-            
-            // Hide ghost to check what's underneath
-            ghostElement.style.display = 'none';
-            const elemBelow = document.elementFromPoint(x, y);
-            ghostElement.style.display = '';
-            
-            // Clear all highlights
-            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-            clearDropIndicator();
-
-            if (elemBelow) {
-                const pen = elemBelow.closest('.pen');
-                const bin = elemBelow.closest('#deleteBin') || elemBelow.closest('.bin');
-                const staging = elemBelow.closest('#stagingArea') || elemBelow.closest('.staging-section');
-
-                if (bin) {
-                    document.getElementById('deleteBin').classList.add('drag-over');
-                } else if (pen) {
-                    pen.classList.add('drag-over');
-                    showDropIndicator(pen, y);
-                } else if (staging) {
-                    document.getElementById('stagingArea').classList.add('drag-over');
+                if (press && press.tile && press.tile.releasePointerCapture) {
+                    try { press.tile.releasePointerCapture(press.pointerId); } catch (e) {}
                 }
             }
-        }
 
-        // Show/hide the within-pen insertion line, reusing computeDropIndex so the cue and the
-        // actual drop slot are always the same single source of truth.
-        function clearDropIndicator() {
-            document.querySelectorAll('.pen-dog.drop-before').forEach(el => el.classList.remove('drop-before'));
-            document.querySelectorAll('.pen-dogs.drop-at-end').forEach(el => el.classList.remove('drop-at-end'));
-        }
-
-        function showDropIndicator(penEl, y) {
-            const container = penEl.querySelector('.pen-dogs');
-            if (!container) return;
-            const cards = Array.from(container.children).filter(el =>
-                el.classList && el.classList.contains('pen-dog') && el.dataset.dogId !== draggedDogId);
-            if (cards.length === 0) return;                 // empty / single-dog pen: no line needed
-            const idx = computeDropIndex(penEl, draggedDogId, y);
-            if (idx >= cards.length) container.classList.add('drop-at-end');
-            else cards[idx].classList.add('drop-before');
-        }
-        
-        // Within-pen insertion index for a drop at finalY. Returns the index in the pen's array
-        // AFTER the dragged dog is removed (we exclude the dragged card), so it's correct for both a
-        // same-pen reorder and a cross-pen drop-at-position. undefined => caller appends.
-        function computeDropIndex(penEl, draggedId, finalY) {
-            const container = penEl.querySelector('.pen-dogs');
-            if (!container) return undefined;
-            const cards = Array.from(container.children).filter(el =>
-                el.classList && el.classList.contains('pen-dog') && el.dataset.dogId !== draggedId);
-            for (let i = 0; i < cards.length; i++) {
-                const r = cards[i].getBoundingClientRect();
-                if (finalY < r.top + r.height / 2) return i;   // above this card's midpoint -> insert before it
+            // Every scroller the board owns, measured once at lift. Walking up from
+            // elementFromPoint each frame fails in the case that matters most on a phone:
+            // once the finger is at the very edge of the screen (or past it) there may be no
+            // element under it — and that is exactly when the row has to keep moving.
+            function collectScrollers() {
+                var nodes = document.querySelectorAll('.fb-pens, .fb-main, .fb-rail, .staging-area');
+                var out = [];
+                for (var i = 0; i < nodes.length; i++) {
+                    var n = nodes[i];
+                    if (n.scrollWidth <= n.clientWidth + 2 && n.scrollHeight <= n.clientHeight + 2) continue;
+                    var st = window.getComputedStyle(n);
+                    out.push({
+                        el: n,
+                        x: /auto|scroll/.test(st.overflowX),
+                        y: /auto|scroll/.test(st.overflowY)
+                    });
+                }
+                // the document itself, so a drag can pan the whole page vertically
+                out.push({ el: document.scrollingElement || document.documentElement, x: false, y: true });
+                return out;
             }
-            return cards.length;                               // below all cards -> append
-        }
 
-        async function finishDrag(finalX, finalY) {
-            // Unlock body
-            document.body.classList.remove('is-dragging');
-            
-            // Clean up visuals
-            document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
-            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-            clearDropIndicator();
-            hideDropZones();
-            removeGhostElement();
-            // GHOST FIX: Sweep any orphaned ghost elements from the DOM
-            document.querySelectorAll('.drag-ghost').forEach(el => el.remove());
-            
-            if (!isDragging || !draggedDogId) {
-                isDragging = false;
-                draggedDogId = null;
-                draggedFromPen = null;
-                dragSourceElement = null;
-                return;
+            // ------------------------------------------------------------------ ghost
+            function makeGhost(dogId, x, y) {
+                killGhost();
+                ghost = document.createElement('div');
+                ghost.className = 'drag-ghost';
+                ghost.setAttribute('aria-hidden', 'true');
+                ghost.style.width = Math.max(150, Math.min(240, press.w)) + 'px';
+
+                var name = document.createElement('span');
+                name.textContent = (typeof getDogDisplayName === 'function') ? getDogDisplayName(dogId) : dogId;
+                var hint = document.createElement('span');
+                hint.className = 'drag-ghost-hint';
+                ghost.appendChild(name);
+                ghost.appendChild(hint);
+
+                document.body.appendChild(ghost);
+                moveGhost(x, y);
             }
-            
-            // Check what's at the drop position
-            const elemBelow = document.elementFromPoint(finalX, finalY);
-            
-            if (elemBelow) {
-                if (elemBelow.closest('#deleteBin') || elemBelow.closest('.bin')) {
+
+            function moveGhost(x, y) {
+                if (!ghost || !press) return;
+                ghost.style.transform =
+                    'translate3d(' + (x - press.ox) + 'px,' + (y - press.oy) + 'px,0) rotate(-1.5deg) scale(1.03)';
+            }
+
+            function setGhostHint(text) {
+                if (!ghost) return;
+                var h = ghost.querySelector('.drag-ghost-hint');
+                if (h) h.textContent = text || '';
+            }
+
+            function killGhost() {
+                if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
+                ghost = null;
+                var stale = document.querySelectorAll('.drag-ghost');
+                for (var i = 0; i < stale.length; i++) stale[i].parentNode.removeChild(stale[i]);
+            }
+
+            // --------------------------------------------------------------- hit test
+            // elementFromPoint (the ghost is pointer-events:none) so hit testing stays
+            // correct under CSS transforms, zoom and mid-drag auto-scroll.
+            function hitTest(x, y) {
+                var el = document.elementFromPoint(x, y);
+                if (!el || !el.closest) return null;
+                if (el.closest('#deleteBin') || el.closest('.bin')) return { kind: 'bin', id: 'bin', index: null };
+                var pen = el.closest('.pen');
+                if (pen) {
+                    return {
+                        kind: 'pen',
+                        id: pen.getAttribute('data-pen-id'),
+                        index: (typeof computeDropIndex === 'function')
+                            ? computeDropIndex(pen, drag ? drag.dogId : null, y)
+                            : undefined
+                    };
+                }
+                if (el.closest('#stagingArea') || el.closest('.fb-card-assign')) {
+                    return { kind: 'stage', id: 'stage', index: null };
+                }
+                return null;
+            }
+
+            function penLabel(penId) {
+                return penId.replace('-', ' ').replace(/\b\w/g, function (l) { return l.toUpperCase(); });
+            }
+
+            function paintTarget(hit) {
+                var prev = document.querySelectorAll('.drag-over');
+                for (var i = 0; i < prev.length; i++) prev[i].classList.remove('drag-over');
+                if (typeof clearDropIndicator === 'function') clearDropIndicator();
+                var binLabel = document.getElementById('binLabel');
+
+                if (!hit) {
+                    setGhostHint('');
+                    if (binLabel) binLabel.textContent = 'Drop to remove';
+                    return;
+                }
+                if (hit.kind === 'bin') {
+                    var bin = document.getElementById('deleteBin');
+                    if (bin) bin.classList.add('drag-over');
+                    if (binLabel) binLabel.textContent = 'Release to remove';
+                    setGhostHint('Remove');
+                } else if (hit.kind === 'stage') {
+                    var st = document.getElementById('stagingArea');
+                    if (st) st.classList.add('drag-over');
+                    if (binLabel) binLabel.textContent = 'Drop to remove';
+                    setGhostHint('Un-assign');
+                } else if (hit.kind === 'pen') {
+                    var pen = document.querySelector('.pen[data-pen-id="' + hit.id + '"]');
+                    if (pen) {
+                        pen.classList.add('drag-over');
+                        if (typeof showDropIndicator === 'function') showDropIndicator(pen, pt.y);
+                    }
+                    if (binLabel) binLabel.textContent = 'Drop to remove';
+                    setGhostHint(penLabel(hit.id));
+                }
+            }
+
+            // ------------------------------------------------------------ auto-scroll
+            // Proportional so a nudge creeps and a firm push races; anything past the edge
+            // (dist < 0) is already at full speed.
+            function ramp(dist) {
+                return Math.ceil(MAX_SPEED * Math.min(1, Math.max(0, EDGE - dist) / EDGE));
+            }
+
+            function autoScroll(x, y) {
+                if (!scrollers) return;
+                for (var i = 0; i < scrollers.length; i++) {
+                    var s = scrollers[i], n = s.el, r;
+                    if (n === document.documentElement || n === document.body || n === document.scrollingElement) {
+                        r = { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight,
+                              width: window.innerWidth, height: window.innerHeight };
+                    } else {
+                        r = n.getBoundingClientRect();
+                    }
+                    if (!r.width || !r.height) continue;
+
+                    if (s.x && n.scrollWidth > n.clientWidth + 2 && y > r.top - EDGE_PAD && y < r.bottom + EDGE_PAD) {
+                        if (x < r.left + EDGE) n.scrollLeft -= ramp(x - r.left);
+                        else if (x > r.right - EDGE) n.scrollLeft += ramp(r.right - x);
+                    }
+                    if (s.y && n.scrollHeight > n.clientHeight + 2 && x > r.left - EDGE_PAD && x < r.right + EDGE_PAD) {
+                        if (y < r.top + EDGE) n.scrollTop -= ramp(y - r.top);
+                        else if (y > r.bottom - EDGE) n.scrollTop += ramp(r.bottom - y);
+                    }
+                }
+            }
+
+            // ------------------------------------------------------------- frame loop
+            // ONE persistent rAF for the whole drag, not one scheduled per move. A finger
+            // parked in the edge zone stops producing pointermove events, so a move-driven
+            // loop would stop scrolling exactly when the user is asking it to keep going.
+            function loop() {
+                raf = null;
+                if (!drag || !pt) return;
+                moveGhost(pt.x, pt.y);
+                var hit = hitTest(pt.x, pt.y);           // hit-test BEFORE scrolling, or we
+                autoScroll(pt.x, pt.y);                  // read whatever slid under the finger
+                var changed = !over !== !hit ||
+                    (over && hit && (over.kind !== hit.kind || over.id !== hit.id || over.index !== hit.index));
+                if (changed) {
+                    if (hit && hit.kind === 'pen' && (!over || over.id !== hit.id)) triggerHaptic('light');
+                    over = hit;
+                    paintTarget(hit);
+                }
+                raf = requestAnimationFrame(loop);
+            }
+
+            // ---------------------------------------------------------------- gesture
+            function onPointerDown(e) {
+                if (e.pointerType === 'mouse' && e.button !== 0) return;
+                if (drag || press) return;                       // pointerdown bubbles — first one wins
+                if (!e.target || !e.target.closest) return;
+                // The portion control and the expanded panel opt out: those are precise,
+                // high-frequency controls where an accidental lift is worse than a slightly
+                // smaller drag surface.
+                if (e.target.closest('[data-nodrag]')) return;
+
+                var tile = e.target.closest('.pen-dog, .dog-card');
+                if (!tile) return;
+                var dogId = tile.getAttribute('data-dog-id');
+                if (!dogId) return;
+                var penEl = tile.closest('.pen');
+                var rect = tile.getBoundingClientRect();
+
+                press = {
+                    dogId: dogId,
+                    fromPen: penEl ? penEl.getAttribute('data-pen-id') : null,
+                    pointerId: e.pointerId,
+                    sx: e.clientX,
+                    sy: e.clientY,
+                    ox: e.clientX - rect.left,               // grab offset keeps the ghost under
+                    oy: e.clientY - rect.top,                // the exact spot that was touched
+                    w: rect.width,
+                    tile: tile
+                };
+
+                bindMoves();
+                armedOn(tile);
+                clearTimer();
+                timer = setTimeout(lift, LONG_PRESS_MS);
+            }
+
+            function lift() {
+                if (!press) return;
+                clearTimer();
+                armedOff(press.tile);
+                // NOW take capture: every move from here belongs to the drag, even once the
+                // finger leaves the tile or the list reflows.
+                try { press.tile.setPointerCapture(press.pointerId); } catch (e) {}
+
+                drag = { dogId: press.dogId, fromPen: press.fromPen };
+                draggedDogId = press.dogId;          // showDropIndicator reads these
+                draggedFromPen = press.fromPen;
+                pt = { x: press.sx, y: press.sy };
+                over = null;
+
+                // A carried dog must not be yanked out from under the finger by a poll.
+                // pauseSync gates applyRemoteState; pollForUpdates additionally checks
+                // isDragActive() so a drag longer than SYNC_PAUSE_DURATION is still safe.
+                if (typeof pauseSync === 'function') pauseSync();
+
+                document.body.classList.add('is-dragging');
+                press.tile.classList.add('dragging');
+                triggerHaptic('medium');
+
+                makeGhost(press.dogId, pt.x, pt.y);
+                if (typeof showDropZones === 'function') showDropZones();
+                announce((typeof getDogDisplayName === 'function' ? getDogDisplayName(press.dogId) : 'Dog') +
+                         ' picked up. Drag to a pen.');
+
+                scrollers = collectScrollers();
+                if (!raf) raf = requestAnimationFrame(loop);
+            }
+
+            function onMove(e) {
+                if (!press || e.pointerId !== press.pointerId) return;
+                if (!drag) {
+                    // Still deciding: a real finger-slide before the press lands is a scroll.
+                    if (Math.abs(e.clientX - press.sx) > SCROLL_CANCEL_PX ||
+                        Math.abs(e.clientY - press.sy) > SCROLL_CANCEL_PX) abort();
+                    return;
+                }
+                if (e.cancelable) e.preventDefault();
+                pt = { x: e.clientX, y: e.clientY };
+            }
+
+            function onCancel(e) { finish(e, true); }
+            function onUp(e) { finish(e, false); }
+
+            function finish(e, cancelled) {
+                if (!press || (e && e.pointerId !== undefined && press.pointerId !== e.pointerId)) return;
+                var p = press;
+                clearTimer();
+                armedOff(p.tile);
+                unbind();
+                if (!drag) { press = null; return; }
+
+                document.body.classList.remove('is-dragging');
+                var dragging = document.querySelectorAll('.dragging');
+                for (var i = 0; i < dragging.length; i++) dragging[i].classList.remove('dragging');
+                var hl = document.querySelectorAll('.drag-over');
+                for (var j = 0; j < hl.length; j++) hl[j].classList.remove('drag-over');
+                if (typeof clearDropIndicator === 'function') clearDropIndicator();
+                if (typeof hideDropZones === 'function') hideDropZones();
+                killGhost();
+                var binLabel = document.getElementById('binLabel');
+                if (binLabel) binLabel.textContent = 'Drop to remove';
+
+                suppressClickUntil = Date.now() + CLICK_SUPPRESS_MS;
+
+                // Hit-test FRESH at the release point. The highlight comes from the last
+                // animation frame, which can be a frame behind the finger (or never ran, if
+                // the gesture was faster than one frame) — trusting it drops the dog in the
+                // wrong pen. On pointercancel there are no useful coordinates, so fall back
+                // to the last seen target: an interrupted gesture must still land the move.
+                var target = over;
+                if (!cancelled && e && typeof e.clientX === 'number') {
+                    var fresh = hitTest(e.clientX, e.clientY);
+                    if (fresh) target = fresh;
+                    else if (pt) { var f2 = hitTest(pt.x, pt.y); if (f2) target = f2; }
+                }
+
+                var dogId = p.dogId;
+                var fromPen = drag.fromPen;
+                drag = null; press = null; pt = null; scrollers = null; over = null;
+                draggedDogId = null; draggedFromPen = null;
+                if (raf) { cancelAnimationFrame(raf); raf = null; }
+
+                if (!dogId || !target) { announce('Move cancelled'); return; }
+
+                if (target.kind === 'bin') {
                     triggerHaptic('delete');
-                    await deleteDog(draggedDogId);
-                } else if (elemBelow.closest('.pen')) {
-                    const pen = elemBelow.closest('.pen');
-                    const penId = pen.dataset.penId;
-                    const dropIndex = computeDropIndex(pen, draggedDogId, finalY);
+                    deleteDog(dogId);
+                } else if (target.kind === 'pen') {
                     triggerHaptic('success');
-                    await moveDogToPen(draggedDogId, penId, dropIndex);
-                    showToast(`Moved to ${penId.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}`, 'success');
-                } else if (elemBelow.closest('#stagingArea') || elemBelow.closest('.staging-section')) {
-                    if (draggedFromPen) {
+                    moveDogToPen(dogId, target.id, target.index);
+                    showToast('Moved to ' + penLabel(target.id), 'success');
+                } else if (target.kind === 'stage') {
+                    if (fromPen) {
                         triggerHaptic('light');
-                        await moveDogToPen(draggedDogId, null);
+                        moveDogToPen(dogId, null);
                         showToast('Returned to staging', 'info');
                     }
                 }
             }
-            
-            isDragging = false;
-            draggedDogId = null;
-            draggedFromPen = null;
-            dragSourceElement = null;
+
+            function abort() {
+                clearTimer();
+                if (press) armedOff(press.tile);
+                unbind();
+                press = null;
+            }
+
+            // --------------------------------------------------------------- keyboard
+            // Space picks up, arrows move between pens and within a pen, Enter drops,
+            // Escape cancels. Tiles carry tabindex="0" and role="button".
+            var lifted = null;
+
+            function onKeyDown(e) {
+                if (!e.target || !e.target.closest) return;
+                // Never steal a space bar from a text field (the medicine name lives inside
+                // an expanded tile) or from anything explicitly opted out of dragging.
+                var tag = (e.target.tagName || '').toLowerCase();
+                if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+                if (e.target.closest('[data-nodrag]')) return;
+
+                var tile = e.target.closest('.pen-dog, .dog-card');
+                if (!tile) return;
+                var dogId = tile.getAttribute('data-dog-id');
+                if (!dogId) return;
+                var penEl = tile.closest('.pen');
+                var penId = penEl ? penEl.getAttribute('data-pen-id') : null;
+
+                if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault();
+                    if (lifted === dogId) { lifted = null; announce('Dropped'); }
+                    else { lifted = dogId; announce(getDogDisplayName(dogId) + ' picked up. Arrow keys to move, Enter to drop.'); }
+                    return;
+                }
+                if (lifted !== dogId) return;
+                if (e.key === 'Escape') { lifted = null; announce('Move cancelled'); return; }
+
+                var order = (typeof PEN_ORDER !== 'undefined') ? PEN_ORDER : [];
+                if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    var cur = order.indexOf(penId);
+                    var step = (e.key === 'ArrowRight' ? 1 : -1);
+                    var next = (cur < 0) ? order[0] : order[Math.max(0, Math.min(order.length - 1, cur + step))];
+                    if (next) moveDogToPen(dogId, next);
+                } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && penId) {
+                    e.preventDefault();
+                    var list = pens[penId] || [];
+                    var at = list.indexOf(dogId);
+                    moveDogToPen(dogId, penId, Math.max(0, Math.min(list.length - 1, at + (e.key === 'ArrowDown' ? 1 : -1))));
+                }
+            }
+
+            function announce(msg) {
+                var el = document.getElementById('dragLiveRegion');
+                if (el) el.textContent = msg;
+            }
+
+            // ------------------------------------------------------------------- init
+            function init() {
+                // THE ANDROID FIX: registered once, up front, non-passive. A listener
+                // attached mid-gesture cannot cancel a scroll Chrome has already committed to.
+                document.addEventListener('touchmove', function (e) {
+                    if (drag && e.cancelable) e.preventDefault();
+                }, { passive: false });
+
+                document.addEventListener('pointerdown', onPointerDown, { passive: true });
+                document.addEventListener('keydown', onKeyDown);
+
+                // Suppress the click that follows a completed drag, so releasing a drag
+                // never also toggles the tile it landed on.
+                document.addEventListener('click', function (e) {
+                    if (Date.now() < suppressClickUntil) { e.stopPropagation(); e.preventDefault(); }
+                }, true);
+
+                // Kill the native long-press menu on tiles (Android shows Download/Share/Print).
+                document.addEventListener('contextmenu', function (e) {
+                    if (e.target.closest && e.target.closest('.pen-dog, .dog-card')) e.preventDefault();
+                }, { passive: false });
+            }
+
+            return { init: init, isDragging: isDragging, suppressed: function () { return Date.now() < suppressClickUntil; } };
+        }());
+
+        function isDragActive() {
+            return typeof FRMDrag !== 'undefined' && FRMDrag.isDragging();
         }
 
         // ============================================
@@ -1937,7 +2144,7 @@
 
         function pauseSync() {
             syncPausedUntil = Date.now() + SYNC_PAUSE_DURATION;
-            updateStatus('⏸ Editing...', 'paused');
+            updateStatus('Editing…', 'paused');
         }
 
         function isSyncPaused() {
@@ -1981,7 +2188,7 @@
         //    unrecoverable except via the manual Retry button.
         //  * The pause still protects the BOARD, not the connection. applyRemoteState is what must
         //    not fight an in-progress edit, so only the full read is gated on isSyncPaused() /
-        //    pendingDogIds — the probe and the queue flush are not.
+        //    pendingDogIds / an in-flight drag — the probe and the queue flush are not.
         //  * isSyncing is now a REAL in-flight guard (it was vestigial: read here, never set), so a
         //    slow 12s call can't stack ticks behind it. That was the old heartbeatInFlight's job.
         async function pollForUpdates() {
@@ -2008,7 +2215,10 @@
                 }
 
                 // Only pay for a full read when something changed AND we're not mid-edit.
-                if (version.version > lastSyncVersion && !isSyncPaused() && pendingDogIds.size === 0) {
+                // isDragActive() is the same class of guard as isSyncPaused(): a re-render while
+                // a dog is in the air replaces the captured tile and the browser fires
+                // pointercancel, dropping the dog somewhere nobody asked for.
+                if (version.version > lastSyncVersion && !isSyncPaused() && !isDragActive() && pendingDogIds.size === 0) {
                     const result = await sessionFetch({ action: 'getSession' });
 
                     if (!result || !result.success) {
@@ -2020,7 +2230,7 @@
                     if (result.version > lastSyncVersion) {
                         applyRemoteState(result);
                         lastSyncVersion = result.version;
-                        updateStatus(`✓ Synced (${dogs.length} dogs)`, 'connected');
+                        updateStatus(`Synced (${dogs.length} dogs)`, 'connected');
                     }
                 }
 
@@ -2066,8 +2276,7 @@
             // Meal type: a pending local change wins over the server value.
             if (pendingMeal) currentMealType = pendingMeal;
             else if (result.mealType) currentMealType = result.mealType;
-            const mealSelect = document.getElementById('mealType');
-            if (mealSelect) mealSelect.value = currentMealType;
+            renderMealSegments();
 
             // Build the merged dog set keyed by id, carrying a transient penId used to rebuild pens.
             const byId = new Map();
@@ -2149,6 +2358,10 @@
                 pens[penId].sort((a, b) => posById.get(a) - posById.get(b));
             }
 
+            // An expanded tile whose dog has gone (deleted on another device, or submitted)
+            // must not keep the panel state pinned to a ghost id.
+            if (expandedDogId && !dogs.some(d => d.id === expandedDogId)) expandedDogId = null;
+
             // RE-MATCH FIX: repair dogs that arrived with no match, but ONLY those with no pending
             // op (so we never fight the user's own in-flight edit). Repairs are queued like any edit.
             dogs.forEach(dog => {
@@ -2183,7 +2396,7 @@
                     applyRemoteState(result);
                     lastSyncVersion = result.version;
                     markSyncSuccess();
-                    updateStatus(`✓ Connected (${result.count} dogs)`, 'connected');
+                    updateStatus(`Connected (${result.count} dogs)`, 'connected');
                     return true;
                 } else {
                     markSyncFailure('loadSession-bad-response');
@@ -2192,7 +2405,7 @@
             } catch (error) {
                 console.error('Load session error:', error);
                 markSyncFailure('loadSession');
-                updateStatus('⚠ Offline mode', 'offline');
+                updateStatus('Offline mode', 'offline');
                 return false;
             }
         }
@@ -2324,14 +2537,14 @@
             }
         }
 
+        // Transient, informational text in the header. The CONNECTION state itself is owned
+        // solely by updateConnectionUI() — this line never contradicts the pill.
         function updateStatus(message, type) {
-            const el = document.getElementById('statusBar');
             const textEl = document.getElementById('statusText');
-            const indicatorEl = document.getElementById('syncIndicator');
-            
-            textEl.textContent = message;
-            el.className = 'status-bar ' + (type || '');
-            indicatorEl.className = 'sync-indicator ' + (type || '');
+            if (textEl) {
+                textEl.textContent = message;
+                textEl.title = message;
+            }
         }
 
         // ============================================
@@ -2358,28 +2571,28 @@
             const input = inputName.trim().toLowerCase();
             const inputParts = input.split(/\s+/);
             const firstName = inputParts[0];
-            
+
             const scored = dogNameList.map(fullName => {
                 const nameParts = fullName.toLowerCase().split(' ');
                 const jotFirstName = nameParts[0];
                 let score = 0;
-                
+
                 if (jotFirstName === firstName) score += 100;
                 else if (jotFirstName.startsWith(firstName)) score += 80;
                 else if (firstName.startsWith(jotFirstName)) score += 60;
                 else if (jotFirstName.substring(0, 2) === firstName.substring(0, 2)) score += 40;
                 else if (jotFirstName[0] === firstName[0]) score += 20;
-                
+
                 if (inputParts.length > 1 && nameParts.length > 1) {
                     const inputSurname = inputParts.slice(1).join(' ').toUpperCase();
                     const jotSurname = nameParts.slice(1).join(' ').toUpperCase();
                     if (jotSurname.startsWith(inputSurname)) score += 50;
                     else if (jotSurname[0] === inputSurname[0]) score += 25;
                 }
-                
+
                 return { name: fullName, score };
             });
-            
+
             return scored.filter(s => s.score > 0).sort((a, b) => b.score - a.score).slice(0, 15).map(s => s.name);
         }
 
@@ -2387,15 +2600,17 @@
         // DOG MANAGEMENT
         // ============================================
 
-        async function addDog() {
+        async function addDog(presetName) {
             const input = document.getElementById('dogNameInput');
-            const name = input.value.trim();
+            const name = (typeof presetName === 'string' && presetName.trim())
+                ? presetName.trim()
+                : (input ? input.value.trim() : '');
             if (!name) return;
-            
+
             pauseSync();
-            
+
             const matches = matchDogName(name);
-            
+
             const dog = {
                 id: Date.now() + '-' + Math.random().toString(36).substr(2, 9),
                 inputName: name,
@@ -2408,29 +2623,29 @@
                 supplementTypes: [],
                 position: 0
             };
-            
+
             if (matches.length === 0) {
                 dog.possibleMatches = fuzzyMatchDogName(name);
             }
-            
+
             dogs.push(dog);
-            input.value = '';
-            
+            if (input) input.value = '';
+            renderSuggestions();
+
             renderStagingArea();
-            
-            // NEW-DOG FIX: Scroll to and highlight the newly-added card for immediate visibility
+
+            // Flash + scroll the new card so it is obvious where the dog landed.
             requestAnimationFrame(() => {
-                const newCard = document.querySelector(`.dog-card[data-dog-id="${dog.id}"], .dog-card.unmatched[data-dog-id="${dog.id}"]`);
+                const newCard = document.querySelector(`.dog-card[data-dog-id="${dog.id}"]`);
                 if (newCard) {
                     newCard.classList.add('newly-added');
-                    newCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                    // Remove highlight class after animation completes
-                    setTimeout(() => newCard.classList.remove('newly-added'), 700);
+                    if (newCard.scrollIntoView) newCard.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                    setTimeout(() => newCard.classList.remove('newly-added'), 950);
                 }
             });
-            
-            showToast(dog.matchedName ? `Added ${dog.matchedName}` : `Added ${name} - select from dropdown`, 'success');
-            
+
+            showToast(dog.matchedName ? `Added ${dog.matchedName}` : `Added ${name} — pick the right dog`, 'success');
+
             await syncAddDog(dog);
         }
 
@@ -2461,14 +2676,25 @@
             return best;
         }
 
+        function setTodayBusy(busy, label) {
+            const btn = document.getElementById('addTodayBtn');
+            if (!btn) return;
+            btn.disabled = !!busy;
+            const span = btn.querySelector ? btn.querySelector('span') : null;
+            if (span) span.textContent = label;
+        }
+
         // One-press: pick the meal from the clock, pull that meal's dogs from the
         // Whiteboard (via the backend), and merge them onto the board into pens.
         async function addDogsForToday() {
-            const btn = document.getElementById('addTodayBtn');
             const mealPeriod = computeMealPeriod(new Date());
             const mealLabel = { 'Morning Meal': 'Breakfast', 'Lunch': 'Lunch', 'Evening Meal': 'Dinner' }[mealPeriod];
 
-            if (btn) { btn.disabled = true; btn.textContent = '⏳ Loading…'; }
+            setTodayBusy(true, 'Loading…');
+            // The wait is genuinely long and staff used to stare at a dead button. The sheet says
+            // so honestly. It is PROGRESS ONLY — the add decision below is still a blocking
+            // confirm(), because a modal that can be missed must never gate a stale roster.
+            openTodayLoadingSheet(mealLabel);
 
             // The Whiteboard fan-out is slow and its cold start is the main variance, so this call
             // gets PLAN_FETCH_TIMEOUT_MS (not the standard 12s) and one retry — a timeout on the
@@ -2486,7 +2712,7 @@
             let result = null, timedOut = false;
 
             for (let attempt = 1; attempt <= PLAN_FETCH_ATTEMPTS; attempt++) {
-                if (btn && attempt > 1) btn.textContent = '⏳ Still loading…';
+                if (attempt > 1) setTodayBusy(true, 'Still loading…');
                 try {
                     const response = await gasFetch(url, { method: 'GET', redirect: 'follow' }, PLAN_FETCH_TIMEOUT_MS);
                     result = await response.json();
@@ -2499,7 +2725,8 @@
                 if (result && result.success) break;
             }
 
-            if (btn) { btn.disabled = false; btn.textContent = '🐶 Add Dogs for Today'; }
+            setTodayBusy(false, 'Add today’s dogs');
+            closeTodaySheet();
 
             if (!result || !result.success) {
                 showToast(timedOut
@@ -2566,9 +2793,8 @@
             pauseSync();
 
             // Set the meal type to match the period, and sync it.
-            const mealSelect = document.getElementById('mealType');
-            if (mealSelect) mealSelect.value = mealPeriod;
             currentMealType = mealPeriod;
+            renderMealSegments();
             await syncMealType(mealPeriod);
 
             // Seed pen occupancy from the current board so the spread stays balanced.
@@ -2576,6 +2802,7 @@
             for (const penId of PEN_ORDER) counts[penId] = (pens[penId] || []).length;
 
             let added = 0;
+            const addedNames = [];
             const unmatched = [];
 
             for (const planDog of newDogs) {
@@ -2615,6 +2842,7 @@
                     dog.position = pens[targetPen].length * 1000;
                     counts[targetPen] = (counts[targetPen] || 0) + 1;
                 }
+                addedNames.push({ name: name, pen: targetPen });
                 await syncAddDog(dog);
                 added++;
             }
@@ -2623,26 +2851,36 @@
             renderStagingArea();
             updateConnectionUI();
 
+            const skipped = Array.isArray(result.skipped) ? result.skipped : [];
+
             let msg = `Added ${added} dog${added === 1 ? '' : 's'} for ${mealLabel}.`;
             if (dupCount) msg += ` ${dupCount} already on board.`;
-            if (result.skipped && result.skipped.length) msg += ` ${result.skipped.length} skipped (no B/T pen).`;
+            if (skipped.length) msg += ` ${skipped.length} skipped (no B/T pen).`;
             if (unmatched.length) msg += ` ${unmatched.length} need a name match.`;
             showToast(msg, unmatched.length ? 'info' : 'success');
+
+            // Only open the result sheet when something actually needs a human: a dog the master
+            // sheet could not place, or a name the roster could not resolve. A clean run stays a
+            // toast, so the common case is still one press and done.
+            if (skipped.length || unmatched.length) {
+                showTodayResultSheet(mealLabel, addedNames, skipped, unmatched);
+            }
         }
 
         async function deleteDog(dogId) {
             pauseSync();
-            
+
+            if (expandedDogId === dogId) expandedDogId = null;
             dogs = dogs.filter(d => d.id !== dogId);
-            
+
             for (const penId of Object.keys(pens)) {
                 pens[penId] = pens[penId].filter(id => id !== dogId);
             }
-            
+
             renderAllPens();
             renderStagingArea();
             showToast('Dog removed', 'info');
-            
+
             await syncDeleteDog(dogId);
         }
 
@@ -2705,25 +2943,29 @@
             changed.forEach(id => syncUpdateDog(id, { position: (dogs.find(d => d.id === id) || {}).position }));
         }
 
-        async function updateMealType() {
-            const select = document.getElementById('mealType');
-            currentMealType = select.value;
+        async function updateMealType(meal) {
+            const next = meal || currentMealType;
+            if (!MEAL_TYPES.some(m => m.id === next)) return;
+            currentMealType = next;
+            renderMealSegments();
+            renderBoardChrome();
             await syncMealType(currentMealType);
             showToast(`Meal set to ${currentMealType}`, 'info');
         }
 
         async function resolveMatch(dogId, selectedName) {
+            if (!selectedName) return;
             pauseSync();
-            
+
             const dog = dogs.find(d => d.id === dogId);
             if (!dog) return;
-            
+
             dog.matchedName = selectedName;
             dog.possibleMatches = [selectedName];
-            
+
             renderStagingArea();
             renderAllPens();
-            
+
             await syncUpdateDog(dogId, { matchedName: selectedName, possibleMatches: [selectedName] });
         }
 
@@ -2731,106 +2973,267 @@
         // RENDERING
         // ============================================
 
+        function portionMeta(status) {
+            return PORTION_META.find(p => p.id === status) || PORTION_META[0];
+        }
+
+        function renderMealSegments() {
+            const el = document.getElementById('mealSegments');
+            if (!el) return;
+            el.innerHTML = MEAL_TYPES.map(m => {
+                const on = currentMealType === m.id;
+                return `<button type="button" role="radio" aria-checked="${on}" class="${on ? 'is-on' : ''}" ` +
+                       `onclick="updateMealType('${esc(m.id)}')">${esc(m.short)}</button>`;
+            }).join('');
+            renderBoardChrome();
+        }
+
+        // Live roster suggestions while typing — up to 4 names the staff can tap instead of
+        // finishing the spelling. Uses the same dogNameList the matcher does.
+        function renderSuggestions() {
+            const box = document.getElementById('addSuggestions');
+            const input = document.getElementById('dogNameInput');
+            if (!box) return;
+            const q = ((input && input.value) || '').trim().toLowerCase();
+            if (q.length < 2) { box.innerHTML = ''; box.classList.remove('has-items'); measureTray(); return; }
+
+            const onBoard = new Set(dogs.map(d => (d.matchedName || d.inputName || '').toLowerCase()));
+            const hits = dogNameList
+                .filter(n => n.toLowerCase().indexOf(q) >= 0 && !onBoard.has(n.toLowerCase()))
+                .slice(0, 4);
+
+            if (hits.length === 0) { box.innerHTML = ''; box.classList.remove('has-items'); measureTray(); return; }
+            box.innerHTML = hits.map(n =>
+                `<button type="button" role="option" onclick="addDog('${esc(n).replace(/'/g, '&#39;')}')">${esc(n)}</button>`
+            ).join('');
+            box.classList.add('has-items');
+            measureTray();
+        }
+
         function renderStagingArea() {
             const container = document.getElementById('stagingArea');
             const assignedDogIds = Object.values(pens).flat();
             const unassignedDogs = dogs.filter(d => !assignedDogIds.includes(d.id));
-            
-            document.getElementById('stagingCount').textContent = unassignedDogs.length;
-            
+
+            const countEl = document.getElementById('stagingCount');
+            if (countEl) countEl.textContent = unassignedDogs.length;
+
+            if (!container) { renderBoardChrome(); return; }
+
             if (unassignedDogs.length === 0) {
-                container.innerHTML = '<div class="empty-message">All dogs assigned to pens! 🎉</div>';
+                container.innerHTML = '<div class="empty-message">Every dog is in a pen.<br>Drop one back here to un-assign it.</div>';
+                renderBoardChrome();
                 return;
             }
-            
+
             container.innerHTML = unassignedDogs.map(dog => {
+                // An unresolved dog is deliberately NOT draggable (data-nodrag): it must be
+                // matched to a roster name before it can go into a pen, exactly as before.
                 if (!dog.matchedName && dog.possibleMatches.length !== 1) {
+                    const picker = dog.possibleMatches.length === 0
+                        ? '<div class="unmatched-error">No matches found</div>'
+                        : dog.possibleMatches.length <= 6
+                            ? `<div class="unmatched-picks">${dog.possibleMatches.map(m =>
+                                    `<button type="button" onclick="resolveMatch('${esc(dog.id)}', '${esc(m).replace(/'/g, '&#39;')}')">${esc(m)}</button>`
+                               ).join('')}</div>`
+                            : `<select class="unmatched-select" onchange="resolveMatch('${esc(dog.id)}', this.value)">
+                                   <option value="">Select match…</option>
+                                   ${dog.possibleMatches.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+                               </select>`;
                     return `
-                        <div class="dog-card unmatched" data-dog-id="${dog.id}">
-                            <div style="width: 100%;">
-                                <div class="unmatched-header">
-                                    <span class="unmatched-name">"${dog.inputName}"</span>
-                                    <button class="unmatched-remove" onclick="deleteDog('${dog.id}')">×</button>
-                                </div>
-                                ${dog.possibleMatches.length > 0 ? `
-                                    <select class="unmatched-select" onchange="resolveMatch('${dog.id}', this.value)">
-                                        <option value="">Select match...</option>
-                                        ${dog.possibleMatches.map(m => `<option value="${m}">${m}</option>`).join('')}
-                                    </select>
-                                ` : '<div class="unmatched-error">No matches found</div>'}
+                        <div class="dog-card unmatched" data-dog-id="${esc(dog.id)}" data-nodrag="true">
+                            <div class="dog-card-row">
+                                <span class="dog-card-name">${esc(dog.inputName)}</span>
+                                <button type="button" class="dog-card-remove" aria-label="Remove ${esc(dog.inputName)}" onclick="deleteDog('${esc(dog.id)}')">
+                                    ${svg(ICON.close, 16)}
+                                </button>
                             </div>
+                            <span class="unmatched-hint">Not on the list — pick one</span>
+                            ${picker}
                         </div>
                     `;
                 }
-                
+
                 const displayName = dog.matchedName || dog.possibleMatches[0];
                 return `
-                    <div class="dog-card" data-dog-id="${dog.id}" data-draggable="true">
-                        ${displayName}
+                    <div class="dog-card status-${esc(dog.status || 'all')}" data-dog-id="${esc(dog.id)}"
+                         tabindex="0" role="button"
+                         aria-label="${esc(displayName)}, to assign. Hold to move, or Space to pick up.">
+                        <div class="dog-card-row">
+                            <span class="dog-card-name">${esc(displayName)}</span>
+                            <button type="button" class="dog-card-remove" data-nodrag="true" aria-label="Remove ${esc(displayName)}" onclick="deleteDog('${esc(dog.id)}')">
+                                ${svg(ICON.close, 16)}
+                            </button>
+                        </div>
                     </div>
                 `;
             }).join('');
+
+            renderBoardChrome();
+        }
+
+        // renderPen rebuilds a pen's innerHTML, so an open panel and a caret in the medicine
+        // input have to survive it — the current code re-renders after every edit, which would
+        // otherwise collapse the panel the user is typing in.
+        function captureFocus(container) {
+            const active = document.activeElement;
+            if (!active || !active.id || !container || !container.contains) return null;
+            if (!container.contains(active)) return null;
+            let start = null, end = null;
+            try { start = active.selectionStart; end = active.selectionEnd; } catch (e) {}
+            return { id: active.id, start: start, end: end };
+        }
+
+        function restoreFocus(snap) {
+            if (!snap || !snap.id) return;
+            const el = document.getElementById(snap.id);
+            if (!el || !el.focus) return;
+            el.focus();
+            if (typeof snap.start === 'number' && el.setSelectionRange) {
+                try { el.setSelectionRange(snap.start, snap.end); } catch (e) {}
+            }
         }
 
         function renderPen(penId) {
             const container = document.getElementById(`pen-${penId}`);
-            const dogIds = pens[penId];
-            
+            if (!container) return;
+            const dogIds = pens[penId] || [];
+
+            const snap = captureFocus(container);
+
+            const badge = document.getElementById(`pencount-${penId}`);
+            if (badge) {
+                badge.textContent = dogIds.length;
+                badge.className = 'fb-pen-count' + (dogIds.length ? '' : ' is-zero');
+            }
+
             if (dogIds.length === 0) {
-                container.innerHTML = '';
+                container.innerHTML = '<div class="pen-empty">Empty</div>';
                 return;
             }
-            
+
             container.innerHTML = dogIds.map(dogId => {
                 const dog = dogs.find(d => d.id === dogId);
                 if (!dog) return '';
-                
+
                 const displayName = dog.matchedName || (dog.possibleMatches.length === 1 ? dog.possibleMatches[0] : dog.inputName);
-                
-                return `
-                    <div class="pen-dog status-${dog.status}" data-dog-id="${dog.id}">
-                        <div class="pen-dog-header">
-                            <span class="pen-dog-name" data-dog-id="${dog.id}" data-pen-id="${penId}" data-draggable="true">
-                                ${displayName}
-                            </span>
-                            <button class="pen-dog-remove" onclick="deleteDog('${dog.id}')">×</button>
+                const status = dog.status || 'all';
+                const expanded = expandedDogId === dog.id;
+                const hasSupps = !!(dog.supplements && dog.supplementTypes && dog.supplementTypes.length > 0);
+                const meta = portionMeta(status);
+
+                const badges =
+                    (dog.prescription ? `<span class="pen-dog-badge is-meds" title="Medicine">${svg(ICON.meds, 13)}</span>` : '') +
+                    (hasSupps ? `<span class="pen-dog-badge is-supp" title="Supplements">${svg(ICON.leaf, 13)}</span>` : '');
+
+                const portions = PORTION_META.map(p => {
+                    const on = status === p.id;
+                    return `<button type="button" class="p-btn${on ? ' is-on' : ''}" data-s="${p.id}" role="radio" aria-checked="${on}" ` +
+                           `aria-label="${p.a11y}" onclick="updateDogStatus('${esc(dog.id)}', '${p.id}')">${p.label}</button>`;
+                }).join('');
+
+                const panel = !expanded ? '' : `
+                    <div class="dog-panel" data-nodrag="true">
+                        <div class="dog-panel-toggles">
+                            <button type="button" class="toggle-btn is-meds ${dog.prescription ? 'active' : ''}" aria-pressed="${!!dog.prescription}" onclick="togglePrescription('${esc(dog.id)}')">
+                                ${svg(ICON.meds, 15)} Medicine
+                            </button>
+                            <button type="button" class="toggle-btn is-supp ${dog.supplements ? 'active' : ''}" aria-pressed="${!!dog.supplements}" onclick="toggleSupplements('${esc(dog.id)}')">
+                                ${svg(ICON.leaf, 15)} Supplements
+                            </button>
                         </div>
-                        <div class="pen-dog-controls">
-                            <select onchange="updateDogStatus('${dog.id}', this.value)">
-                                <option value="all" ${dog.status === 'all' ? 'selected' : ''}>All</option>
-                                <option value="three-quarter" ${dog.status === 'three-quarter' ? 'selected' : ''}>¾</option>
-                                <option value="half" ${dog.status === 'half' ? 'selected' : ''}>½</option>
-                                <option value="quarter" ${dog.status === 'quarter' ? 'selected' : ''}>¼</option>
-                                <option value="none" ${dog.status === 'none' ? 'selected' : ''}>None</option>
-                            </select>
-                            <button class="toggle-btn ${dog.prescription ? 'active' : ''}" onclick="togglePrescription('${dog.id}')">+P</button>
-                            <button class="toggle-btn ${dog.supplements ? 'active' : ''}" onclick="toggleSupplements('${dog.id}')">+S</button>
-                        </div>
-                        <div class="prescription-panel ${dog.prescription ? 'active' : ''}" id="prescription-${dog.id}">
-                            <input type="text" class="prescription-input" placeholder="Medicine name..."
-                                   value="${dog.prescriptionComment || ''}"
-                                   onchange="updatePrescriptionComment('${dog.id}', this.value)">
-                        </div>
-                        <div class="supplement-panel ${dog.supplements ? 'active' : ''}" id="supplements-${dog.id}">
-                            <div class="supplement-checkboxes">
-                                ${SUPPLEMENT_TYPES.map(st => `
-                                    <label class="supplement-checkbox">
-                                        <input type="checkbox" ${dog.supplementTypes.includes(st.id) ? 'checked' : ''}
-                                               onchange="toggleSupplementType('${dog.id}', '${st.id}', this.checked)">
-                                        ${st.label}
-                                    </label>
-                                `).join('')}
+                        ${dog.prescription ? `
+                            <input type="text" class="prescription-input" id="presc-${esc(dog.id)}" placeholder="Which medicine?"
+                                   value="${esc(dog.prescriptionComment || '')}"
+                                   oninput="pauseSync()"
+                                   onchange="updatePrescriptionComment('${esc(dog.id)}', this.value)">
+                        ` : ''}
+                        ${dog.supplements ? `
+                            <div class="supplement-chips">
+                                ${SUPPLEMENT_TYPES.map(st => {
+                                    const on = dog.supplementTypes.includes(st.id);
+                                    return `<button type="button" class="${on ? 'is-on' : ''}" aria-pressed="${on}" ` +
+                                           `onclick="toggleSupplementType('${esc(dog.id)}', '${st.id}', ${!on})">${esc(st.label)}</button>`;
+                                }).join('')}
                             </div>
+                        ` : ''}
+                        <button type="button" class="dog-remove-btn" onclick="deleteDog('${esc(dog.id)}')">
+                            ${svg(ICON.trash, 15)} Take off the board
+                        </button>
+                    </div>
+                `;
+
+                return `
+                    <div class="pen-dog status-${esc(status)}${expanded ? ' is-expanded' : ''}" data-dog-id="${esc(dog.id)}"
+                         tabindex="0" role="button"
+                         aria-label="${esc(displayName)}, ${meta.a11y}, ${esc(penId.replace('-', ' '))}. Hold to move, or Space to pick up.">
+                        <div class="pen-dog-row">
+                            <button type="button" class="pen-dog-toggle" aria-expanded="${expanded}" onclick="toggleTile('${esc(dog.id)}')">
+                                <span class="pen-dog-name">${esc(displayName)}</span>
+                                ${badges}
+                                <span class="pen-dog-chev">${svg(ICON.chevron, 15)}</span>
+                            </button>
                         </div>
+                        <div class="portion-row" data-nodrag="true" role="radiogroup" aria-label="Portion eaten by ${esc(displayName)}">
+                            ${portions}
+                        </div>
+                        ${panel}
                     </div>
                 `;
             }).join('');
+
+            restoreFocus(snap);
         }
 
         function renderAllPens() {
             for (const penId of Object.keys(pens)) {
                 renderPen(penId);
             }
+            renderBoardChrome();
+        }
+
+        // Everything on the board that isn't a pen or a staging tile: the header subtitle, the
+        // two group counts, and the "Add today's dogs" prominence.
+        function renderBoardChrome() {
+            const sub = document.getElementById('fbSubtitle');
+            if (sub) {
+                let day = '';
+                try { day = new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }); }
+                catch (e) { day = ''; }
+                sub.textContent = (day ? day + ' · ' : '') + currentMealType;
+            }
+
+            const countIn = side => PEN_ORDER
+                .filter(p => p.indexOf(side + '-') === 0)
+                .reduce((a, p) => a + ((pens[p] || []).length), 0);
+            const topEl = document.getElementById('topCount');
+            const bottomEl = document.getElementById('bottomCount');
+            if (topEl) topEl.textContent = countIn('top') + ' dogs';
+            if (bottomEl) bottomEl.textContent = countIn('bottom') + ' dogs';
+
+            // The empty board has exactly one sensible next move, so the roster button takes
+            // the primary weight until there is something to feed.
+            const todayBtn = document.getElementById('addTodayBtn');
+            if (todayBtn && todayBtn.classList) {
+                if (dogs.length === 0) todayBtn.classList.add('is-primary');
+                else todayBtn.classList.remove('is-primary');
+            }
+
+            measureTray();
+        }
+
+        // One tile open at a time. A tap that lands within CLICK_SUPPRESS_MS of a drag ending
+        // is swallowed by FRMDrag's capture-phase click handler, so releasing a drag never also
+        // expands the tile it landed on — this guard is the belt to that braces.
+        function toggleTile(dogId) {
+            if (FRMDrag.suppressed()) return;
+            const previous = expandedDogId;
+            expandedDogId = (previous === dogId) ? null : dogId;
+            const pensToRedraw = new Set();
+            if (previous) { const p = getDogPen(previous); if (p) pensToRedraw.add(p); }
+            const now = getDogPen(dogId);
+            if (now) pensToRedraw.add(now);
+            pensToRedraw.forEach(p => renderPen(p));
         }
 
         // ============================================
@@ -2843,6 +3246,7 @@
                 pauseSync();
                 dog.status = status;
                 renderPen(getDogPen(dogId));
+                showToast(`${getDogDisplayName(dogId)}: ${portionMeta(status).a11y.toLowerCase()}`, 'success');
                 await syncUpdateDog(dogId, { status: status });
             }
         }
@@ -2887,12 +3291,13 @@
                 } else if (!checked) {
                     dog.supplementTypes = dog.supplementTypes.filter(t => t !== typeId);
                 }
+                renderPen(getDogPen(dogId));
                 await syncUpdateDog(dogId, { supplementTypes: dog.supplementTypes });
             }
         }
 
         // ============================================
-        // DRAG AND DROP - ANDROID FIXED VERSION
+        // DRAG SUPPORT (called by FRMDrag — keep these signatures)
         // ============================================
 
         function triggerHaptic(pattern = 'light') {
@@ -2915,130 +3320,233 @@
 
         function showDropZones() {
             document.querySelectorAll('.pen').forEach(p => p.classList.add('drop-ready'));
-            document.getElementById('deleteBin').classList.add('drop-ready');
-            document.getElementById('stagingArea').classList.add('drop-ready');
+            const bin = document.getElementById('deleteBin');
+            if (bin) bin.classList.add('drop-ready');
+            const staging = document.getElementById('stagingArea');
+            if (staging) staging.classList.add('drop-ready');
+            measureTray();
         }
 
         function hideDropZones() {
             document.querySelectorAll('.pen').forEach(p => p.classList.remove('drop-ready'));
-            document.getElementById('deleteBin').classList.remove('drop-ready');
-            document.getElementById('stagingArea').classList.remove('drop-ready');
+            const bin = document.getElementById('deleteBin');
+            if (bin) bin.classList.remove('drop-ready');
+            const staging = document.getElementById('stagingArea');
+            if (staging) staging.classList.remove('drop-ready');
+            measureTray();
         }
 
-        function createGhostElement(dogId, x, y) {
-            // GHOST FIX: Remove any pre-existing ghost elements to prevent orphans
-            removeGhostElement();
-            // Also sweep for any stale ghost elements left in the DOM
-            document.querySelectorAll('.drag-ghost').forEach(el => el.remove());
-            
-            const name = getDogDisplayName(dogId);
-            ghostElement = document.createElement('div');
-            ghostElement.className = 'drag-ghost';
-            ghostElement.textContent = name;
-            ghostElement.style.left = x + 'px';
-            ghostElement.style.top = y + 'px';
-            document.body.appendChild(ghostElement);
+        // Show/hide the within-pen insertion line, reusing computeDropIndex so the cue and the
+        // actual drop slot are always the same single source of truth.
+        function clearDropIndicator() {
+            document.querySelectorAll('.pen-dog.drop-before').forEach(el => el.classList.remove('drop-before'));
+            document.querySelectorAll('.pen-dogs.drop-at-end').forEach(el => el.classList.remove('drop-at-end'));
         }
 
-        function removeGhostElement() {
-            if (ghostElement) {
-                ghostElement.remove();
-                ghostElement = null;
+        function showDropIndicator(penEl, y) {
+            const container = penEl.querySelector('.pen-dogs');
+            if (!container) return;
+            const cards = Array.from(container.children).filter(el =>
+                el.classList && el.classList.contains('pen-dog') && el.dataset.dogId !== draggedDogId);
+            if (cards.length === 0) return;                 // empty / single-dog pen: no line needed
+            const idx = computeDropIndex(penEl, draggedDogId, y);
+            if (idx >= cards.length) container.classList.add('drop-at-end');
+            else cards[idx].classList.add('drop-before');
+        }
+
+        // Within-pen insertion index for a drop at finalY. Returns the index in the pen's array
+        // AFTER the dragged dog is removed (we exclude the dragged card), so it's correct for both a
+        // same-pen reorder and a cross-pen drop-at-position. undefined => caller appends.
+        function computeDropIndex(penEl, draggedId, finalY) {
+            const container = penEl.querySelector('.pen-dogs');
+            if (!container) return undefined;
+            const cards = Array.from(container.children).filter(el =>
+                el.classList && el.classList.contains('pen-dog') && el.dataset.dogId !== draggedId);
+            for (let i = 0; i < cards.length; i++) {
+                const r = cards[i].getBoundingClientRect();
+                if (finalY < r.top + r.height / 2) return i;   // above this card's midpoint -> insert before it
             }
-        }
-
-        // Drop zone hover handlers (kept for pointer events on drop zones)
-        function handlePenEnter(e) {
-            if (isDragging) e.currentTarget.classList.add('drag-over');
-        }
-
-        function handlePenLeave(e) {
-            e.currentTarget.classList.remove('drag-over');
-        }
-
-        function handleBinEnter(e) {
-            if (isDragging) document.getElementById('deleteBin').classList.add('drag-over');
-        }
-
-        function handleBinLeave(e) {
-            document.getElementById('deleteBin').classList.remove('drag-over');
-        }
-
-        function handleStagingEnter(e) {
-            if (isDragging && draggedFromPen) {
-                document.getElementById('stagingArea').classList.add('drag-over');
-            }
-        }
-
-        function handleStagingLeave(e) {
-            document.getElementById('stagingArea').classList.remove('drag-over');
+            return cards.length;                               // below all cards -> append
         }
 
         // ============================================
-        // PREVIEW & SUBMIT
+        // SHEETS — preview / submit, and today's dogs
         // ============================================
+
+        function openSheet(id) {
+            const el = document.getElementById(id);
+            if (el && el.classList) el.classList.add('active');
+        }
+
+        function closeSheet(id) {
+            const el = document.getElementById(id);
+            if (el && el.classList) el.classList.remove('active');
+        }
+
+        function sheetRow(name, extra, status) {
+            const meta = portionMeta(status);
+            return `
+                <div class="sheet-row" style="border-left-color: var(--portion-${status});">
+                    <div class="sheet-row-main">
+                        <div class="sheet-row-name">${esc(name)}</div>
+                        ${extra ? `<div class="sheet-row-extra">${esc(extra)}</div>` : ''}
+                    </div>
+                    <span class="sheet-pill" style="background:${meta.pillBg};color:${meta.pillFg};">${meta.label}</span>
+                </div>
+            `;
+        }
 
         function showPreview() {
-            const modal = document.getElementById('previewModal');
             const content = document.getElementById('previewContent');
-            
+            const sub = document.getElementById('previewSheetSub');
+
             const penOrder = ['top-1', 'top-2', 'top-3', 'top-4', 'top-5', 'bottom-1', 'bottom-2', 'bottom-3', 'bottom-4', 'bottom-5'];
-            let html = `<p><strong>Meal:</strong> ${currentMealType}</p><hr style="border-color: var(--bg-pen); margin: 15px 0;">`;
-            
+            let html = '';
             let totalDogs = 0;
-            
+
             penOrder.forEach(penId => {
-                const dogIds = pens[penId];
+                const dogIds = pens[penId] || [];
                 if (dogIds.length === 0) return;
-                
+
                 const penLabel = penId.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase());
-                html += `<div class="preview-pen"><div class="preview-pen-title">📍 ${penLabel}</div>`;
-                
+                let rows = '';
+
                 dogIds.forEach(dogId => {
                     const dog = dogs.find(d => d.id === dogId);
                     if (!dog) return;
-                    
+
                     const displayName = dog.matchedName || (dog.possibleMatches.length === 1 ? dog.possibleMatches[0] : dog.inputName);
-                    const statusLabel = FEEDING_STATUS_MAP[dog.status] || dog.status;
-                    
-                    let extras = [];
-                    if (dog.prescription) extras.push(`💊 ${dog.prescriptionComment || 'Prescription'}`);
+
+                    const extras = [];
+                    if (dog.prescription) extras.push(`Medicine: ${dog.prescriptionComment || 'yes'}`);
                     if (dog.supplements && dog.supplementTypes.length > 0) {
-                        const suppLabels = dog.supplementTypes.map(t => {
+                        extras.push(dog.supplementTypes.map(t => {
                             const st = SUPPLEMENT_TYPES.find(s => s.id === t);
                             return st ? st.label : t;
-                        });
-                        extras.push(`🌿 ${suppLabels.join(', ')}`);
+                        }).join(', '));
                     }
-                    
-                    html += `
-                        <div class="preview-dog">
-                            <div>
-                                <div class="preview-dog-name">${displayName}</div>
-                                ${extras.length > 0 ? `<div class="preview-extras">${extras.join(' • ')}</div>` : ''}
-                            </div>
-                            <div class="preview-dog-status">${statusLabel}</div>
-                        </div>
-                    `;
+
+                    rows += sheetRow(displayName, extras.join(' · '), dog.status || 'all');
                     totalDogs++;
                 });
-                
-                html += '</div>';
+
+                html += `
+                    <div class="sheet-block">
+                        <div class="sheet-block-head">
+                            <span>${penLabel}</span>
+                            <span class="fb-rule"></span>
+                            <span class="sheet-block-count">${dogIds.length}</span>
+                        </div>
+                        ${rows}
+                    </div>
+                `;
             });
-            
+
             if (totalDogs === 0) {
-                html += '<p style="text-align: center; color: var(--text-secondary);">No dogs assigned to pens yet.</p>';
-            } else {
-                html += `<hr style="border-color: var(--bg-pen); margin: 15px 0;"><p><strong>Total:</strong> ${totalDogs} dogs</p>`;
+                html = '<p class="empty-message">No dogs are in a pen yet. Drag a dog from “To assign” into a pen first.</p>';
             }
-            
-            content.innerHTML = html;
-            modal.classList.add('active');
+
+            const assignedIds = Object.values(pens).flat();
+            const waiting = dogs.filter(d => !assignedIds.includes(d.id)).length;
+            if (waiting > 0) {
+                html += `<p class="sheet-note">${waiting} dog${waiting === 1 ? ' is' : 's are'} still waiting to be assigned — they will not be included.</p>`;
+            }
+
+            if (sub) sub.textContent = `${totalDogs} dog${totalDogs === 1 ? '' : 's'} · ${currentMealType} · goes to Telegram for review`;
+            if (content) content.innerHTML = html;
+            openSheet('previewModal');
+            // updateConnectionUI owns the submit gate; re-run it so the sheet's own Submit
+            // button picks up the current state the moment it appears.
+            updateConnectionUI();
         }
 
         function closePreview() {
-            document.getElementById('previewModal').classList.remove('active');
+            closeSheet('previewModal');
         }
+
+        function openTodayLoadingSheet(mealLabel) {
+            const sub = document.getElementById('todaySheetSub');
+            const body = document.getElementById('todaySheetBody');
+            const foot = document.getElementById('todaySheetFoot');
+            if (sub) sub.textContent = 'Checking the whiteboard for ' + mealLabel + '…';
+            if (body) body.innerHTML = `
+                <div class="sheet-loading">
+                    <span class="sheet-spinner fb-spin"></span>
+                    <p>Reading today’s whiteboard. This can take up to 45 seconds — it’s the slow one.</p>
+                </div>
+            `;
+            if (foot) foot.innerHTML = '';
+            openSheet('todaySheet');
+        }
+
+        function showTodayResultSheet(mealLabel, addedNames, skipped, unmatched) {
+            const sub = document.getElementById('todaySheetSub');
+            const body = document.getElementById('todaySheetBody');
+            const foot = document.getElementById('todaySheetFoot');
+            if (sub) sub.textContent = `From the whiteboard, for ${mealLabel}`;
+
+            let html = '';
+            if (addedNames.length) {
+                html += `
+                    <div class="sheet-block">
+                        <div class="sheet-block-head">
+                            <span>Added to the board</span><span class="fb-rule"></span>
+                            <span class="sheet-block-count">${addedNames.length}</span>
+                        </div>
+                        ${addedNames.map(a => `
+                            <div class="sheet-row">
+                                <div class="sheet-row-main">
+                                    <div class="sheet-row-name">${esc(a.name)}</div>
+                                    ${a.pen ? `<div class="sheet-row-extra">${esc(a.pen.replace('-', ' '))}</div>` : ''}
+                                </div>
+                            </div>`).join('')}
+                    </div>`;
+            }
+            if (unmatched.length) {
+                html += `
+                    <div class="sheet-block">
+                        <div class="sheet-block-head">
+                            <span>Need a name match</span><span class="fb-rule"></span>
+                            <span class="sheet-block-count">${unmatched.length}</span>
+                        </div>
+                        ${unmatched.map(n => `
+                            <div class="sheet-row" style="border-left-color: var(--color-accent);">
+                                <div class="sheet-row-main">
+                                    <div class="sheet-row-name">${esc(n)}</div>
+                                    <div class="sheet-row-extra">Not on the Lookup list — pick the right dog on its card</div>
+                                </div>
+                            </div>`).join('')}
+                    </div>`;
+            }
+            if (skipped.length) {
+                html += `
+                    <div class="sheet-block">
+                        <div class="sheet-block-head">
+                            <span>Skipped — no pen on the master sheet</span><span class="fb-rule"></span>
+                            <span class="sheet-block-count">${skipped.length}</span>
+                        </div>
+                        ${skipped.map(n => `
+                            <div class="sheet-row" style="border-left-color: var(--color-neutral-400);">
+                                <div class="sheet-row-main">
+                                    <div class="sheet-row-name">${esc(n)}</div>
+                                    <div class="sheet-row-extra">Booked in, but the dog details sheet has no B/T feeding pen</div>
+                                </div>
+                            </div>`).join('')}
+                    </div>`;
+            }
+
+            if (body) body.innerHTML = html;
+            if (foot) foot.innerHTML = '<button type="button" class="fb-btn fb-btn-submit" onclick="closeTodaySheet()">Done</button>';
+            openSheet('todaySheet');
+        }
+
+        function closeTodaySheet() {
+            closeSheet('todaySheet');
+        }
+
+        // ============================================
+        // SUBMIT
+        // ============================================
 
         async function submitReport() {
             showPreview();
@@ -3091,7 +3599,7 @@
             // Success requires BOTH a successful backend AND a confirmed Telegram delivery.
             // A report with no review links in Telegram is a failed submit — don't wipe state.
             if (result && result.success && result.telegramSent) {
-                showToast(`✅ ${result.dogsProcessed} dogs submitted! Check Telegram.`, 'success');
+                showToast(`${result.dogsProcessed} dogs submitted — check Telegram.`, 'success');
                 // Belt-and-braces board clear (@36). GAS also clears the n8n board server-side
                 // (liveBoardCleared), which covers the case where this tablet aborted after the
                 // server had already delivered. This covers the opposite case — GAS reaching
@@ -3103,17 +3611,18 @@
                         .catch(e => console.warn('[submit] live board clear failed', e));
                 }
                 dogs = [];
+                expandedDogId = null;
                 for (const penId of Object.keys(pens)) pens[penId] = [];
                 clearQueue();
                 renderAllPens();
                 renderStagingArea();
                 updateConnectionUI();
-                updateStatus('✓ Submitted', 'connected');
+                updateStatus('Submitted', 'connected');
             } else {
                 const reason = (result && result.error) ? result.error
                              : (result && result.success && !result.telegramSent) ? 'Telegram delivery failed — report not sent'
                              : 'Unknown error';
-                showToast('❌ Submit failed: ' + reason + '. Your dogs are still here — try again.', 'error');
+                showToast('Submit failed: ' + reason + '. Your dogs are still here — try again.', 'error');
                 updateStatus('Submit failed', 'error');
                 // Local state + queue are preserved, so the user can retry or refresh safely.
             }
@@ -3134,13 +3643,14 @@
 
             if (result && result.success) {
                 dogs = [];
+                expandedDogId = null;
                 for (const penId of Object.keys(pens)) pens[penId] = [];
                 clearQueue();
                 renderAllPens();
                 renderStagingArea();
                 updateConnectionUI();
                 showToast('Session cleared', 'success');
-                updateStatus('✓ Cleared', 'connected');
+                updateStatus('Cleared', 'connected');
             } else {
                 showToast('Clear failed — your data is safe. Try again when reconnected.', 'error');
                 updateStatus('Clear failed', 'error');
@@ -3151,13 +3661,17 @@
         // TOAST NOTIFICATIONS
         // ============================================
 
+        // 2.2s is the design's cadence for a confirmation. Errors carry sentences staff have to
+        // act on (skipped dogs by name, a submit failure reason), so they get long enough to read.
         function showToast(message, type = 'info') {
             const container = document.getElementById('toastContainer');
+            if (!container) return;
             const toast = document.createElement('div');
             toast.className = `toast ${type}`;
+            toast.setAttribute('role', 'status');
             toast.textContent = message;
             container.appendChild(toast);
-            setTimeout(() => toast.remove(), 4000);
+            setTimeout(() => toast.remove(), type === 'error' ? 8000 : 2600);
         }
     </script>
 </body>

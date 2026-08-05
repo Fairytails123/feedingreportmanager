@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/organic-3045ce80-1d04-44db-8453-a7d78cf8a2c1/styles.css">
+<script src="_ds/organic-3045ce80-1d04-44db-8453-a7d78cf8a2c1/_ds_bundle.js"></script>
+<style>
+/* Only what inline styles cannot express: resets, keyframes, focus rings,
+   pointer/drag states and the container queries that make one markup tree
+   serve phone / tablet / desktop. Everything visual is inline. */
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);
+     -webkit-font-smoothing:antialiased;overscroll-behavior:none}
+button{font-family:inherit}
+:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}
+.fb-scroll{scrollbar-width:thin;scrollbar-color:var(--color-neutral-400) transparent}
+.fb-scroll::-webkit-scrollbar{height:8px;width:8px}
+.fb-scroll::-webkit-scrollbar-thumb{background:var(--color-neutral-400);border-radius:99px}
+.fb-scroll::-webkit-scrollbar-track{background:transparent}
+
+/* --- gesture surfaces ------------------------------------------------- */
+/* Long-press anywhere on a tile is the only way to pick a dog up. Tiles keep
+   pan-y so the board still scrolls when a finger lands on one; the press is
+   what converts a touch into a drag, and the non-passive touchmove registered
+   at mount is what stops Android turning it back into a scroll. */
+.fb-tile{touch-action:pan-y;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;cursor:grab}
+.fb-dragging .fb-tile{touch-action:none}
+/* Snap points fight programmatic scrolling — every scrollLeft nudge gets pulled
+   back to the nearest pen. Off while a dog is in the air, so the row can follow
+   the finger; back on for thumb swiping. */
+.fb-dragging .fb-pens{scroll-snap-type:none;scroll-behavior:auto}
+/* Armed: the press has landed on the finger but not yet become a drag. */
+.fb-tile[data-armed="true"]{transform:scale(.975);box-shadow:0 0 0 3px var(--color-accent-300), var(--shadow-md)}
+.fb-tile[data-lifted="true"]{opacity:.35;filter:saturate(.4)}
+.fb-ghost{pointer-events:none;will-change:transform;transform-origin:top left}
+
+/* --- motion ----------------------------------------------------------- */
+@keyframes fbPop{from{transform:scale(.94);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes fbLift{from{transform:scale(1) rotate(0)}to{transform:scale(1.04) rotate(-1.2deg)}}
+@keyframes fbRise{from{transform:translateY(14px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes fbPulse{0%,100%{opacity:1}50%{opacity:.45}}
+@keyframes fbSpin{to{transform:rotate(360deg)}}
+@keyframes fbFlash{0%{background:var(--color-accent-200)}100%{background:var(--color-neutral-100)}}
+.fb-pop{animation:fbPop .22s cubic-bezier(.22,1,.36,1)}
+.fb-rise{animation:fbRise .3s cubic-bezier(.22,1,.36,1)}
+.fb-new{animation:fbFlash .9s ease-out}
+.fb-spin{animation:fbSpin .9s linear infinite}
+.fb-pulse{animation:fbPulse 1.6s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* --- layout: one tree, three shapes ---------------------------------- */
+html,body{height:100%}
+.fb-shell{display:grid;gap:14px;min-height:0}
+.fb-pens{display:grid;gap:12px}
+.fb-tray{display:none}
+/* phone portrait */
+@container (max-width:719px){
+  .fb-shell{grid-template-columns:minmax(0,1fr)}
+  .fb-rail{display:none}
+  .fb-tray{display:block}
+  .fb-pens{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:6px}
+  .fb-pen{flex:0 0 84%;scroll-snap-align:center}
+  .fb-main{padding-bottom:200px}
+}
+/* tablet portrait / small windows */
+@container (min-width:720px) and (max-width:1059px){
+  .fb-shell{grid-template-columns:minmax(0,1fr)}
+  .fb-rail{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
+  .fb-rail-wide{grid-column:1 / -1}
+  .fb-pens{display:flex;overflow-x:auto;scroll-snap-type:x proximity;padding-bottom:6px}
+  .fb-pen{flex:0 0 clamp(210px,31%,260px);scroll-snap-align:start}
+}
+/* tablet landscape + desktop: nothing is hidden, nothing scrolls sideways */
+@container (min-width:1060px){
+  .fb-shell{grid-template-columns:312px minmax(0,1fr)}
+  .fb-rail{display:flex;flex-direction:column;gap:12px;min-height:0;max-height:100%;overflow-y:auto;padding-right:2px}
+  .fb-pens{grid-template-columns:repeat(5,minmax(0,1fr))}
+}
+@container (min-width:1400px){
+  .fb-shell{grid-template-columns:340px minmax(0,1fr);gap:20px}
+}
+</style>
+</helmet>
+
+<div data-fb-root="true" ref="{{ rootRef }}" class="{{ rootClass }}" style="container-type:inline-size;position:relative;height:100%;min-height:100%;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);font-size:15px;line-height:1.4;overflow:hidden">
+
+  <sc-if value="{{ showBanner }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" aria-live="assertive" class="fb-rise" style="position:absolute;top:0;left:0;right:0;z-index:60;display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--color-accent-800);color:var(--color-accent-100);box-shadow:var(--shadow-lg)">
+      <span class="fb-pulse" style="display:grid;place-items:center;width:34px;height:34px;border-radius:99px;background:var(--color-accent-700);flex:none">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><path d="M2 8.8A16 16 0 0 1 22 8.8"></path><path d="M5.5 12.6A11 11 0 0 1 18.5 12.6"></path><path d="M9 16.4a6 6 0 0 1 6 0"></path><path d="m2 2 20 20"></path></svg>
+      </span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:15px">Not synced — {{ pendingLabel }} waiting</div>
+        <div style="font-size:13px;opacity:.8">Your edits are safe on this tablet. Submit is locked until they land.</div>
+      </div>
+      <button class="btn" onClick="{{ onRetry }}" style="background:var(--color-accent-100);color:var(--color-accent-800);border-radius:99px;min-height:44px;padding:0 18px;flex:none">Retry now</button>
+    </div>
+  </sc-if>
+
+  <div style="display:flex;flex-direction:column;gap:14px;padding:14px;padding-top:{{ topPad }};height:100%;min-height:0">
+
+    <header style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div style="display:grid;place-items:center;width:44px;height:44px;border-radius:99px;background:var(--color-accent-2-200);color:var(--color-accent-2-700);flex:none;box-shadow:var(--shadow-sm)">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11h18"></path><path d="M4.5 11a7.5 7.5 0 0 0 15 0"></path><path d="M12 18.5V21"></path></svg>
+      </div>
+      <div style="min-width:0;flex:1">
+        <h1 style="margin:0;font-family:var(--font-heading);font-size:23px;line-height:1.05;letter-spacing:-.01em">Feeding round</h1>
+        <div style="font-size:13px;color:var(--color-neutral-700)">{{ dateLabel }} · {{ meal }}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 14px 8px 10px;border-radius:99px;background:{{ connBg }};color:{{ connFg }};font-size:13.5px;font-weight:600;min-height:44px">
+        <span class="{{ connDotClass }}" style="width:10px;height:10px;border-radius:99px;background:currentColor;flex:none"></span>
+        {{ connLabel }}
+      </div>
+    </header>
+
+    <div class="fb-shell" style="flex:1;min-height:0">
+
+      <!-- ───────────── rail ───────────── -->
+      <aside class="fb-rail">
+        <section style="background:var(--color-surface);border-radius:var(--radius-lg);padding:14px;box-shadow:var(--shadow-sm)">
+          <h2 style="margin:0 0 10px;font-family:var(--font-heading);font-size:15px">Add a dog</h2>
+          <div style="display:flex;gap:8px">
+            <input class="input" type="text" value="{{ query }}" onChange="{{ onQuery }}" onKeyDown="{{ onQueryKey }}" placeholder="Type a name…" style="flex:1;min-width:0;border-radius:99px;min-height:48px;font-size:16px;background:var(--color-neutral-100)">
+            <button class="btn btn-primary" onClick="{{ onAdd }}" aria-label="Add dog" style="border-radius:99px;min-width:48px;min-height:48px;padding:0 16px">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+            </button>
+          </div>
+          <sc-if value="{{ hasSuggestions }}" hint-placeholder-val="{{ false }}">
+            <div role="listbox" style="margin-top:8px;display:flex;flex-direction:column;gap:4px;max-height:172px;overflow-y:auto" class="fb-scroll">
+              <sc-for list="{{ suggestions }}" as="s" hint-placeholder-count="3">
+                <button onClick="{{ s.onPick }}" style="display:flex;align-items:center;gap:8px;text-align:left;background:var(--color-neutral-100);border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:0 12px;min-height:44px;font-size:15px;font-weight:600;color:var(--color-text);cursor:pointer" style-hover="background:var(--color-accent-200);border-color:var(--color-accent-400)">{{ s.name }}</button>
+              </sc-for>
+            </div>
+          </sc-if>
+        </section>
+
+        <section style="background:var(--color-surface);border-radius:var(--radius-lg);padding:14px;box-shadow:var(--shadow-sm)">
+          <h2 style="margin:0 0 10px;font-family:var(--font-heading);font-size:15px">Meal</h2>
+          <div role="radiogroup" aria-label="Meal type" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;background:var(--color-neutral-200);padding:5px;border-radius:99px">
+            <sc-for list="{{ meals }}" as="m" hint-placeholder-count="3">
+              <button role="radio" aria-checked="{{ m.on }}" onClick="{{ m.onPick }}" style="border:0;cursor:pointer;border-radius:99px;min-height:44px;padding:0 6px;font-family:var(--font-heading);font-size:13.5px;background:{{ m.bg }};color:{{ m.fg }};box-shadow:{{ m.shadow }};transition:background .18s ease,color .18s ease">{{ m.short }}</button>
+            </sc-for>
+          </div>
+          <button class="btn" onClick="{{ onToday }}" style="width:100%;margin-top:10px;border-radius:99px;min-height:{{ todayH }};gap:8px;border:1px solid {{ todayBorder }};background:{{ todayBg }};color:{{ todayFg }};box-shadow:{{ todayShadow }}">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.1 13.4a.7.7 0 0 0 .55 1.13h5.2l-1.35 7.2a.35.35 0 0 0 .62.28L18.9 10.6a.7.7 0 0 0-.55-1.13h-5.2l1.35-7.2A.35.35 0 0 0 13 2Z"></path></svg>
+            Add today’s dogs
+          </button>
+        </section>
+
+        <section class="fb-rail-wide" style="background:var(--color-surface);border-radius:var(--radius-lg);padding:14px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:10px;min-height:0">
+          <div style="display:flex;align-items:baseline;gap:8px">
+            <h2 style="margin:0;font-family:var(--font-heading);font-size:15px;flex:1">To assign</h2>
+            <span class="tag tag-accent" style="border-radius:99px;font-weight:700">{{ stageCount }}</span>
+          </div>
+          <div data-drop="stage" style="min-height:96px;border-radius:var(--radius-md);padding:8px;background:{{ stageBg }};border:2px dashed {{ stageBorder }};display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;align-content:flex-start;transition:background .18s ease,border-color .18s ease">
+            <sc-for list="{{ staging }}" as="d" hint-placeholder-count="3">
+              <div class="fb-tile" data-lifted="{{ d.lifted }}" tabindex="0" role="button" aria-label="{{ d.a11y }}" onKeyDown="{{ d.onKey }}" onPointerDown="{{ d.onTileDown }}" style="position:relative;display:flex;flex-direction:column;gap:4px;background:{{ d.bg }};border:1px solid var(--color-divider);border-left:5px solid {{ d.edge }};border-radius:var(--radius-md);padding:2px 6px 2px 12px;box-shadow:var(--shadow-sm);min-height:48px;transition:opacity .15s ease,transform .12s ease,box-shadow .12s ease">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="flex:1;min-height:44px;display:flex;align-items:center;font-size:15px;font-weight:700;white-space:nowrap">{{ d.name }}</span>
+                  <button data-nodrag="true" onClick="{{ d.onRemove }}" aria-label="Remove {{ d.name }}" style="display:grid;place-items:center;width:32px;height:44px;border:0;background:transparent;color:var(--color-neutral-600);cursor:pointer;border-radius:var(--radius-sm);flex:none" style-hover="background:var(--color-neutral-300);color:var(--color-accent-800)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+                  </button>
+                </div>
+                <sc-if value="{{ d.needsMatch }}" hint-placeholder-val="{{ false }}">
+                  <div data-nodrag="true" style="display:flex;flex-direction:column;gap:5px;padding:0 4px 6px 0;max-width:230px">
+                    <span style="font-size:12px;font-weight:700;color:var(--color-accent-700)">Not on the list — pick one</span>
+                    <sc-for list="{{ d.matches }}" as="m" hint-placeholder-count="2">
+                      <button onClick="{{ m.onPick }}" style="text-align:left;min-height:42px;padding:0 12px;border-radius:99px;border:1px solid var(--color-accent-400);background:var(--color-accent-100);color:var(--color-accent-800);font-size:14px;font-weight:700;cursor:pointer" style-hover="background:var(--color-accent-200)">{{ m.name }}</button>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+            <sc-if value="{{ stageEmpty }}" hint-placeholder-val="{{ false }}">
+              <p style="margin:auto;font-size:13.5px;color:var(--color-neutral-600);text-align:center;padding:8px">Every dog is in a pen.<br>Drop one back here to un-assign it.</p>
+            </sc-if>
+          </div>
+          <div data-drop="bin" style="display:flex;align-items:center;justify-content:center;gap:10px;min-height:{{ binH }};border-radius:var(--radius-md);border:2px dashed {{ binBorder }};background:{{ binBg }};color:{{ binFg }};font-size:13.5px;font-weight:700;transition:all .18s ease">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"></path></svg>
+            {{ binLabel }}
+          </div>
+        </section>
+
+        <section class="fb-rail-wide" style="display:flex;gap:10px">
+          <button class="btn btn-secondary" onClick="{{ onPreview }}" style="flex:1;border-radius:99px;min-height:52px;gap:8px;border:1px solid var(--color-divider);background:var(--color-neutral-100)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="3"></rect><path d="M8 8h8M8 12h8M8 16h4"></path></svg>
+            Preview
+          </button>
+          <button class="btn" onClick="{{ onPreview }}" disabled="{{ submitLocked }}" style="flex:1;border-radius:99px;min-height:52px;gap:8px;background:{{ submitBg }};color:{{ submitFg }}">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12.5 5 5L20 6.5"></path></svg>
+            Submit
+          </button>
+        </section>
+      </aside>
+
+      <!-- ───────────── pens ───────────── -->
+      <main class="fb-main fb-scroll" style="min-width:0;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:12px">
+
+        <sc-for list="{{ penGroups }}" as="group" hint-placeholder-count="2">
+          <section style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <h2 style="margin:0;font-family:var(--font-heading);font-size:17px">{{ group.label }}</h2>
+              <span style="font-size:13px;color:var(--color-neutral-700)">{{ group.count }}</span>
+              <span style="flex:1;height:1px;background:var(--color-divider)"></span>
+              <span style="font-size:12px;color:var(--color-neutral-600)">{{ group.hint }}</span>
+            </div>
+            <div class="fb-pens fb-scroll">
+              <sc-for list="{{ group.pens }}" as="pen" hint-placeholder-count="5">
+                <div data-drop="pen" data-pen="{{ pen.id }}" style="display:flex;flex-direction:column;gap:8px;min-height:{{ pen.minH }};padding:8px;border-radius:var(--radius-lg);background:{{ pen.bg }};box-shadow:{{ pen.ring }};transition:background .18s ease,box-shadow .18s ease" class="fb-pen">
+                  <div style="display:flex;align-items:center;gap:6px;padding:2px 4px 0">
+                    <span style="font-family:var(--font-heading);font-size:14px">{{ pen.label }}</span>
+                    <span style="flex:1"></span>
+                    <span style="display:grid;place-items:center;min-width:24px;height:24px;padding:0 7px;border-radius:99px;background:{{ pen.badgeBg }};color:{{ pen.badgeFg }};font-size:12px;font-weight:700">{{ pen.count }}</span>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:7px">
+                    <sc-for list="{{ pen.dogs }}" as="dog" hint-placeholder-count="3">
+                      <div style="position:relative">
+                        <sc-if value="{{ dog.lineBefore }}" hint-placeholder-val="{{ false }}">
+                          <div style="position:absolute;top:-5px;left:0;right:0;height:3px;border-radius:99px;background:var(--color-accent);box-shadow:0 0 0 3px var(--color-accent-200)"></div>
+                        </sc-if>
+                        <div class="fb-tile {{ dog.newClass }}" data-lifted="{{ dog.lifted }}" tabindex="0" role="button" aria-label="{{ dog.a11y }}" onKeyDown="{{ dog.onKey }}" onPointerDown="{{ dog.onTileDown }}" style="background:{{ dog.bg }};border:1px solid {{ dog.border }};border-left:5px solid {{ dog.edge }};border-radius:var(--radius-md);box-shadow:{{ dog.shadow }};overflow:hidden;transition:opacity .15s ease,box-shadow .18s ease,border-color .18s ease">
+                          <div style="display:flex;align-items:center;gap:2px;padding:2px 2px 2px 0">
+                            <button onClick="{{ dog.onToggle }}" aria-expanded="{{ dog.expanded }}" style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;min-height:44px;padding:0 8px;border:0;background:transparent;color:inherit;text-align:left;cursor:grab">
+                              <span style="flex:1;min-width:0;font-size:14.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ dog.name }}</span>
+                              <sc-if value="{{ dog.hasMeds }}" hint-placeholder-val="{{ false }}">
+                                <span title="Medicine" style="display:grid;place-items:center;width:22px;height:22px;border-radius:99px;background:var(--color-accent-200);color:var(--color-accent-800);flex:none">
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><rect x="2.5" y="8.5" width="19" height="7" rx="3.5" transform="rotate(-45 12 12)"></rect><path d="M8.5 8.5 15.5 15.5"></path></svg>
+                                </span>
+                              </sc-if>
+                              <sc-if value="{{ dog.hasSupps }}" hint-placeholder-val="{{ false }}">
+                                <span title="Supplements" style="display:grid;place-items:center;width:22px;height:22px;border-radius:99px;background:var(--color-accent-2-200);color:var(--color-accent-2-800);flex:none">
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4c0 9-5.5 13-11 13a5.5 5.5 0 0 1 0-11c5 0 8-1 11-2Z"></path><path d="M4 20c2-5 5-8 9-10"></path></svg>
+                                </span>
+                              </sc-if>
+                              <span style="display:grid;place-items:center;width:22px;height:22px;color:var(--color-neutral-600);flex:none;transform:{{ dog.chev }};transition:transform .2s ease">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+                              </span>
+                            </button>
+                          </div>
+                          <div role="radiogroup" data-nodrag="true" aria-label="Portion eaten by {{ dog.name }}" style="display:grid;grid-template-columns:repeat(4,1fr) 1.55fr;gap:3px;padding:0 5px 5px">
+                            <sc-for list="{{ dog.portions }}" as="p" hint-placeholder-count="5">
+                              <button role="radio" aria-checked="{{ p.on }}" aria-label="{{ p.a11y }}" onClick="{{ p.onPick }}" style="border:1px solid {{ p.border }};background:{{ p.bg }};color:{{ p.fg }};border-radius:{{ p.radius }};min-height:38px;font-family:var(--font-heading);font-size:{{ p.size }};cursor:pointer;transition:background .16s ease,color .16s ease,border-color .16s ease" style-hover="border-color:var(--color-accent-400)">{{ p.label }}</button>
+                            </sc-for>
+                          </div>
+                          <sc-if value="{{ dog.expanded }}" hint-placeholder-val="{{ false }}">
+                            <div class="fb-rise" data-nodrag="true" style="border-top:1px dashed var(--color-divider);padding:8px;display:flex;flex-direction:column;gap:8px">
+                              <div style="display:flex;gap:6px">
+                                <button onClick="{{ dog.onMeds }}" aria-pressed="{{ dog.hasMeds }}" style="flex:1;min-height:44px;border-radius:99px;border:1px solid {{ dog.medsBorder }};background:{{ dog.medsBg }};color:{{ dog.medsFg }};font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+                                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><rect x="2.5" y="8.5" width="19" height="7" rx="3.5" transform="rotate(-45 12 12)"></rect><path d="M8.5 8.5 15.5 15.5"></path></svg>
+                                  Medicine
+                                </button>
+                                <button onClick="{{ dog.onSupps }}" aria-pressed="{{ dog.hasSupps }}" style="flex:1;min-height:44px;border-radius:99px;border:1px solid {{ dog.suppBorder }};background:{{ dog.suppBg }};color:{{ dog.suppFg }};font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+                                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4c0 9-5.5 13-11 13a5.5 5.5 0 0 1 0-11c5 0 8-1 11-2Z"></path><path d="M4 20c2-5 5-8 9-10"></path></svg>
+                                  Supplements
+                                </button>
+                              </div>
+                              <sc-if value="{{ dog.hasMeds }}" hint-placeholder-val="{{ false }}">
+                                <input class="input" type="text" value="{{ dog.medsText }}" onChange="{{ dog.onMedsText }}" placeholder="Which medicine?" style="width:100%;border-radius:var(--radius-md);min-height:46px;font-size:16px;background:var(--color-neutral-100)">
+                              </sc-if>
+                              <sc-if value="{{ dog.hasSupps }}" hint-placeholder-val="{{ false }}">
+                                <div style="display:flex;flex-wrap:wrap;gap:6px">
+                                  <sc-for list="{{ dog.supps }}" as="s" hint-placeholder-count="4">
+                                    <button onClick="{{ s.onToggle }}" aria-pressed="{{ s.on }}" style="min-height:40px;padding:0 12px;border-radius:99px;border:1px solid {{ s.border }};background:{{ s.bg }};color:{{ s.fg }};font-size:13px;font-weight:700;cursor:pointer">{{ s.label }}</button>
+                                  </sc-for>
+                                </div>
+                              </sc-if>
+                              <button onClick="{{ dog.onRemove }}" style="align-self:flex-start;display:flex;align-items:center;gap:7px;min-height:44px;padding:0 14px;border-radius:99px;border:1px solid var(--color-divider);background:transparent;color:var(--color-accent-800);font-size:13px;font-weight:700;cursor:pointer" style-hover="background:var(--color-accent-200);border-color:var(--color-accent-400)">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"></path></svg>
+                                Take off the board
+                              </button>
+                            </div>
+                          </sc-if>
+                        </div>
+                      </div>
+                    </sc-for>
+                    <sc-if value="{{ pen.lineEnd }}" hint-placeholder-val="{{ false }}">
+                      <div style="height:3px;border-radius:99px;background:var(--color-accent);box-shadow:0 0 0 3px var(--color-accent-200)"></div>
+                    </sc-if>
+                    <sc-if value="{{ pen.empty }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:grid;place-items:center;min-height:64px;border-radius:var(--radius-md);border:2px dashed {{ pen.emptyBorder }};color:{{ pen.emptyFg }};font-size:12.5px;text-align:center;padding:8px">{{ pen.emptyLabel }}</div>
+                    </sc-if>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+        </sc-for>
+      </main>
+    </div>
+  </div>
+
+  <!-- ───────────── phone tray: staging + actions, always in reach ───────────── -->
+  <div class="fb-tray" style="position:absolute;left:0;right:0;bottom:0;z-index:40;background:var(--color-surface);border-top:1px solid var(--color-divider);border-radius:var(--radius-lg) var(--radius-lg) 0 0;box-shadow:var(--shadow-lg);padding:10px 12px 12px">
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input class="input" type="text" value="{{ query }}" onChange="{{ onQuery }}" onKeyDown="{{ onQueryKey }}" placeholder="Add a dog…" aria-label="Add a dog" style="flex:1;min-width:0;border-radius:99px;min-height:48px;font-size:16px;background:var(--color-neutral-100)">
+      <button class="btn btn-primary" onClick="{{ onAdd }}" aria-label="Add dog" style="border-radius:99px;min-width:48px;min-height:48px;padding:0 16px;flex:none">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+      </button>
+    </div>
+    <sc-if value="{{ hasSuggestions }}" hint-placeholder-val="{{ false }}">
+      <div role="listbox" class="fb-scroll" style="display:flex;gap:6px;overflow-x:auto;margin-bottom:8px;padding-bottom:2px">
+        <sc-for list="{{ suggestions }}" as="s" hint-placeholder-count="3">
+          <button onClick="{{ s.onPick }}" style="flex:none;white-space:nowrap;min-height:44px;padding:0 16px;border-radius:99px;border:1px solid var(--color-accent-400);background:var(--color-accent-100);color:var(--color-accent-800);font-size:14.5px;font-weight:700;cursor:pointer">{{ s.name }}</button>
+        </sc-for>
+      </div>
+    </sc-if>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span style="font-family:var(--font-heading);font-size:14px">To assign</span>
+      <span class="tag tag-accent" style="border-radius:99px;font-weight:700">{{ stageCount }}</span>
+      <span style="flex:1"></span>
+      <button onClick="{{ onToday }}" aria-label="Add today’s dogs" style="display:grid;place-items:center;width:44px;height:44px;border-radius:99px;border:1px solid var(--color-divider);background:var(--color-neutral-100);color:var(--color-text);cursor:pointer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.1 13.4a.7.7 0 0 0 .55 1.13h5.2l-1.35 7.2a.35.35 0 0 0 .62.28L18.9 10.6a.7.7 0 0 0-.55-1.13h-5.2l1.35-7.2A.35.35 0 0 0 13 2Z"></path></svg>
+      </button>
+      <button onClick="{{ onPreview }}" style="display:flex;align-items:center;gap:7px;min-height:44px;padding:0 16px;border-radius:99px;border:0;background:{{ submitBg }};color:{{ submitFg }};font-family:var(--font-heading);font-size:14px;cursor:pointer">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12.5 5 5L20 6.5"></path></svg>
+        Submit
+      </button>
+    </div>
+    <div data-drop="stage" class="fb-scroll" style="display:flex;gap:8px;overflow-x:auto;padding:6px;border-radius:var(--radius-md);background:{{ stageBg }};border:2px dashed {{ stageBorder }};min-height:64px;align-items:center">
+      <sc-for list="{{ staging }}" as="d" hint-placeholder-count="3">
+        <div class="fb-tile" data-lifted="{{ d.lifted }}" onPointerDown="{{ d.onTileDown }}" style="flex:none;display:flex;align-items:center;background:{{ d.bg }};border:1px solid var(--color-divider);border-left:5px solid {{ d.edge }};border-radius:var(--radius-md);padding:2px 14px;box-shadow:var(--shadow-sm);min-height:48px;transition:transform .12s ease,box-shadow .12s ease">
+          <span style="font-size:14.5px;font-weight:700;white-space:nowrap">{{ d.name }}</span>
+        </div>
+      </sc-for>
+      <sc-if value="{{ stageEmpty }}" hint-placeholder-val="{{ false }}">
+        <span style="margin:auto;font-size:13px;color:var(--color-neutral-600)">All dogs are in a pen</span>
+      </sc-if>
+    </div>
+    <sc-if value="{{ dragging }}" hint-placeholder-val="{{ false }}">
+      <div data-drop="bin" style="margin-top:8px;display:flex;align-items:center;justify-content:center;gap:8px;min-height:56px;border-radius:var(--radius-md);border:2px dashed {{ binBorder }};background:{{ binBg }};color:{{ binFg }};font-size:13.5px;font-weight:700">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"></path></svg>
+        {{ binLabel }}
+      </div>
+    </sc-if>
+  </div>
+
+  <!-- ───────────── drag ghost ───────────── -->
+  <sc-if value="{{ dragging }}" hint-placeholder-val="{{ false }}">
+    <div ref="{{ ghostRef }}" class="fb-ghost" aria-hidden="true" style="position:absolute;top:0;left:0;z-index:80;width:{{ ghostW }};display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:var(--radius-md);background:var(--color-neutral-100);border:1px solid var(--color-accent-400);border-left:5px solid {{ ghostEdge }};box-shadow:var(--shadow-lg);font-size:15px;font-weight:700">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="var(--color-accent)"><circle cx="5.5" cy="3" r="1.4"></circle><circle cx="10.5" cy="3" r="1.4"></circle><circle cx="5.5" cy="8" r="1.4"></circle><circle cx="10.5" cy="8" r="1.4"></circle><circle cx="5.5" cy="13" r="1.4"></circle><circle cx="10.5" cy="13" r="1.4"></circle></svg>
+      <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ ghostName }}</span>
+      <span style="margin-left:auto;font-size:12px;font-weight:700;color:{{ ghostHintFg }};white-space:nowrap">{{ ghostHint }}</span>
+    </div>
+  </sc-if>
+
+  <!-- ───────────── sheets ───────────── -->
+  <sc-if value="{{ sheetOpen }}" hint-placeholder-val="{{ false }}">
+    <div role="dialog" aria-modal="true" style="position:absolute;inset:0;z-index:70;background:color-mix(in srgb, var(--color-neutral-900) 46%, transparent);display:flex;align-items:flex-end;justify-content:center;padding:0">
+      <div class="fb-rise" style="width:100%;max-width:560px;max-height:92%;display:flex;flex-direction:column;background:var(--color-bg);border-radius:var(--radius-lg) var(--radius-lg) 0 0;box-shadow:var(--shadow-lg);overflow:hidden">
+        <div style="display:flex;align-items:center;gap:12px;padding:16px 16px 12px;border-bottom:1px solid var(--color-divider)">
+          <div style="flex:1;min-width:0">
+            <h2 style="margin:0;font-family:var(--font-heading);font-size:21px">{{ sheetTitle }}</h2>
+            <div style="font-size:13px;color:var(--color-neutral-700)">{{ sheetSub }}</div>
+          </div>
+          <button onClick="{{ onCloseSheet }}" aria-label="Close" style="display:grid;place-items:center;width:44px;height:44px;border-radius:99px;border:1px solid var(--color-divider);background:var(--color-neutral-100);color:var(--color-text);cursor:pointer">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+          </button>
+        </div>
+        <div class="fb-scroll" style="flex:1;overflow-y:auto;padding:14px 16px">
+          <sc-if value="{{ sheetLoading }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:36px 0">
+              <span class="fb-spin" style="width:38px;height:38px;border-radius:99px;border:4px solid var(--color-neutral-300);border-top-color:var(--color-accent);display:block"></span>
+              <p style="margin:0;font-size:14.5px;color:var(--color-neutral-700);text-align:center;max-width:32ch">Reading today’s whiteboard. This can take up to 45 seconds — it’s the slow one.</p>
+            </div>
+          </sc-if>
+          <sc-for list="{{ sheetRows }}" as="row" hint-placeholder-count="4">
+            <div style="margin-bottom:14px">
+              <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">
+                <span style="font-family:var(--font-heading);font-size:14px">{{ row.label }}</span>
+                <span style="flex:1;height:1px;background:var(--color-divider)"></span>
+                <span style="font-size:12.5px;color:var(--color-neutral-700)">{{ row.count }}</span>
+              </div>
+              <sc-for list="{{ row.items }}" as="it" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;margin-bottom:5px;border-radius:var(--radius-md);background:var(--color-neutral-100);border:1px solid var(--color-divider);border-left:5px solid {{ it.edge }}">
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:14.5px;font-weight:700">{{ it.name }}</div>
+                    <sc-if value="{{ it.extra }}" hint-placeholder-val="{{ false }}">
+                      <div style="font-size:12.5px;color:var(--color-accent-700)">{{ it.extra }}</div>
+                    </sc-if>
+                  </div>
+                  <span style="font-family:var(--font-heading);font-size:13px;padding:5px 11px;border-radius:99px;background:{{ it.pillBg }};color:{{ it.pillFg }}">{{ it.status }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+          <sc-if value="{{ sheetNote }}" hint-placeholder-val="{{ false }}">
+            <p style="margin:0;padding:12px 14px;border-radius:var(--radius-md);background:var(--color-accent-2-100);border:1px solid var(--color-accent-2-300);font-size:13.5px;color:var(--color-accent-2-800)">{{ sheetNote }}</p>
+          </sc-if>
+        </div>
+        <div style="display:flex;gap:10px;padding:12px 16px 16px;border-top:1px solid var(--color-divider)">
+          <button class="btn btn-secondary" onClick="{{ onCloseSheet }}" style="flex:1;border-radius:99px;min-height:52px;border:1px solid var(--color-divider);background:var(--color-neutral-100)">{{ sheetCancel }}</button>
+          <button class="btn" onClick="{{ onSheetConfirm }}" disabled="{{ sheetConfirmLocked }}" style="flex:1.4;border-radius:99px;min-height:52px;background:{{ submitBg }};color:{{ submitFg }}">{{ sheetConfirm }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div role="status" aria-live="polite" class="fb-pop" style="position:absolute;left:50%;bottom:{{ toastBottom }};transform:translateX(-50%);z-index:90;display:flex;align-items:center;gap:9px;padding:11px 18px;border-radius:99px;background:var(--color-neutral-900);color:var(--color-neutral-100);box-shadow:var(--shadow-lg);font-size:14px;font-weight:600;white-space:nowrap;max-width:92%">
+      <span style="display:grid;place-items:center;width:20px;height:20px;border-radius:99px;background:{{ toastDot }};color:var(--color-neutral-900);flex:none">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12.5 5 5L20 6.5"></path></svg>
+      </span>
+      {{ toast }}
+    </div>
+  </sc-if>
+
+  <div aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)">{{ liveMsg }}</div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:800},&quot;seed&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;busy&quot;,&quot;empty&quot;],&quot;default&quot;:&quot;busy&quot;,&quot;tsType&quot;:&quot;'busy' | 'empty'&quot;,&quot;section&quot;:&quot;Board&quot;},&quot;connection&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;ok&quot;,&quot;syncing&quot;,&quot;offline&quot;],&quot;default&quot;:&quot;ok&quot;,&quot;tsType&quot;:&quot;'ok' | 'syncing' | 'offline'&quot;,&quot;section&quot;:&quot;Board&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;comfortable&quot;,&quot;compact&quot;],&quot;default&quot;:&quot;comfortable&quot;,&quot;tsType&quot;:&quot;'comfortable' | 'compact'&quot;,&quot;section&quot;:&quot;Board&quot;},&quot;longPressMs&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;min&quot;:120,&quot;max&quot;:600,&quot;step&quot;:20,&quot;default&quot;:300,&quot;unit&quot;:&quot;ms&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Drag&quot;}}">
+const PORTIONS = [
+  { id: 'all',           label: 'All',  a11y: 'Ate all',           edge: '#728157', pillBg: '#e1eecc', pillFg: '#3d472b' },
+  { id: 'three-quarter', label: '¾',    a11y: 'Ate three quarters', edge: '#aebf92', pillBg: '#f0fae1', pillFg: '#3d472b' },
+  { id: 'half',          label: '½',    a11y: 'Ate half',           edge: '#f6a06b', pillBg: '#ffe1d0', pillFg: '#643312' },
+  { id: 'quarter',       label: '¼',    a11y: 'Ate a quarter',      edge: '#b2622d', pillBg: '#ffc6a5', pillFg: '#402310' },
+  { id: 'none',          label: 'None', a11y: 'Ate nothing',        edge: '#643312', pillBg: '#8c491a', pillFg: '#fff2eb' }
+];
+const SUPPS = [
+  { id: 'calming', label: 'Calming' }, { id: 'hemp', label: 'Hemp' },
+  { id: 'vitamins', label: 'Vitamins' }, { id: 'probiotics', label: 'Probiotics' }
+];
+const MEALS = [
+  { id: 'Morning Meal', short: 'Morning' }, { id: 'Lunch', short: 'Lunch' }, { id: 'Evening Meal', short: 'Evening' }
+];
+const PEN_IDS = ['top-1','top-2','top-3','top-4','top-5','bottom-1','bottom-2','bottom-3','bottom-4','bottom-5'];
+const ROSTER = ['Alfie','Bella','Bramble','Casper Hamilton','Dexter','Hattie Duncan','Marli','Mochi','Nala Sands','Obie','Oliver','Poppy Clark','Reggie Daly','Rufus','Tilly Mills','Winnie Ryan','Woody Warren','Ivy','Digby','Margo','Pepper','Sonny'];
+
+let uid = 0;
+const mk = (name, pen, status, extra) => Object.assign({
+  id: 'd' + (++uid), name: name, pen: pen, status: status || 'all',
+  meds: false, medsText: '', supps: false, suppTypes: []
+}, extra || {});
+
+const BUSY = [
+  mk('Bella','top-1','all'), mk('Dexter','top-1','half',{meds:true,medsText:'Metacam'}), mk('Marli','top-1'),
+  mk('Bramble','top-2','all'), mk('Obie','top-2','quarter'),
+  mk('Hattie Duncan','top-3','all',{supps:true,suppTypes:['calming','hemp']}), mk('Mochi','top-3'), mk('Alfie','top-3','three-quarter'),
+  mk('Rufus','top-4','all'),
+  mk('Casper Hamilton','top-5','none',{meds:true,medsText:'Antibiotic — with food'}),
+  mk('Poppy Clark','bottom-1','all'), mk('Nala Sands','bottom-1','three-quarter'), mk('Tilly Mills','bottom-1'), mk('Winnie Ryan','bottom-1','all'),
+  mk('Woody Warren','bottom-2','half'), mk('Reggie Daly','bottom-2'),
+  mk('Ivy','bottom-3','all'), mk('Digby','bottom-3','all'), mk('Margo','bottom-3','quarter'),
+  mk('Pepper','bottom-4'),
+  mk('Sonny',null), mk('Oliver',null),
+  mk('Ollie R',null,null,{ needsMatch:true, matches:['Oliver','Ollie Reed'] })
+];
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const fill = props.seed || 'busy';
+    this.rootRef = React.createRef();
+    this.ghostRef = React.createRef();
+    this.state = {
+      dogs: fill === 'empty' ? [] : BUSY.map(d => Object.assign({}, d)),
+      meal: 'Lunch', query: '', expanded: null,
+      drag: null, over: null, dropIndex: null, lifted: null,
+      sheet: null, sheetLoading: false, toast: null, liveMsg: '',
+      newIds: []
+    };
+    this._press = null; this._raf = null; this._pt = null; this._suppressClick = 0;
+  }
+
+  // ── drag engine ────────────────────────────────────────────────────────
+  // Pointer Events + pointer capture for coordinates, plus ONE non-passive
+  // touchmove listener registered up front. Registering it at mount (not
+  // mid-gesture) is what makes preventDefault actually stop an Android
+  // scroll: by the time the long press fires the browser has not committed
+  // to a pan, and every move after that is cancelled at source. No
+  // body{overflow:hidden}, so nothing reflows under the finger.
+  componentDidMount() {
+    this._onTouchMove = (e) => { if (this.state.drag) e.preventDefault(); };
+    const root = this.rootRef.current;
+    if (root) root.addEventListener('touchmove', this._onTouchMove, { passive: false });
+    this._onCtx = (e) => { if (e.target.closest && e.target.closest('.fb-tile')) e.preventDefault(); };
+    document.addEventListener('contextmenu', this._onCtx);
+  }
+  componentWillUnmount() {
+    const root = this.rootRef.current;
+    if (root) root.removeEventListener('touchmove', this._onTouchMove);
+    document.removeEventListener('contextmenu', this._onCtx);
+    this._clearTimer(); if (this._raf) cancelAnimationFrame(this._raf);
+  }
+
+  buzz(kind) {
+    if (!navigator.vibrate) return;
+    try {
+      navigator.vibrate(kind === 'lift' ? 18 : kind === 'drop' ? [16, 40, 22] : kind === 'bin' ? [40, 30, 60] : 10);
+    } catch (e) {}
+  }
+  _clearTimer() { if (this._timer) { clearTimeout(this._timer); this._timer = null; } }
+
+  // Client → board-local coordinates. Reading the live scale off the root
+  // keeps the ghost glued to the finger even when the host canvas is zoomed
+  // or the board sits inside a scaled device frame.
+  local(cx, cy) {
+    const el = this.rootRef.current;
+    if (!el) return { x: cx, y: cy, s: 1 };
+    const r = el.getBoundingClientRect();
+    const s = el.offsetWidth ? r.width / el.offsetWidth : 1;
+    return { x: (cx - r.left) / (s || 1), y: (cy - r.top) / (s || 1), s: s || 1 };
+  }
+
+  press(e, dogId, fromPen) {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (this.state.drag || this._press) return;   // pointerdown bubbles — take the first only
+    const handle = e.currentTarget;
+    const tile = handle.closest ? (handle.closest('.fb-tile') || handle) : handle;
+    const rect = tile.getBoundingClientRect();
+    const pt = this.local(e.clientX, e.clientY);
+    this._press = {
+      id: dogId, from: fromPen, pointerId: e.pointerId, sx: e.clientX, sy: e.clientY,
+      // grab offset keeps the ghost under the exact spot that was touched
+      ox: pt.x - (rect.left - this.rootRef.current.getBoundingClientRect().left) / pt.s,
+      oy: pt.y - (rect.top - this.rootRef.current.getBoundingClientRect().top) / pt.s,
+      w: rect.width / pt.s, handle: handle, tile: tile
+    };
+    // NO pointer capture yet. Capturing on pointerdown retargets pointerup to
+    // the captured element, so the browser resolves the click against the tile
+    // instead of the button inside it — which silently killed every tap on the
+    // expand chevron and the portion segments. Capture is taken in lift(),
+    // where suppressing the click is exactly what we want.
+    handle.addEventListener('pointermove', this._pmove = (ev) => this.move(ev));
+    handle.addEventListener('pointerup', this._pup = (ev) => this.up(ev));
+    handle.addEventListener('pointercancel', this._pcancel = (ev) => this.up(ev, true));
+    handle.addEventListener('pointerleave', this._pleave = () => { if (!this.state.drag) this.abort(); });
+    const delay = this.props.longPressMs != null ? this.props.longPressMs : 300;
+    this._clearTimer();
+    // Armed feedback is written straight to the DOM, not through state: a
+    // re-render between pointerdown and pointerup is another way to lose the
+    // click, and this has to be free anyway.
+    if (tile && tile.setAttribute) tile.setAttribute('data-armed', 'true');
+    this._timer = setTimeout(() => this.lift(), delay);
+  }
+
+  disarm() {
+    const p = this._press;
+    if (p && p.tile && p.tile.removeAttribute) p.tile.removeAttribute('data-armed');
+  }
+
+  unbind() {
+    const p = this._press;
+    if (!p || !p.handle) return;
+    p.handle.removeEventListener('pointermove', this._pmove);
+    p.handle.removeEventListener('pointerup', this._pup);
+    p.handle.removeEventListener('pointercancel', this._pcancel);
+    p.handle.removeEventListener('pointerleave', this._pleave);
+    try { p.handle.releasePointerCapture(p.pointerId); } catch (err) {}
+  }
+
+  lift() {
+    const p = this._press;
+    if (!p) return;
+    const dog = this.state.dogs.find(d => d.id === p.id);
+    if (!dog) return;
+    this.buzz('lift');
+    this._pt = { x: p.sx, y: p.sy };
+    this.disarm();
+    // NOW take capture: every move from here belongs to the drag, even once the
+    // finger leaves the tile, the list reflows, or React replaces the node.
+    try { p.handle.setPointerCapture(p.pointerId); } catch (err) {}
+    document.body.classList.add('fb-dragging');
+    this.setState({ drag: { id: p.id, from: p.from, name: dog.name, w: Math.max(150, Math.min(240, p.w)) }, expanded: null,
+      liveMsg: dog.name + ' picked up. Drag to a pen.' }, () => {
+        this._scrollers = this.collectScrollers();
+        this.loop();
+      });
+  }
+
+  move(e) {
+    const p = this._press;
+    if (!p || e.pointerId !== p.pointerId) return;
+    if (!this.state.drag) {
+      // Still deciding: a real finger-slide before the press lands is a scroll.
+      if (Math.abs(e.clientX - p.sx) > 10 || Math.abs(e.clientY - p.sy) > 10) this.abort();
+      return;
+    }
+    e.preventDefault();
+    this._pt = { x: e.clientX, y: e.clientY };
+  }
+
+  // One persistent rAF for the whole drag, rather than one scheduled per move.
+  // A finger parked in the edge zone stops producing pointermove events, so a
+  // move-driven loop stops scrolling exactly when the user is asking it to keep
+  // going — holding at the edge has to keep the row travelling.
+  loop() {
+    this._raf = null;
+    if (!this.state.drag) return;
+    this.frame();
+    if (this.state.drag) this._raf = requestAnimationFrame(() => this.loop());
+  }
+
+  frame() {
+    if (!this.state.drag || !this._pt) return;
+    const p = this._press; if (!p) return;
+    const pt = this.local(this._pt.x, this._pt.y);
+    const g = this.ghostRef.current;
+    if (g) g.style.transform = 'translate3d(' + (pt.x - p.ox) + 'px,' + (pt.y - p.oy) + 'px,0) rotate(-1.5deg) scale(1.03)';
+    // Hit-test first, THEN scroll: reading the target after an auto-scroll has
+    // already moved the layout points at whatever slid under the finger.
+    const hit = this.hitTest(this._pt.x, this._pt.y);
+    this.autoScroll(this._pt.x, this._pt.y);
+    const cur = this.state.over;
+    const same = (cur && hit && cur.kind === hit.kind && cur.id === hit.id) || (!cur && !hit);
+    if (!same || hit && hit.index !== this.state.dropIndex) {
+      if (hit && hit.kind === 'pen' && (!cur || cur.id !== hit.id)) this.buzz('tick');
+      this.setState({ over: hit, dropIndex: hit ? hit.index : null });
+    }
+  }
+
+  // elementFromPoint (ghost is pointer-events:none) so hit testing stays
+  // correct under CSS transforms, zoom and mid-drag auto-scroll.
+  hitTest(cx, cy) {
+    const el = document.elementFromPoint(cx, cy);
+    if (!el || !el.closest) return null;
+    const zone = el.closest('[data-drop]');
+    if (!zone) return null;
+    const kind = zone.getAttribute('data-drop');
+    if (kind === 'pen') {
+      const id = zone.getAttribute('data-pen');
+      return { kind: 'pen', id: id, index: this.dropIndex(zone, cy) };
+    }
+    return { kind: kind, id: kind, index: null };
+  }
+
+  // Index in the pen array AFTER the dragged dog is removed, so the same
+  // number drives the insertion line and the drop.
+  dropIndex(penEl, cy) {
+    const tiles = Array.from(penEl.querySelectorAll('.fb-tile')).filter(t => t.getAttribute('data-lifted') !== 'true');
+    for (let i = 0; i < tiles.length; i++) {
+      const r = tiles[i].getBoundingClientRect();
+      if (cy < r.top + r.height / 2) return i;
+    }
+    return tiles.length;
+  }
+
+  // Every scroller the board owns, measured once at lift. Walking up from
+  // elementFromPoint each frame fails in the case that matters most on a phone:
+  // once the finger is at the very edge of the screen — or past it — there may
+  // be no element under it, and that is exactly when the row has to keep moving.
+  collectScrollers() {
+    const root = this.rootRef.current;
+    if (!root) return [];
+    return Array.from(root.querySelectorAll('.fb-pens, .fb-main, .fb-rail, .fb-scroll'))
+      .filter(n => n.scrollWidth > n.clientWidth + 2 || n.scrollHeight > n.clientHeight + 2)
+      .map(n => {
+        const st = getComputedStyle(n);
+        return { el: n, x: /auto|scroll/.test(st.overflowX), y: /auto|scroll/.test(st.overflowY) };
+      });
+  }
+
+  // Edge auto-scroll. Carrying a dog from Top 1 to Top 5 on a phone means the
+  // row itself has to travel: push toward the edge and it pans, faster the
+  // further in you push, and it keeps panning while you hold there.
+  autoScroll(cx, cy) {
+    const EDGE = 84, MAX = 24, PAD = 48;
+    // Proportional so a nudge creeps and a firm push races — and anything past
+    // the edge (dist < 0) is already at full speed.
+    const ramp = (dist) => Math.ceil(MAX * Math.min(1, Math.max(0, EDGE - dist) / EDGE));
+    (this._scrollers || []).forEach(s => {
+      const n = s.el, r = n.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      if (s.x && n.scrollWidth > n.clientWidth + 2 && cy > r.top - PAD && cy < r.bottom + PAD) {
+        if (cx < r.left + EDGE) n.scrollLeft -= ramp(cx - r.left);
+        else if (cx > r.right - EDGE) n.scrollLeft += ramp(r.right - cx);
+      }
+      if (s.y && n.scrollHeight > n.clientHeight + 2 && cx > r.left - PAD && cx < r.right + PAD) {
+        if (cy < r.top + EDGE) n.scrollTop -= ramp(cy - r.top);
+        else if (cy > r.bottom - EDGE) n.scrollTop += ramp(r.bottom - cy);
+      }
+    });
+  }
+
+  up(e, cancelled) {
+    const p = this._press;
+    this._clearTimer();
+    this.disarm();
+    this.unbind();
+    document.body.classList.remove('fb-dragging');
+    if (!this.state.drag) { this._press = null; return; }
+    this._suppressClick = Date.now();
+    // Hit-test FRESH at the release point. The highlight comes from the last
+    // animation frame, which can be a frame behind the finger (or never ran, if
+    // the gesture was faster than one frame) — trusting it drops the dog in the
+    // wrong pen. On pointercancel there are no useful coordinates, so fall back
+    // to the last seen target: an interrupted gesture must still land the move.
+    let over = this.state.over, idx = this.state.dropIndex;
+    if (!cancelled && e && typeof e.clientX === 'number') {
+      const fresh = this.hitTest(e.clientX, e.clientY);
+      if (fresh) { over = fresh; idx = fresh.index; }
+      else if (this._pt) {
+        const f2 = this.hitTest(this._pt.x, this._pt.y);
+        if (f2) { over = f2; idx = f2.index; }
+      }
+    }
+    const id = p ? p.id : null;
+    this._press = null; this._pt = null; this._scrollers = null;
+    if (this._raf) { cancelAnimationFrame(this._raf); this._raf = null; }
+    this.setState({ drag: null, over: null, dropIndex: null }, () => {
+      if (!id || !over) { this.say('Move cancelled'); return; }
+      if (over.kind === 'bin') { this.buzz('bin'); this.remove(id, true); }
+      else if (over.kind === 'stage') { this.buzz('drop'); this.place(id, null, null); }
+      else if (over.kind === 'pen') { this.buzz('drop'); this.place(id, over.id, idx); }
+    });
+  }
+
+  abort() {
+    this._clearTimer();
+    this.disarm();
+    this.unbind();
+    this._press = null;
+  }
+
+  // ── board mutations ────────────────────────────────────────────────────
+  place(id, penId, index) {
+    this.setState(s => {
+      const dogs = s.dogs.slice();
+      const i = dogs.findIndex(d => d.id === id);
+      if (i < 0) return null;
+      const dog = Object.assign({}, dogs[i], { pen: penId });
+      dogs.splice(i, 1);
+      if (penId == null) { dogs.push(dog); return { dogs: dogs }; }
+      const inPen = dogs.filter(d => d.pen === penId);
+      const at = index == null || index > inPen.length ? inPen.length : index;
+      const anchor = inPen[at];
+      const pos = anchor ? dogs.indexOf(anchor) : dogs.length;
+      dogs.splice(pos, 0, dog);
+      return { dogs: dogs };
+    }, () => this.say(penId ? this.name(id) + ' → ' + this.penLabel(penId) : this.name(id) + ' back to assign'));
+  }
+  remove(id, viaBin) {
+    const n = this.name(id);
+    this.setState(s => ({ dogs: s.dogs.filter(d => d.id !== id) }), () => this.say(n + ' taken off the board'));
+  }
+  setPortion(id, status) {
+    this.setState(s => ({ dogs: s.dogs.map(d => d.id === id ? Object.assign({}, d, { status: status }) : d) }),
+      () => this.say(this.name(id) + ': ' + (PORTIONS.find(p => p.id === status) || {}).a11y));
+  }
+  patch(id, obj) { this.setState(s => ({ dogs: s.dogs.map(d => d.id === id ? Object.assign({}, d, obj) : d) })); }
+  say(msg) {
+    this.setState({ toast: msg, liveMsg: msg });
+    clearTimeout(this._toast);
+    this._toast = setTimeout(() => this.setState({ toast: null }), 2200);
+  }
+  name(id) { const d = this.state.dogs.find(x => x.id === id); return d ? d.name : 'Dog'; }
+  penLabel(id) { const p = id.split('-'); return (p[0] === 'top' ? 'Top ' : 'Bottom ') + p[1]; }
+
+  add(name) {
+    const n = (name || this.state.query).trim();
+    if (!n) return;
+    const hit = ROSTER.find(r => r.toLowerCase() === n.toLowerCase());
+    const near = ROSTER.filter(r => r.toLowerCase().indexOf(n.toLowerCase()) === 0);
+    const dog = mk(hit || n, null, null, hit ? {} : { needsMatch: near.length !== 1, matches: near.slice(0, 4) });
+    if (!hit && near.length === 1) dog.name = near[0];
+    this.setState(s => ({ dogs: s.dogs.concat([dog]), query: '', newIds: s.newIds.concat([dog.id]) }),
+      () => this.say(dog.name + ' added to assign'));
+  }
+
+  // Keyboard equivalent of the drag: pick up with Space, arrows move, Enter drops.
+  key(e, id, pen) {
+    const k = e.key;
+    if (k === ' ' || k === 'Enter') {
+      e.preventDefault();
+      if (this.state.lifted === id) { this.setState({ lifted: null }); this.say('Dropped'); }
+      else { this.setState({ lifted: id, liveMsg: this.name(id) + ' picked up. Arrow keys to move, Enter to drop.' }); }
+      return;
+    }
+    if (this.state.lifted !== id) return;
+    if (k === 'Escape') { this.setState({ lifted: null }); return; }
+    const cur = PEN_IDS.indexOf(pen);
+    if (k === 'ArrowRight' || k === 'ArrowLeft') {
+      e.preventDefault();
+      const next = PEN_IDS[Math.max(0, Math.min(PEN_IDS.length - 1, cur + (k === 'ArrowRight' ? 1 : -1)))];
+      this.place(id, next, null);
+    } else if (k === 'ArrowUp' || k === 'ArrowDown') {
+      e.preventDefault();
+      const inPen = this.state.dogs.filter(d => d.pen === pen);
+      const at = inPen.findIndex(d => d.id === id);
+      this.place(id, pen, Math.max(0, Math.min(inPen.length - 1, at + (k === 'ArrowDown' ? 1 : -1))));
+    }
+  }
+
+  // ── derived view values ────────────────────────────────────────────────
+  portionOf(id) { return PORTIONS.find(p => p.id === id) || PORTIONS[0]; }
+
+  dogView(d, penId) {
+    const P = this.portionOf(d.status);
+    const expanded = this.state.expanded === d.id;
+    const lifted = this.state.drag && this.state.drag.id === d.id;
+    const over = this.state.over;
+    const lineBefore = !!(over && over.kind === 'pen' && over.id === penId && this.penDogs(penId, true)[this.state.dropIndex] &&
+      this.penDogs(penId, true)[this.state.dropIndex].id === d.id);
+    return {
+      id: d.id, name: d.name, expanded: expanded, lifted: lifted ? 'true' : 'false', lineBefore: lineBefore,
+      newClass: this.state.newIds.indexOf(d.id) >= 0 ? 'fb-new' : '',
+      a11y: d.name + ', ' + P.a11y + ', ' + (penId ? this.penLabel(penId) : 'to assign') + '. Hold to move, or Space to pick up.',
+      edge: P.edge,
+      bg: 'var(--color-neutral-100)',
+      border: 'var(--color-divider)',
+      shadow: expanded ? 'var(--shadow-md)' : 'var(--shadow-sm)',
+      chev: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+      hasMeds: d.meds, hasSupps: d.supps && d.suppTypes.length > 0, medsText: d.medsText,
+      medsBg: d.meds ? 'var(--color-accent-200)' : 'var(--color-neutral-100)',
+      medsFg: d.meds ? 'var(--color-accent-800)' : 'var(--color-neutral-700)',
+      medsBorder: d.meds ? 'var(--color-accent-400)' : 'var(--color-divider)',
+      suppBg: d.supps ? 'var(--color-accent-2-200)' : 'var(--color-neutral-100)',
+      suppFg: d.supps ? 'var(--color-accent-2-800)' : 'var(--color-neutral-700)',
+      suppBorder: d.supps ? 'var(--color-accent-2-400)' : 'var(--color-divider)',
+      portions: PORTIONS.map((p, i) => {
+        const on = d.status === p.id;
+        return { label: p.label, a11y: p.a11y, on: on,
+          size: p.label.length > 2 ? '10.5px' : '15px',
+          radius: i === 0 ? '99px 4px 4px 99px' : i === 4 ? '4px 99px 99px 4px' : '4px',
+          bg: on ? p.edge : 'var(--color-neutral-200)',
+          fg: on ? (p.id === 'three-quarter' || p.id === 'half' ? 'var(--color-neutral-900)' : 'var(--color-neutral-100)') : 'var(--color-neutral-800)',
+          border: on ? p.edge : 'transparent',
+          onPick: () => this.setPortion(d.id, p.id) };
+      }),
+      supps: SUPPS.map(s => {
+        const on = d.suppTypes.indexOf(s.id) >= 0;
+        return { label: s.label, on: on,
+          bg: on ? 'var(--color-accent-2-600)' : 'var(--color-neutral-100)',
+          fg: on ? 'var(--color-neutral-100)' : 'var(--color-neutral-800)',
+          border: on ? 'var(--color-accent-2-600)' : 'var(--color-divider)',
+          onToggle: () => this.patch(d.id, { suppTypes: on ? d.suppTypes.filter(t => t !== s.id) : d.suppTypes.concat([s.id]) }) };
+      }),
+      // Long-press ANYWHERE on the tile — including the name — starts the drag.
+      // Only the portion control and the expanded panel opt out: those are
+      // precise, high-frequency controls where an accidental lift is worse than
+      // a slightly smaller drag surface.
+      onTileDown: (e) => { if (e.target.closest && e.target.closest('[data-nodrag]')) return; this.press(e, d.id, penId); },
+      onToggle: () => { if (Date.now() - this._suppressClick < 320) return; this.setState(s => ({ expanded: s.expanded === d.id ? null : d.id })); },
+      onKey: (e) => this.key(e, d.id, penId),
+      onMeds: () => this.patch(d.id, { meds: !d.meds, medsText: d.meds ? '' : d.medsText }),
+      onSupps: () => this.patch(d.id, { supps: !d.supps, suppTypes: d.supps ? [] : d.suppTypes }),
+      onMedsText: (e) => this.patch(d.id, { medsText: e.target.value }),
+      onRemove: () => this.remove(d.id),
+      matches: (d.matches || []).map(m => ({ name: m, onPick: () => this.patch(d.id, { name: m, needsMatch: false, matches: [] }) })),
+      needsMatch: !!d.needsMatch
+    };
+  }
+
+  penDogs(penId, excludeDragged) {
+    return this.state.dogs.filter(d => d.pen === penId && !(excludeDragged && this.state.drag && this.state.drag.id === d.id));
+  }
+
+  renderVals() {
+    const s = this.state, over = s.over;
+    const staged = s.dogs.filter(d => !d.pen);
+    const assigned = s.dogs.filter(d => d.pen);
+    const dragging = !!s.drag;
+    const conn = this.props.connection || 'ok';
+    const pend = conn === 'syncing' ? 2 : conn === 'offline' ? 3 : 0;
+    const dense = this.props.density === 'compact';
+
+    const groups = [
+      { key: 'top', label: 'Top pens', hint: 'up to 3 dogs', rows: 3 },
+      { key: 'bottom', label: 'Bottom pens', hint: 'up to 5 dogs', rows: 5 }
+    ].map(g => {
+      const pens = [1, 2, 3, 4, 5].map(n => {
+        const id = g.key + '-' + n;
+        const list = this.penDogs(id, false);
+        const isOver = !!(over && over.kind === 'pen' && over.id === id);
+        const shown = this.penDogs(id, true);
+        return {
+          id: id, label: this.penLabel(id), count: list.length,
+          // Floor only — .fb-pens is a grid, so every pen in a row already
+          // stretches to the tallest one. Reserving the max height for all
+          // five wasted a third of the screen on a quiet day.
+          minH: (dense ? 132 : 148) + 'px',
+          dogs: list.map(d => this.dogView(d, id)),
+          empty: list.length === 0,
+          emptyLabel: isOver ? 'Drop here' : 'Empty',
+          emptyBorder: isOver ? 'var(--color-accent)' : 'var(--color-neutral-400)',
+          emptyFg: isOver ? 'var(--color-accent-700)' : 'var(--color-neutral-600)',
+          lineEnd: isOver && shown.length > 0 && s.dropIndex >= shown.length,
+          bg: isOver ? 'var(--color-accent-200)' : 'var(--color-surface)',
+          ring: isOver ? '0 0 0 3px var(--color-accent), var(--shadow-md)' : (dragging ? 'inset 0 0 0 2px var(--color-neutral-300)' : 'var(--shadow-sm)'),
+          badgeBg: list.length ? 'var(--color-neutral-300)' : 'transparent',
+          badgeFg: 'var(--color-neutral-800)'
+        };
+      });
+      return { label: g.label, hint: g.hint, count: pens.reduce((a, p) => a + p.count, 0) + ' dogs', pens: pens };
+    });
+
+    const q = s.query.trim().toLowerCase();
+    const sugg = q ? ROSTER.filter(r => r.toLowerCase().indexOf(q) >= 0 && !s.dogs.some(d => d.name === r)).slice(0, 4) : [];
+
+    const sheetRows = s.sheet === 'preview'
+      ? PEN_IDS.map(id => {
+          const list = this.penDogs(id, false);
+          if (!list.length) return null;
+          return { label: this.penLabel(id), count: list.length + '', items: list.map(d => {
+            const P = this.portionOf(d.status);
+            const ex = [];
+            if (d.meds) ex.push('Medicine: ' + (d.medsText || 'yes'));
+            if (d.supps && d.suppTypes.length) ex.push(d.suppTypes.map(t => (SUPPS.find(x => x.id === t) || {}).label).join(', '));
+            return { name: d.name, status: P.label, extra: ex.join(' · '), edge: P.edge, pillBg: P.pillBg, pillFg: P.pillFg };
+          }) };
+        }).filter(Boolean)
+      : s.sheet === 'today' && !s.sheetLoading
+      ? [{ label: 'Added to the board', count: '6', items: ['Margo','Pepper','Sonny','Ivy','Digby','Mochi'].map(n => ({ name: n, status: 'New', extra: '', edge: 'var(--color-accent-2-600)', pillBg: '#e1eecc', pillFg: '#3d472b' })) },
+         { label: 'Skipped — no pen on the master sheet', count: '1', items: [{ name: 'Branko Rubi Steene', status: 'Skip', extra: 'Lunch Y? is ticked but no pen letter', edge: 'var(--color-neutral-400)', pillBg: 'var(--color-neutral-300)', pillFg: 'var(--color-neutral-800)' }] }]
+      : [];
+
+    return {
+      rootRef: this.rootRef, ghostRef: this.ghostRef,
+      rootClass: dragging ? 'fb-dragging' : '',
+      dateLabel: 'Wed 5 Aug', meal: s.meal, topPad: conn === 'offline' ? '86px' : '14px',
+      showBanner: conn === 'offline', pendingLabel: pend + ' change' + (pend === 1 ? '' : 's'),
+      connLabel: conn === 'offline' ? 'Offline' : conn === 'syncing' ? 'Syncing ' + pend + '…' : 'All saved',
+      connBg: conn === 'offline' ? 'var(--color-accent-200)' : conn === 'syncing' ? 'var(--color-neutral-200)' : 'var(--color-accent-2-200)',
+      connFg: conn === 'offline' ? 'var(--color-accent-800)' : conn === 'syncing' ? 'var(--color-neutral-800)' : 'var(--color-accent-2-800)',
+      connDotClass: conn === 'ok' ? '' : 'fb-pulse',
+      meals: MEALS.map(m => ({ short: m.short, on: s.meal === m.id,
+        bg: s.meal === m.id ? 'var(--color-neutral-100)' : 'transparent',
+        fg: s.meal === m.id ? 'var(--color-text)' : 'var(--color-neutral-700)',
+        shadow: s.meal === m.id ? 'var(--shadow-sm)' : 'none',
+        onPick: () => this.setState({ meal: m.id }) })),
+      query: s.query, onQuery: (e) => this.setState({ query: e.target.value }),
+      onQueryKey: (e) => { if (e.key === 'Enter') this.add(); },
+      onAdd: () => this.add(),
+      hasSuggestions: sugg.length > 0,
+      suggestions: sugg.map(n => ({ name: n, onPick: () => this.add(n) })),
+      staging: staged.map(d => this.dogView(d, null)),
+      stageCount: staged.length + '', stageEmpty: staged.length === 0,
+      stageBg: over && over.kind === 'stage' ? 'var(--color-accent-200)' : 'var(--color-neutral-100)',
+      stageBorder: over && over.kind === 'stage' ? 'var(--color-accent)' : (dragging ? 'var(--color-neutral-400)' : 'transparent'),
+      binH: dragging ? '64px' : '52px',
+      binLabel: over && over.kind === 'bin' ? 'Release to remove' : 'Drop to remove',
+      binBg: over && over.kind === 'bin' ? 'var(--color-accent-700)' : 'transparent',
+      binFg: over && over.kind === 'bin' ? 'var(--color-accent-100)' : 'var(--color-neutral-700)',
+      binBorder: over && over.kind === 'bin' ? 'var(--color-accent-700)' : 'var(--color-neutral-400)',
+      penGroups: groups,
+      // The empty board has exactly one sensible next move, so the roster
+      // button takes the primary weight until there is something to feed.
+      todayH: s.dogs.length === 0 ? '56px' : '48px',
+      todayBg: s.dogs.length === 0 ? 'var(--color-accent)' : 'var(--color-neutral-100)',
+      todayFg: s.dogs.length === 0 ? 'var(--color-accent-100)' : 'var(--color-text)',
+      todayBorder: s.dogs.length === 0 ? 'var(--color-accent)' : 'var(--color-divider)',
+      todayShadow: s.dogs.length === 0 ? 'var(--shadow-md)' : 'none',
+      submitLocked: conn !== 'ok', submitBg: conn === 'ok' ? 'var(--color-accent-2-600)' : 'var(--color-neutral-400)',
+      submitFg: conn === 'ok' ? 'var(--color-neutral-100)' : 'var(--color-neutral-700)',
+      onPreview: () => this.setState({ sheet: 'preview' }),
+      onToday: () => { this.setState({ sheet: 'today', sheetLoading: true }); clearTimeout(this._t2); this._t2 = setTimeout(() => this.setState({ sheetLoading: false }), 2600); },
+      onCloseSheet: () => this.setState({ sheet: null, sheetLoading: false }),
+      onSheetConfirm: () => { const wasPreview = s.sheet === 'preview'; this.setState({ sheet: null }); this.say(wasPreview ? 'Sent for review in Telegram' : '6 dogs added'); },
+      onRetry: () => this.say('Retrying…'),
+      sheetOpen: !!s.sheet, sheetLoading: s.sheetLoading, sheetRows: sheetRows,
+      sheetTitle: s.sheet === 'today' ? 'Today’s dogs' : 'Ready to submit',
+      sheetSub: s.sheet === 'today' ? (s.sheetLoading ? 'Checking the whiteboard…' : 'From the whiteboard, for ' + s.meal) : assigned.length + ' dogs · ' + s.meal + ' · goes to Telegram for review',
+      sheetCancel: s.sheet === 'today' ? 'Cancel' : 'Keep editing',
+      sheetConfirm: s.sheet === 'today' ? (s.sheetLoading ? 'Loading…' : 'Add them') : 'Submit report',
+      sheetConfirmLocked: s.sheetLoading || (s.sheet === 'preview' && conn !== 'ok'),
+      sheetNote: s.sheet === 'preview' && staged.length ? staged.length + ' dog(s) are still waiting to be assigned — they will not be included.' : '',
+      dragging: dragging, ghostW: s.drag ? s.drag.w + 'px' : '180px',
+      ghostName: s.drag ? s.drag.name : '',
+      ghostEdge: over && over.kind === 'bin' ? 'var(--color-accent-800)' : 'var(--color-accent)',
+      ghostHint: over ? (over.kind === 'bin' ? 'Remove' : over.kind === 'stage' ? 'Un-assign' : this.penLabel(over.id)) : '',
+      ghostHintFg: over && over.kind === 'bin' ? 'var(--color-accent-800)' : 'var(--color-accent-700)',
+      toast: s.toast, toastDot: 'var(--color-accent-2-400)', toastBottom: dragging ? '150px' : '24px',
+      liveMsg: s.liveMsg
+    };
+  }
+}
+
+</script>
+</body>
+</html>
