@@ -1,5 +1,75 @@
 # Changelog
 
+## 2026-08-05 — @37: the Organic redesign across tablet, phone and TV, a new drag engine, and a silent data-loss race in the mutation queue
+
+**What changed.** `design_handoff_feeding_board/` (Claude Design handoff) implemented across all
+three surfaces. Presentation layer plus one behavioural rewrite — the drag engine. The sync
+layer, the durable mutation queue's semantics, the submit gate, the timeout budgets and the
+endpoint contract are unchanged; `node scripts/check_contract.js` is clean.
+
+**Tablet / phone (`index.html`).**
+- Organic tokens: warm cream ground, terracotta + sage ramps, Caprasimo display over Figtree,
+  large radii, no emoji, Lucide-style inline SVG. Replaces the Nunito dark theme and drops the
+  third-party `i.ibb.co` logo (a production dependency) for a sage bowl glyph.
+- New drag engine `FRMDrag`. See CLAUDE.md → "Drag-and-drop is FRMDrag" for the five
+  load-bearing properties. Headline: the non-passive `touchmove` is registered at init, pointer
+  capture is taken at lift and never on `pointerdown`, `body.is-dragging { overflow:hidden }` is
+  gone, and the board auto-scrolls at the edges instead.
+- Dog tile rewritten: two rows, a 5-way segmented portion control replacing the `<select>`, and
+  tap-to-expand for medicine / supplements / "Take off the board". `renderPen` now preserves the
+  open tile and the caret in the medicine input across a re-render.
+- Layout: 312px rail + all 10 pens in a 5-column grid at >=1060px; 2-column rail above swiping
+  pens at 720-1059; a fixed bottom tray on a phone, whose height is measured (`--tray-h`) rather
+  than guessed. Deviation: viewport `@media` instead of `@container` — the board is the page, so
+  identical pixels with no support cliff on an older tablet browser.
+- Bottom sheets for preview/submit, plus a progress sheet for "Add today's dogs" carrying the
+  honest copy about the 45s wait. **The stale-roster warning stays in the blocking `confirm()`**
+  (a sheet can be missed; `tests/tablet.test.js` S9 pins this).
+- Connection pill + redesigned offline banner, both written *only* by `updateConnectionUI`.
+- Everything interpolated into `innerHTML` is now HTML-escaped.
+- `Clear All` survives as a quiet "Clear board" ghost button (it was a full-weight button in the
+  old action bar; the design has no equivalent, but removing working functionality is not a
+  design decision). The meal segmented control is kept in the phone tray for the same reason.
+
+**TV display (`display/display.html`).** Car-dashboard-at-night: a clean bowl is dim, a problem
+glows. `None` gets an amber alarm pulse and **lights a warning lamp on its pen**, so a refusal is
+findable from the doorway without reading. Footer gains **"Need a look"** (refusals + quarters).
+Every size is `calc(n * var(--u))` where `--u` is `1cqh` behind an `@supports`, falling back to
+`1vh` — the TV browser is not ours to choose and an unsupported unit would collapse the page.
+Names wrap instead of ellipsising at the two largest scale tiers (caught live: one dog on the
+board rendered as "Bell…"). All connection-health and adaptive-refresh machinery unchanged.
+
+**⚠️ The bug the redesign uncovered — silent data loss in the mutation queue (pre-existing).**
+Found by exercising the *live* board, not by the suite. The new tile puts portion, medicine and
+supplements in one panel, so staff now fire three edits inside one ~700ms round-trip.
+1. `flushQueue` serialises an item's payload when it POSTs it and removes the item on success.
+   `enqueue` merged later edits **into that same payload object** — they went out with nothing
+   and were then thrown away. Live repro: ½ → Medicine → "Metacam" landed **only the ½**, with no
+   error anywhere. A direct `updateDog` curl with the same fields wrote them fine, which is what
+   isolated it to the client.
+2. A `delete` for a dog whose `add` was already on the wire was collapsed to "never synced,
+   nothing to delete" — **orphaning the row on the server**.
+3. `flushQueue` removed the finished item with `shift()`, i.e. *whatever is at index 0 now*. An
+   `enqueue` that rebuilt the array mid-flight therefore **discarded a different dog's edit**,
+   unsent.
+Fix: an `inFlight` marker that `enqueue` will not merge into or filter away, cleared by
+`loadQueue` (a reload means nothing is on the wire), plus removal by identity rather than
+position. New tests: group **S22** (13 checks), negative-control tested — 5 fail against the
+pre-fix build, reproducing exactly what was seen live. The harness now records the request
+**body**, because asserting *which fields reached the wire* is the only way to see this class
+of bug.
+
+**Verification.** `bash tests/run.sh` green: 80 backend / 82 tablet / 9 display + contract.
+`LIVE=1 bash tests/run.sh` green: +27 live n8n assertions (hot path mean 1232ms, worst 1923ms).
+Rendering verified in Chrome at 1284x800, 412x892 and 1366x768, and end-to-end against the real
+n8n board: add → move → portion → medicine → supplements → clear, every field read back
+server-side, both version endpoints agreeing. Board left empty.
+
+**Still to do — the one thing a desktop browser cannot prove:** the Android drag has NOT been
+exercised on a real tablet or phone yet. That is the whole reason the engine was rewritten
+(`design_handoff_feeding_board/INTEGRATION.md` §6). Long-press a dog, carry it across the
+screen, confirm the board pans at the edge, and drop it into another pen at a chosen position.
+
 ## 2026-08-05 (evening) — @36 / v2.6: the live session moves off Apps Script onto n8n
 
 **Trigger.** Staff could not submit — "connection lost" all afternoon. @35's client-side fixes

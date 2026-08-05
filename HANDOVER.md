@@ -48,6 +48,8 @@ lost"*: the tablet was aborting **itself**.
 
 | About to… | Do this first |
 |---|---|
+| touch the drag engine, or any tile CSS | load `frontend-gotchas`, then re-test **on a real Android tablet**. A mouse cannot catch this class — that is why it was rewritten (@37). |
+| touch `enqueue` / `flushQueue` | read `CLAUDE.md` → the `it.inFlight` bullet, and `tests/tablet.test.js` **S22**. Merging into a payload that is already on the wire loses the edit silently. |
 | change the n8n session workflow | `LIVE=1 bash tests/run.sh` **after**. Validation is not proof — see §4. |
 | change `index.html`, the backend, or the display | `bash tests/run.sh` — must be green. Never hand-deploy. |
 | touch polling, the queue, or connection state | read `CLAUDE.md` → "One version-first poll" and `tests/tablet.test.js` **S13/S14/S21**. Those three tests are the guard rails. |
@@ -56,6 +58,22 @@ lost"*: the tablet was aborting **itself**.
 | edit any n8n workflow | load the `n8n-gotchas` skill. Every entry is a production bug that passed validation. |
 | edit any Apps Script | load the `gas-gotchas` skill. Same. |
 | deploy the backend | bump the version string, then smoke-check — and **retry 2–3×**, `/exec` is genuinely flaky. |
+
+## 3b. The @37 redesign (2026-08-05) — what it did and did not change
+
+The whole UI is now the **Organic** design system (`design_handoff_feeding_board/` is the source
+of truth) on all three surfaces, and the drag engine is a rewrite (`FRMDrag`). **Nothing in §1,
+§2 or §5 changed** — same endpoints, same queue semantics, same budgets, same version contract.
+
+Two things worth knowing before you touch it:
+
+- **The redesign uncovered a silent data-loss race in the mutation queue** that predates it:
+  `enqueue` merged an edit into a payload `flushQueue` had already serialised and was about to
+  discard. Live repro: ½ → Medicine → "Metacam" landed only the ½. Fixed with `inFlight`; see
+  §5 and `tests/tablet.test.js` **S22**. It was found by exercising the *live* board, not by the
+  suite — which is the whole point of §4 below.
+- **The Android drag has not been proven on a real device yet.** Everything else is verified;
+  this one cannot be, from a desktop browser. It is the open item.
 
 ## 4. Things that passed validation and were still broken
 
@@ -85,6 +103,8 @@ non-idempotent `addDog` put 37 rows on the board for 16 dogs.
 - **`addDog` is idempotent by `dog_id`.** A retrying client makes every write endpoint an
   idempotency requirement — a client abort is indistinguishable from a failure even when the
   server landed the write.
+- **The queue never merges into an item that is already on the wire** (`it.inFlight`), and
+  removes finished items **by identity, never by `shift()`**. Both were silent data loss (@37).
 - **The poll runs while EDITING and while OFFLINE.** Only the board *write* is gated on the edit
   pause. Re-gate the loop and you recreate the gap the deleted 7 s heartbeat used to cover.
 - **Submit is enabled only when online with an empty queue.**
