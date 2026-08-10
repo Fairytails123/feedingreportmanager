@@ -81,7 +81,13 @@ async function flick(x, y, dx, dy, steps = 10, stepMs = 12) {
 }
 const scrollY = () => page.evaluate(() => document.scrollingElement.scrollTop);
 const pensX = () => page.evaluate(() => document.querySelector('.fb-pens').scrollLeft);
-const resetScroll = () => page.evaluate(() => { document.scrollingElement.scrollTop = 0; document.querySelector('.fb-pens').scrollLeft = 0; });
+// Reset BEFORE measuring points: client coordinates captured in a scrolled page go
+// stale the moment the scroll is reset (this masked itself pre-fix, when nothing
+// scrolled, and broke tests 3-4 post-fix).
+const resetScroll = async () => {
+  await page.evaluate(() => { document.scrollingElement.scrollTop = 0; document.querySelector('.fb-pens').scrollLeft = 0; });
+  await page.waitForTimeout(150);
+};
 const points = () => page.evaluate(() => {
   const tiles = document.querySelectorAll('.pen-dog');
   let tile = null;
@@ -100,8 +106,8 @@ const points = () => page.evaluate(() => {
 
 // 1 — vertical flick starting ON A TILE must scroll the page
 {
-  const pts = await points();
   await resetScroll();
+  const pts = await points();
   const b = await scrollY();
   await flick(pts.tile.x, pts.tile.y, 0, -300);
   const a = await scrollY();
@@ -110,8 +116,8 @@ const points = () => page.evaluate(() => {
 
 // 2 — vertical flick starting on the pens-row background must scroll the page
 {
-  const pts = await points();
   await resetScroll();
+  const pts = await points();
   const b = await scrollY();
   await flick(pts.penBg.x, pts.penBg.y, 0, -300);
   const a = await scrollY();
@@ -120,8 +126,8 @@ const points = () => page.evaluate(() => {
 
 // 3 — long-press drag still moves a dog between pens; nothing wedges afterwards
 {
-  const pts = await points();
   await resetScroll();
+  const pts = await points();
   const before = await page.evaluate(() => (pens['top-2'] || []).length);
   const t2 = pts.pen2Header;
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: pts.tile.x, y: pts.tile.y, id: 1 }] });
@@ -139,8 +145,8 @@ const points = () => page.evaluate(() => {
 
 // 4 — horizontal flick on pen chrome still scrolls the pen row
 {
-  const pts = await points();
   await resetScroll();
+  const pts = await points();
   const b = await pensX();
   await flick(pts.pen2Header.x, pts.pen2Header.y, -250, 0);
   const a = await pensX();
