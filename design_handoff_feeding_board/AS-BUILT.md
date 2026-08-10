@@ -127,7 +127,10 @@ dragging. **Do not "restore the spec" here: `none` and `contain` both reintroduc
 
 ## Still open
 
-**The Android drag has never been exercised on a real tablet or phone.** That is the whole reason
-the engine was rewritten (`INTEGRATION.md` §6) and it is the one thing a desktop browser cannot
-prove. Everything else in `INTEGRATION.md` §6 has been verified, including a full round against
-the live n8n board.
+**~~The Android drag has never been exercised on a real tablet or phone.~~ CLOSED 2026-08-10:**
+the owner exercised the live board on a real Android phone after the §8 overscroll fix and
+confirmed vertical scroll, long-press drag between pens, and the sideways pen-row swipe all work
+("great all seems to be fixed"). Staff tablets have also been on this engine in daily production
+since @37 (2026-08-05) with no drag complaints. Emulated CDP-touch coverage now exists too
+(`tests/android-scroll.smoke.mjs`), but the real-device pass is the one that counts — re-run it
+after any change to the drag engine, tile CSS, or scroll behaviour.

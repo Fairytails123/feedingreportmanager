@@ -114,10 +114,15 @@ Every group below is a bug that reached staff. They are regression tests, not de
 When you fix a bug here, add the scenario that would have caught it — with a comment saying what
 broke and who noticed. A test whose reason is undocumented gets deleted by the next person.
 
-Two traps worth knowing, both hit on 2026-08-04:
+Three traps worth knowing (1–2 hit on 2026-08-04, 3 on 2026-08-10):
 
 1. **A stubbed Apps Script has no write-visibility semantics.** The backend buffers Sheet writes
    while `CacheService` applies immediately; a harness can't see that unless you instrument it
    deliberately. 30/30 passed while a silent data-loss bug sat in the diff.
 2. **A green suite is not a deployed system.** `CLAUDE.md`'s live-edit rule still applies: after
    deploying, exercise the real path and read the real response.
+3. **In a touch harness, measure client coordinates AFTER resetting scroll, never before.**
+   Coordinates captured in a scrolled page go stale the moment the scroll is reset — and if the
+   bug under test is "scrolling doesn't work", the pre-fix build masks the harness bug entirely:
+   `android-scroll.smoke.mjs` failed its own regression guards only *after* the fix landed,
+   because the fix made the page actually move. Reset → settle (~150ms) → measure, per block.

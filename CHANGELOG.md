@@ -28,6 +28,10 @@ external request aborted. Standalone (`node tests/android-scroll.smoke.mjs`, nee
 Playwright chromium cache) — deliberately not wired into `tests/run.sh`. Negative-control tested:
 it fails 2/4 against the pre-fix build, on exactly the two bug criteria.
 
+**Verified on-device:** owner confirmed on his Android phone the same morning — vertical scroll,
+long-press drag between pens and the sideways pen-row swipe all working on the deployed page.
+This also closed AS-BUILT's "drag never exercised on a real phone" open item.
+
 ## 2026-08-05 — @37: the Organic redesign across tablet, phone and TV, a new drag engine, and a silent data-loss race in the mutation queue
 
 **What changed.** `design_handoff_feeding_board/` (Claude Design handoff) implemented across all
