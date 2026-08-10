@@ -102,7 +102,12 @@
             overflow-x: hidden;
             -webkit-font-smoothing: antialiased;
             -webkit-overflow-scrolling: touch;
-            overscroll-behavior: none;   /* no pull-to-refresh eating a drag */
+            /* Keep y auto: none/contain on the viewport kills vertical scroll
+               chaining out of .fb-pens in Android Chrome. Keep x none to suppress
+               the horizontal history swipe at the row edge. Pull-to-refresh cannot
+               interrupt a drag because FRMDrag prevents touchmove while dragging. */
+            overscroll-behavior-x: none;
+            overscroll-behavior-y: auto;
             touch-action: auto;
         }
 
