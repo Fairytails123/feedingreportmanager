@@ -20,7 +20,7 @@ The business's n8n is moving from n8n Cloud (`ftmanager.app.n8n.cloud`) to a **s
 - **All new and future work targets the VPS.** Build, change, and amend workflows — and any code that calls n8n — against `auto.thefairytails.co.uk`. Do not build anything new against n8n Cloud. When amending a not-yet-flipped workflow, make the change on the VPS copy and flip that workflow as part of the work (per the F4 play card), rather than investing further in the cloud copy.
 - **n8n MCP deploys:** before creating/updating workflows via an n8n MCP, verify the MCP targets the VPS instance. If it still points at n8n Cloud, ask Kam to reconnect it to `https://auto.thefairytails.co.uk` first.
 
-**Source of truth for the migration** (VPS specs, SSH access, credential + data-table ID maps, F4 cutover plan, live status): `C:\Users\Kam\OneDrive\Business\CODING\Hostinger_n8n\n8n-vps-migration-handover.md`
+**Source of truth for the migration** (VPS specs, SSH access, credential + data-table ID maps, F4 cutover plan, live status): `%OneDrive%\Business\CODING\Hostinger_n8n\n8n-vps-migration-handover.md`
 
 **Self-hosting benefits — design for them:**
 - No cloud plan limits: no execution-time caps and no per-execution/active-workflow billing pressure — long-running, heavy, or chatty workflows are fine; split logic into as many workflows as is clean.
