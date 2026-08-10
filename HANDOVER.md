@@ -50,6 +50,7 @@ lost"*: the tablet was aborting **itself**.
 |---|---|
 | restyle anything, or "match the design spec" | read `design_handoff_feeding_board/AS-BUILT.md`. The shipped UI differs from that folder's spec **on purpose** in ~6 places, including the portion control being a `<select>` (owner decision). |
 | touch the drag engine, or any tile CSS | load `frontend-gotchas`, then re-test **on a real Android tablet**. A mouse cannot catch this class — that is why it was rewritten (@37). |
+| set `overscroll-behavior` back to `none` (or `contain`) on html/body | don't — either value kills **vertical scroll chaining out of `.fb-pens`** on Android Chrome, so a populated board can't scroll at all (2026-08-10 bug). It must stay `x: none; y: auto`. `node tests/android-scroll.smoke.mjs` proves it either way. |
 | touch `enqueue` / `flushQueue` | read `CLAUDE.md` → the `it.inFlight` bullet, and `tests/tablet.test.js` **S22**. Merging into a payload that is already on the wire loses the edit silently. |
 | change the n8n session workflow | `LIVE=1 bash tests/run.sh` **after**. Validation is not proof — see §4. |
 | change `index.html`, the backend, or the display | `bash tests/run.sh` — must be green. Never hand-deploy. |

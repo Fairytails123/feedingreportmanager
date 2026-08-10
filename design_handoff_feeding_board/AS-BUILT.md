@@ -108,6 +108,21 @@ Removing working functionality is not a design decision to make on the owner's b
 - No `body.is-dragging { overflow: hidden }`, and no `touch-action: none` on a tile at rest.
 - The "not yet reviewed" state was explicitly rejected by the client and has not been added.
 
+## 8. `overscroll-behavior` is split by axis, not the spec's `none` — MEASURED ON-DEVICE CLASS BUG
+
+**Spec:** `designs/Feeding Board.dc.html` sets `overscroll-behavior: none` on the page (no
+pull-to-refresh eating a drag), and the first build shipped it.
+
+**Shipped (2026-08-10):** `overscroll-behavior-x: none; overscroll-behavior-y: auto;`
+
+**Why:** with `none` (or `contain`) on the viewport, Android Chrome refuses to chain the
+**vertical** part of a touch gesture that starts inside `.fb-pens` — a horizontal scroll
+container — up to the page scroller. Once dogs are in pens, tiles cover most of the screen, so a
+populated board **could not be scrolled up or down at all** on a phone (Kam's report, verified
+with real CDP touch events and a property bisect; `tests/android-scroll.smoke.mjs` pins it).
+Pull-to-refresh still cannot interrupt a drag — the engine preventDefaults `touchmove` while
+dragging. **Do not "restore the spec" here: `none` and `contain` both reintroduce the bug.**
+
 ---
 
 ## Still open

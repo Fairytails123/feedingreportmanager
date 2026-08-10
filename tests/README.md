@@ -14,6 +14,7 @@ replay acceptance scenarios against it:
 | `backend.test.js` | 80 scenarios. |
 | `tablet_harness.js` | Extracts the inline `<script>` from the real `index.html` and evaluates it with DOM/`fetch`/`localStorage` stubs and a scriptable fake network. |
 | `tablet.test.js` | 82 scenarios. |
+| `android-scroll.smoke.mjs` | **Standalone — NOT in `run.sh`** (needs the local Playwright chromium cache): `node tests/android-scroll.smoke.mjs`. Real CDP **touch** events against the served `index.html` in an emulated Android phone viewport, every external request aborted. The one class the stubbed harnesses cannot see: Chromium's touch scroll-latching/chaining. |
 
 This formalises what `CLAUDE.md` already called the de-facto test step. It was throwaway before
 2026-08-04; the day's outage is why it now lives in the repo.
@@ -95,6 +96,16 @@ Every group below is a bug that reached staff. They are regression tests, not de
   fallback. Asserts the two produce *identical* results, that a missing tab is never created
   (this app is a read-only guest in another project's workbook), and that unrecognised headers
   fall back rather than being read positionally.
+
+**Android touch scroll — `android-scroll.smoke.mjs`** (standalone)
+- The 2026-08-10 bug: `body { overscroll-behavior: none }` stopped Android Chrome chaining the
+  vertical part of a touch gesture that starts inside `.fb-pens` (a horizontal scroll container)
+  up to the page scroller — a populated board could not be scrolled up or down at all. Invisible
+  to `tablet_harness.js` (no real compositor) and to mouse testing; only a dispatched CDP touch
+  stream exercises the path. Four assertions: vertical flick on a tile scrolls, vertical flick on
+  the pen background scrolls, a long-press drag still lands (and nothing wedges), a horizontal
+  row swipe still works. Negative-control verified: fails 2/4 on the pre-fix build.
+  `overscroll-behavior-y` must stay `auto` — `none` AND `contain` both reintroduce the bug.
 
 ---
 

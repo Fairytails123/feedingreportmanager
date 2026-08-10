@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-08-10 — Android phones could not scroll a populated board: `overscroll-behavior: none` was eating vertical scroll chaining
+
+**Symptom (Kam, on his phone):** once dogs are in pens, the page cannot be scrolled up or down at
+all. Nothing wedged, no console errors, drag still worked — and the same flick on the page header
+scrolled fine.
+
+**Root cause:** `body { overscroll-behavior: none }` (there to stop pull-to-refresh eating a
+drag). On Android Chrome that value on the viewport **blocks the vertical part of a touch gesture
+that starts inside `.fb-pens` from chaining up to the page scroller** — and `.fb-pens` is a
+horizontal scroll container (`overflow-x: auto` forces computed `overflow-y: auto` too), so once
+tiles cover the screen, nearly every scroll attempt starts inside it and dies. Diagnosed with real
+CDP touch events against the actual `index.html` in an emulated Pixel viewport; a property bisect
+proved the mechanism: snap/`touch-action` innocent, `contain` equally broken, **only
+`overscroll-behavior-y: auto` restores it**.
+
+**Fix (one rule, via the dual-model pipeline, task `android-scroll-overscroll`, Tier 1):**
+`overscroll-behavior: none` → `overscroll-behavior-x: none; overscroll-behavior-y: auto;`.
+`x` stays `none` (keeps the horizontal history-swipe suppressed at the row edge). Pull-to-refresh
+still cannot interrupt a drag — FRMDrag preventDefaults `touchmove` while a drag is active; the
+residual is a deliberate long downward pull at the very top of the page, which at worst reloads
+into a queue-restored board.
+
+**Regression guard:** `tests/android-scroll.smoke.mjs` — real touch flicks (tile, pen background,
+header), a long-press drag, and a horizontal row swipe against the served `index.html` with every
+external request aborted. Standalone (`node tests/android-scroll.smoke.mjs`, needs the local
+Playwright chromium cache) — deliberately not wired into `tests/run.sh`. Negative-control tested:
+it fails 2/4 against the pre-fix build, on exactly the two bug criteria.
+
 ## 2026-08-05 — @37: the Organic redesign across tablet, phone and TV, a new drag engine, and a silent data-loss race in the mutation queue
 
 **What changed.** `design_handoff_feeding_board/` (Claude Design handoff) implemented across all
