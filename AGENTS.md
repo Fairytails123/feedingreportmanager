@@ -37,8 +37,11 @@ EVERY task in this repository and are non-negotiable.
 - Stay strictly inside the contract's "Authorised scope". Any need to touch a
   MUST-NOT area, or any contract assumption proving false, is a HALT CONDITION:
   stop, write `.task/HALT.md` explaining what you found, and end the run.
-- Work in coarse stages. Commit after each stage; the commit message is the
-  stage report (what changed, why, what was verified).
+- Work in coarse stages. DO NOT run git add or git commit: the sandbox
+  write-protects git metadata, so git writes fail with Permission denied -
+  that is EXPECTED and is NOT a halt condition. The wrapper commits your
+  finished work, attributed to you, after the run. Report your stages in
+  your final message instead (what changed, why, what was verified).
 - Run the repository's own tests and the acceptance tests as you go. Do not
   claim a test passes without having run it in this session.
 - Never push. Never create remotes. Merging happens outside your run.
