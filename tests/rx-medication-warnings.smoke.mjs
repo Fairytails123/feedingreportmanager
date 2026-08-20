@@ -172,8 +172,13 @@ const tabSrc = readText(TABLET) || '';
 
 // ---------------------------------------------------------------- behavioural (harness)
 {
-  let h = null, loadErr = null;
-  try { h = require('./tablet_harness').load(TABLET); } catch (e) { loadErr = e; }
+  // NB: load() returns { api, state, els, localStorage, srcLen } — the exported surface
+  // lives on .api (tablet.test.js uses h.api.* throughout). Reaching for h.rx directly
+  // silently finds nothing and fails every behavioural check without ever calling the
+  // implementation, which is exactly what happened on the first run.
+  let raw = null, h = null, loadErr = null;
+  try { raw = require('./tablet_harness').load(TABLET); h = raw ? raw.api : null; }
+  catch (e) { loadErr = e; }
   report('tablet: harness loads the real inline script', h !== null, loadErr ? String(loadErr).slice(0, 200) : '');
 
   if (h && h.rx && h.rx.present) {
