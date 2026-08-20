@@ -7,6 +7,8 @@ captures the scenarios selected for visual review. Generated pages, browser prof
 DOM dumps and screenshots are written beneath the system scratch directory at
 `ftboard-tests`; the harness does not write generated output into the repository.
 
+The tracked page uses LF line endings, and the publisher normalises its staged copy to LF.
+
 ## Running the harness
 
 From the repository root, run:

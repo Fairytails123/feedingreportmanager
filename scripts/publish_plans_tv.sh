@@ -34,7 +34,8 @@ WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 PAYLOAD_DIR="$WORK_DIR/payload"
 mkdir -p "$PAYLOAD_DIR/assets/img"
-cp "$REPO_DIR/tv-plans/index.html" "$PAYLOAD_DIR/index.html"
+node -e 'const fs = require("fs"); const [source, target] = process.argv.slice(1); fs.writeFileSync(target, fs.readFileSync(source, "utf8").replace(/\r\n/g, "\n"));' \
+  "$REPO_DIR/tv-plans/index.html" "$PAYLOAD_DIR/index.html"
 cp "$REPO_DIR/tv-plans/assets/img/logo.jpg" "$PAYLOAD_DIR/assets/img/logo.jpg"
 INDEX_SHA256="$(sha256sum "$PAYLOAD_DIR/index.html" | awk '{print toupper($1)}')"
 
