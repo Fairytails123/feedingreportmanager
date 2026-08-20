@@ -37,8 +37,56 @@ has shipped and held.
 | 4 Measured infra | Instrument checkinout/plans feeds 2 weeks → move to n8n ONLY on measured degradation; token rework | ⬜ conditional — may correctly never run |
 | Endgame | Merge the OneDrive folders (PII file disposed, memory carried on BOTH machines, redirect stub) | ⬜ after Phase 1 shipped + held |
 
+## Kam's three requirements, 2026-08-20 — ALL MERGED (nothing pushed or published)
+
+| Req | Delivered | Evidence |
+|---|---|---|
+| **R1 one canonical TV page** | `tv-plans/` is the ONLY maintained copy; `fooddata` is a publish target (its CLAUDE.md/HANDOVER.md are redirect stubs); its duplicate harness deleted | sibling `34fd274`, platform merge `9b34323` |
+| **R2 live Apps Script = sole truth** | 3 copies → 2 (live truth + `Boardingplan` deploy vehicle). Unprotected local mirror DELETED after 3-way byte-verification. `scripts/check_boarding_drift.sh`: read-only, opt-in `BOARDING=1` | run against PRODUCTION: both sides `d5cc2ff8…`, exit 0 |
+| **R3 prescription warnings** | Whole tile red on TV + tablet (plan-declared OR staff-flagged); blocking acknowledgement that NEVER clears the red and survives the poll; unacknowledged dogs on the mandatory preview; failed plan fetch = visible banner, never "no meds" | merge `973ddc3`; gate PASS ×8; gitleaks 6.06 MB clean; merged main re-verified rx 46/0, canonical 47/0 |
+
+**Still Kam's:** publishing the TV (`bash scripts/publish_plans_tv.sh`) — the suite prints
+"UNPUBLISHED CHANGES PENDING" until then; pushing either repo; and verifying the tablet's
+red on the real device (only the TV can be screenshotted headlessly).
+
+**R3 decisions locked** (D1–D6, archived contract): red = plan OR staff flag; red at EVERY
+feed because the plan has no structured per-meal field (free text like "1 AM 1 PM" — parsing
+it would turn a parsing miss into a hidden dose); the modal fires only for PLAN-declared
+medication (one that fires on your own input trains people to dismiss modals); blocking
+`confirm()` per the house rule; ack in `localStorage` keyed dog+date+meal, never on the dog
+object. **Known limitation:** true per-meal precision needs a structured field on the
+requirements form — same gap as the missing allergy field.
+
 ## Findings worth keeping
 
+- **A blind review beats a green suite for false NEGATIVES.** R3's first implementation
+  passed 41 acceptance checks and still had a path where a dog needing medication rendered
+  with NO red and NO warning: an ambiguous name match returned a confident "no medication".
+  Found by tracing paths the tests never covered, and proved live by the shipped fixture's
+  own collision pair plus the TV's `deduplicateTagged`, which has always resolved such
+  collisions IN FAVOUR OF medication. Fix: ambiguity now resolves toward the medicated
+  candidate. **When the cost of a miss is asymmetric, make the ambiguous case fail loud.**
+- **A permanent suite may only assert what stays true after its own task merges.** Two
+  suites asserted "index.html unchanged on this branch" — correct scope control for THEIR
+  task, but the gate runs every `tests/*.smoke.mjs`, so after merge they asserted that no
+  LATER task may touch those files, and produced three false failures on correct work.
+  Per-task scope control belongs in the contract's MUST-NOT list and the blind review.
+  (Same family as the `.task/seed` lesson below.)
+- **One constant must not carry two facts.** The pinned TV-page hash meant both "the repo's
+  page" and "what the TV serves". They diverge the moment source moves ahead of a publish —
+  now `CANONICAL_PAGE_SHA` vs `PUBLISHED_PAGE_SHA`, with the suite printing
+  "UNPUBLISHED CHANGES PENDING" so whether the TV is current is visible, not guessed.
+- **Name contract seams from CODE READING, never memory.** R3's contract claimed an
+  "existing submit `confirm()`"; there is none (`confirmSubmit` has no confirm; the one at
+  ~2851 belongs to `addDogsForToday`). Cost a halt cycle — and the exploration report had
+  ALREADY listed the only two confirm sites. The dual-model skill warns about exactly this.
+- **Codex halting is the system working.** Three halts in R1–R3, all correct, none causing
+  damage: cross-repo writes are outside the sandbox (and git metadata is deny-ACE'd, so it
+  could never commit in a second repo); a contract described code that did not exist; a test
+  could not see the interface it was testing. Every one was a flaw in what it was handed.
+- **A test that fails WITHOUT calling the implementation is as bad as one that passes
+  without it.** `h.rx` vs `h.api.rx` failed every behavioural check while never invoking the
+  feature — the mirror image of the BOM false-positive below.
 - **The old TV harness carried live customer names + medication as test literals** (its
   `photo` scenario). Caught by the Codex pre-flight critique before anything reached the
   PUBLIC `fooddata` repo. Seed sanitised (values fabricated, string lengths preserved);
