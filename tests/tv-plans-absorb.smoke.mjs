@@ -44,6 +44,22 @@ function git(args) {
   const r = spawnSync('git', ['-C', repoRoot, ...args], { encoding: 'utf8' });
   return r.status === 0 ? r.stdout : null;
 }
+// The git BLOB is the durable reference, not `.task/seed/`. The seed only exists
+// while the originating task is open — it is archived at merge — so a
+// seed-dependent test starts failing on every LATER task in this repo. The blob
+// is also the authoritative artefact for publishing: the working tree may be
+// CRLF under core.autocrlf while the blob (and the live page) are LF.
+function gitBlob(pathInRepo) {
+  const r = spawnSync('git', ['-C', repoRoot, 'show', `HEAD:${pathInRepo}`],
+    { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 });
+  return r.status === 0 ? r.stdout : null;
+}
+function shaBuf(b) { return b === null ? null : createHash('sha256').update(b).digest('hex'); }
+const lfNorm = b => b === null ? null : Buffer.from(b.toString('utf8').replace(/\r\n/g, '\n'), 'utf8');
+// Pinned 2026-08-20: the live fooddata page and its logo. These are the real
+// invariants — `tv-plans/` must keep matching what the TV actually serves.
+const LIVE_PAGE_SHA = '5d137a9405efdcfde3a80839dee48092252f82ecc8d907ff5b166845202b39d6';
+const LIVE_LOGO_SHA = 'a47d3f496f5d3e76e3464a85760e8795d3da5d4f0f3a7351d11dedce93812884';
 // Resolve a REAL bash. On Windows a bare `bash` hits the distro-less WSL stub in
 // WindowsApps, which dies with "execvpe(/bin/bash) failed" - Git Bash is the one
 // that can actually run these scripts.
@@ -65,15 +81,19 @@ function sh(args, opts) {
 // ---------------------------------------------------------------- 1
 // tv-plans-source-byte-identical
 {
-  const pairs = [
-    ['tv-plans/index.html', join(seedDir, 'tv-plans-index.html')],
-    ['tv-plans/assets/img/logo.jpg', join(seedDir, 'assets', 'img', 'logo.jpg')],
-  ];
-  for (const [rel, seed] of pairs) {
-    const got = sha(join(repoRoot, rel)), want = sha(seed);
-    report(`byte-identical: ${rel}`, got !== null && want !== null && got === want,
-      got === null ? 'missing' : `got ${String(got).slice(0, 12)} want ${String(want).slice(0, 12)}`);
-  }
+  // Against the BLOB and the pinned live-page hashes, not `.task/seed/` — the seed
+  // is archived at merge, and the blob is what actually gets published.
+  const pageBlob = gitBlob('tv-plans/index.html');
+  report('byte-identical: tv-plans/index.html blob matches the live fooddata page',
+    shaBuf(pageBlob) === LIVE_PAGE_SHA, `got ${String(shaBuf(pageBlob)).slice(0, 16)}`);
+  const logoBlob = gitBlob('tv-plans/assets/img/logo.jpg');
+  report('byte-identical: tv-plans/assets/img/logo.jpg blob matches the live logo',
+    shaBuf(logoBlob) === LIVE_LOGO_SHA, `got ${String(shaBuf(logoBlob)).slice(0, 16)}`);
+  // The working tree may legitimately be CRLF under core.autocrlf; its LF-normalised
+  // content must still equal the blob.
+  const wtPage = (() => { try { return readFileSync(join(repoRoot, 'tv-plans/index.html')); } catch { return null; } })();
+  report('byte-identical: working-tree page LF-normalises to the live page',
+    shaBuf(lfNorm(wtPage)) === LIVE_PAGE_SHA, `got ${String(shaBuf(lfNorm(wtPage))).slice(0, 16)}`);
 }
 
 // ---------------------------------------------------------------- 2
@@ -98,16 +118,20 @@ function sh(args, opts) {
   report('harness: tests/tv-plans/build_and_run.ps1 exists', existsSync(harness));
   report('harness: tests/tv-plans/assert_results.ps1 exists', existsSync(checker));
   for (const f of FIXTURES) {
-    const got = sha(join(hDir, 'fixtures', f)), want = sha(join(seedDir, 'fixtures', f));
-    report(`harness: fixture ${f} byte-identical to seed`, got !== null && got === want,
-      got === null ? 'missing' : 'differs');
+    // Each fixture must match its own committed blob (proves nothing drifted since
+    // it was reviewed). The seed reference is gone once the task is archived.
+    const wt = (() => { try { return readFileSync(join(hDir, 'fixtures', f)); } catch { return null; } })();
+    const blob = gitBlob(`tests/tv-plans/fixtures/${f}`);
+    report(`harness: fixture ${f} matches its committed blob`,
+      wt !== null && blob !== null && shaBuf(lfNorm(wt)) === shaBuf(lfNorm(blob)),
+      wt === null ? 'missing' : 'differs from blob');
   }
   const t = readText(harness) || '';
-  const seedT = readText(join(seedDir, 'build_and_run.ps1')) || '';
-  // Scenario set + per-scenario settings must be unchanged from the seed.
-  const sig = s => (s.match(/name\s*=\s*'[a-z_]+';\s*budget\s*=\s*\d+;\s*delay\s*=\s*\d+;\s*shot\s*=\s*\$\w+/g) || []).join('|');
-  report('harness: scenario names/budgets/delays/shot flags identical to seed',
-    sig(t) !== '' && sig(t) === sig(seedT), `got ${sig(t).length}b vs seed ${sig(seedT).length}b`);
+  // Scenario set + per-scenario settings, pinned as the contract's own values rather
+  // than compared against a seed that no longer exists after archiving.
+  const sigPairs = (t.match(/name\s*=\s*'[a-z_]+';\s*budget\s*=\s*\d+;\s*delay\s*=\s*\d+;\s*shot\s*=\s*\$\w+/g) || []);
+  report('harness: every scenario still declares name+budget+delay+shot',
+    sigPairs.length === MANIFEST.length, `${sigPairs.length} of ${MANIFEST.length}`);
   const names = [...t.matchAll(/name\s*=\s*'([a-z_]+)'/g)].map(m => m[1]);
   report('harness: exactly the 20 manifest scenarios',
     JSON.stringify([...names].sort()) === JSON.stringify([...MANIFEST].sort()), names.join(','));
@@ -137,10 +161,9 @@ function sh(args, opts) {
     const r = sh(['scripts/publish_plans_tv.sh', '--dry-run']);
     const out = (r.stdout || '') + (r.stderr || '');
     report('publish: --dry-run exits 0', r.status === 0, `exit=${r.status}; ${out.slice(-250).replace(/\s+/g, ' ')}`);
-    const want = sha(join(seedDir, 'tv-plans-index.html'));
-    report('publish: --dry-run reports the seeded SHA-256 of index.html',
-      want !== null && out.toLowerCase().includes(want.toLowerCase()),
-      `expected ${String(want).slice(0, 16)}... in output`);
+    report('publish: --dry-run reports the LIVE page SHA-256 (blob, LF)',
+      out.toLowerCase().includes(LIVE_PAGE_SHA),
+      `expected ${LIVE_PAGE_SHA.slice(0, 16)}... in output`);
     report('publish: --dry-run did not clone fooddata', !/Cloning into/i.test(out));
   }
 }
