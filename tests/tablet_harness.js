@@ -156,6 +156,8 @@ function load(indexPath) {
       setDogs(v) { dogs = v; },
       setMealType(v) { currentMealType = v; },
       callApplyRemoteState: (...a) => applyRemoteState(...a),
+      toggleTile: (...a) => (typeof toggleTile !== 'undefined' ? toggleTile(...a) : undefined),
+      updateDogStatus: (...a) => (typeof updateDogStatus !== 'undefined' ? updateDogStatus(...a) : undefined),
 
       stub(o) {
         if (o.flushQueue) flushQueue = o.flushQueue;

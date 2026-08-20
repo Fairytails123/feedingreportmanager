@@ -193,6 +193,13 @@ const tabSrc = readText(TABLET) || '';
           feeding: { medication: 'Yes', medicationDetails: 'Eye drops twice daily', specialNotes: '' } },
         { dogName: 'Fig', ownerSurname: 'Vexworth', matched: true,
           feeding: { medication: 'No', medicationDetails: '', specialNotes: '' } },
+        // B-1 collision pair, mirroring the shipped fixture: a board dog typed
+        // "Axo Zorblatt" matches BOTH — once via dogName+ownerSurname, once via dogName.
+        // One of them is medicated, so the dog must still read red.
+        { dogName: 'Axo', ownerSurname: 'Zorblatt', matched: true,
+          feeding: { medication: 'Yes', medicationDetails: 'Fabuprofen half tablet at breakfast', specialNotes: '' } },
+        { dogName: 'Axo Zorblatt', ownerSurname: 'Nebulon', matched: true,
+          feeding: { medication: 'No', medicationDetails: '', specialNotes: '' } },
       ],
     };
     try { h.rx.planState = { ok: true, dogs: PLAN.dogs, fetchedAt: Date.now() }; } catch {}
@@ -218,9 +225,22 @@ const tabSrc = readText(TABLET) || '';
     } else {
       report('join: normalisation helper exists', false);
     }
+    // NB: a single-token name is refused by the tokens.length<2 guard before any
+    // ambiguity logic runs, so it does NOT exercise the count===1 guard. Use a
+    // two-token name that genuinely collides.
     report('join: an ambiguous surname-only match is NOT applied',
       h.rx.needs(mk('Vexworth', false)) === false,
       'two plan dogs share Vexworth — matching on surname alone would be a guess');
+
+    // B-1 REGRESSION (blind review, blocking): when a board name matches MORE THAN ONE
+    // plan entry and ANY of them is medicated, the dog MUST still read red. Returning a
+    // confident false here is a missed dose. The fixture's Axo pair is the real case:
+    // 'Axo'/'Zorblatt' and 'Axo Zorblatt'/'Nebulon' both match a dog typed "Axo Zorblatt".
+    report('join: an AMBIGUOUS match with a medicated candidate still reads RED',
+      h.rx.needs(mk('Axo Zorblatt', false)) === true,
+      'ambiguity must resolve toward medication (the TV deduplicateTagged does the same)');
+    report('join: an ambiguous match never returns a confident false',
+      h.rx.needs(mk('Axo Zorblatt', false)) !== false);
 
     // 7/8 — acknowledgement semantics
     try { h.setMealType('Lunch'); } catch {}
@@ -235,13 +255,46 @@ const tabSrc = readText(TABLET) || '';
     // The poll rebuilds dogs from a whitelist; the ack must survive it.
     try {
       h.setDogs([planOnly]);
+      // applyRemoteState reads d.id (NOT d.dogId) — using the wrong key makes the merged
+      // dog come out with id:undefined, so the whitelist rebuild is not faithfully
+      // reproduced and the check proves less than it appears to.
       h.callApplyRemoteState({ success: true, dogs: [{
-        dogId: planOnly.id, inputName: planOnly.inputName, matchedName: planOnly.matchedName,
+        id: planOnly.id, inputName: planOnly.inputName, matchedName: planOnly.matchedName,
         status: 'all', prescription: false, prescriptionComment: '', supplements: false,
         supplementTypes: [], penId: 'top-1', position: 1000 }], mealType: 'Lunch', version: 2, count: 1 });
       report('ack: survives an applyRemoteState poll', h.rx.isAcked(planOnly) === true);
     } catch (e) {
       report('ack: survives an applyRemoteState poll', false, String(e).slice(0, 160));
+    }
+
+    // F-9: the acknowledgement modal must actually FIRE on interaction — an identifier
+    // regex would pass against a function that is defined and never called.
+    try {
+      const seen = [];
+      const origConfirm = raw && raw.state ? raw.state.confirmReturns : null;
+      if (raw && raw.state) { raw.state.confirmMsgs.length = 0; raw.state.confirmReturns = true; }
+      // A FRESH dog id: the ack block above already acknowledged 'Bolt Quixling', and an
+      // acknowledged dog correctly does not re-warn — reusing that id would have made this
+      // check fail against a perfectly good implementation.
+      const target = mk('Comet Vexworth', false);
+      target.id = 'd-warn-' + Date.now();
+      h.setDogs([target]);
+      if (typeof h.toggleTile === 'function') {
+        h.toggleTile(target.id);
+        const msgs = (raw && raw.state ? raw.state.confirmMsgs : []).join(' | ');
+        report('warning: opening a plan-medication tile fires the blocking confirm',
+          /prescription medication/i.test(msgs), msgs.slice(0, 160) || '(no confirm fired)');
+        report('warning: the confirm text carries the medication detail',
+          /eye drops/i.test(msgs), msgs.slice(0, 160));
+        report('warning: the confirm text states the "checked it" acknowledgement',
+          /have checked/i.test(msgs), msgs.slice(0, 160));
+      } else {
+        report('warning: opening a plan-medication tile fires the blocking confirm', false,
+          'toggleTile is not exported by the harness');
+      }
+      if (raw && raw.state && origConfirm !== null) raw.state.confirmReturns = origConfirm;
+    } catch (e) {
+      report('warning: opening a plan-medication tile fires the blocking confirm', false, String(e).slice(0, 160));
     }
 
     // 9 — a failed plan read is never "no dog needs medication"
