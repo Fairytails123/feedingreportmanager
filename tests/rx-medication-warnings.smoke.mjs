@@ -142,6 +142,32 @@ const tabSrc = readText(TABLET) || '';
     'applyRemoteState would wipe it within ~5s');
   report('tablet: the submit gate is unchanged (isOnline && empty queue)',
     /isOnline/.test(tabSrc) && /mutationQueue\.length\s*===\s*0|queue.*empty/i.test(tabSrc));
+
+  // AMENDMENT 1: the warning lives in the PREVIEW SHEET, the mandatory pre-submit review
+  // (submitReport -> showPreview -> "Submit report" -> confirmSubmit). No new native
+  // confirm() may enter the submit path, and no new hard block may gate submission.
+  const previewFn = (() => {
+    const i = tabSrc.indexOf('function showPreview(');
+    if (i < 0) return '';
+    const j = tabSrc.indexOf('\n        }', i);
+    return j < 0 ? tabSrc.slice(i, i + 6000) : tabSrc.slice(i, j);
+  })();
+  report('submit: showPreview warns about unacknowledged medication dogs',
+    previewFn !== '' && /(medication|prescription)/i.test(previewFn) &&
+    /(ack|acknowledg)/i.test(previewFn),
+    'the preview is the one screen every submit must pass through');
+  const submitFn = (() => {
+    const i = tabSrc.indexOf('async function confirmSubmit(');
+    if (i < 0) return '';
+    const j = tabSrc.indexOf('\n        }', i);
+    return j < 0 ? tabSrc.slice(i, i + 6000) : tabSrc.slice(i, j);
+  })();
+  report('submit: no new native confirm() was added to the submit path',
+    submitFn !== '' && !/\bconfirm\s*\(/.test(submitFn),
+    'confirmSubmit must not gain a blocking confirm');
+  report('submit: no new hard block gates submission',
+    submitFn !== '' && !/needsRx|unacked|unacknowledg/i.test(submitFn.replace(/\/\/[^\n]*/g, '')),
+    'the warning belongs in the preview, not as a submit-time refusal');
 }
 
 // ---------------------------------------------------------------- behavioural (harness)
