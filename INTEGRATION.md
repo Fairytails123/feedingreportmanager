@@ -32,11 +32,12 @@ has shipped and held.
 | 1A Canonical sources (R2) | Keep live boarding GAS as truth; delete the old local mirror; mechanically check it against guarded deploy vehicle `Fairytails123/Boardingplan` | ✅ 2026-08-20 — mirror deleted in sibling commit `34fd274` (NOT pushed); `scripts/check_boarding_drift.sh` added; Boardingplan CI already refuses unknown live state and rolls back failed smoke tests |
 | 1A publish | First publish to the unchanged `fooddata` Pages URL and byte-compare the served page | ⬜ deferred to Kam's explicit publish call — **now safe: dry-run proves the staged payload hashes to the live page exactly** |
 | 2 Shared modules | `shared/name-match.js` + `shared/fetch-kit.js` (ES5), equivalence-tested, adopted per surface | ⬜ |
-| 3 Symbiosis | Plans + medication chips on tablet tiles; plan-vs-report flag in Telegram summary | ⬜ product details to confirm with Kam at contract time |
+| 3 Symbiosis | Prescription-medication red tiles on TV and tablet; plan-data join, blocking tablet acknowledgement, failure banners and preview-sheet warning | ✅ delivered 2026-08-20 (`rx-medication-warnings`; 41 checks / 0 failures with real Chrome; not published) |
+| 3 | Plan-vs-report flag in Telegram summary | ⬜ separate later contract |
 | 4 Measured infra | Instrument checkinout/plans feeds 2 weeks → move to n8n ONLY on measured degradation; token rework | ⬜ conditional — may correctly never run |
 | Endgame | Merge the OneDrive folders (PII file disposed, memory carried on BOTH machines, redirect stub) | ⬜ after Phase 1 shipped + held |
 
-## Findings worth keeping (from the harness-rescue run)
+## Findings worth keeping
 
 - **The old TV harness carried live customer names + medication as test literals** (its
   `photo` scenario). Caught by the Codex pre-flight critique before anything reached the
@@ -63,6 +64,16 @@ has shipped and held.
   blob, never against the working tree.**
 - **Verify the MERGED result, not just the branch.** Both of the above only appeared after
   commit → merge → checkout; the branch was green throughout.
+- **Name contract seams from CODE READING, never memory.** This task's contract claimed an
+  "existing submit `confirm()`" that did not exist, even though the exploration report had
+  already identified the only two `confirm()` call sites. That unsupported seam cost a full
+  halt cycle; the mandatory path proved to be `submitReport()` → `showPreview()` →
+  `confirmSubmit()`.
+- **A test can fail without ever calling the implementation.** The medication acceptance
+  test reached for `h.rx` instead of the harness's exported `h.api.rx`, producing a false
+  negative at the test boundary. This is the mirror image of the earlier BOM false positive:
+  verify that an assertion exercised the intended interface before treating its result as
+  implementation evidence.
 - **codex-run can appear to hang after a successful run:** Codex keeps a long-lived
   PowerShell AST-parser helper (its command-safety layer) that holds the stdout pipe
   open, so the wrapper's wait never returns even though the work is done and the last
