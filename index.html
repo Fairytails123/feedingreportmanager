@@ -1351,8 +1351,16 @@
 
         const RX_PLAN_CACHE_KEY = 'feedingManager.rxPlan.v1';
         const RX_ACK_STORE_KEY = 'feedingManager.rxAck.v1';
+        const RX_PLAN_LKG_MAX_AGE_MS = 2700 * 1000;
+        const RX_PLAN_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
+        const RX_PLAN_RETRY_BASE_MS = 30 * 1000;
+        const RX_PLAN_RETRY_MAX_MS = 5 * 60 * 1000;
         let rxAckState = {};
         let rxPlanFetchSequence = 0;
+        let rxPlanFetchInFlight = false;
+        let rxPlanFailureCount = 0;
+        let rxPlanNextFetchAt = Date.now() + RX_PLAN_REFRESH_INTERVAL_MS;
+        let rxPlanRenderPending = false;
 
         function normRxName(value) {
             return String(value === null || value === undefined ? '' : value)
@@ -1365,7 +1373,13 @@
         function readRxPlanCache() {
             try {
                 const cached = JSON.parse(localStorage.getItem(RX_PLAN_CACHE_KEY) || 'null');
-                if (cached && Array.isArray(cached.dogs) && cached.dogs.length > 0) return cached;
+                const capturedAt = cached && Number(cached.capturedAt || cached.fetchedAt || 0);
+                const age = capturedAt ? Date.now() - capturedAt : Infinity;
+                if (cached && Array.isArray(cached.dogs) && cached.dogs.length > 0 &&
+                        age >= 0 && age <= RX_PLAN_LKG_MAX_AGE_MS) {
+                    return { dogs: cached.dogs, capturedAt: capturedAt };
+                }
+                if (cached) localStorage.removeItem(RX_PLAN_CACHE_KEY);
             } catch (e) {
                 console.warn('[rx-plan] ignored unreadable last-known-good cache');
             }
@@ -1374,9 +1388,10 @@
 
         const initialRxPlanCache = readRxPlanCache();
         let rxPlanState = initialRxPlanCache
-            ? { ok: true, stale: true, dogs: initialRxPlanCache.dogs, fetchedAt: initialRxPlanCache.fetchedAt || 0,
+            ? { ok: true, stale: true, degraded: false, dogs: initialRxPlanCache.dogs,
+                capturedAt: initialRxPlanCache.capturedAt,
                 error: 'Live medication data is unavailable; showing the last-known-good plan.' }
-            : { ok: false, stale: false, dogs: [], fetchedAt: 0,
+            : { ok: false, stale: false, degraded: false, dogs: [], capturedAt: 0,
                 error: 'Medication data is unavailable.' };
 
         function rxLocalDate(now) {
@@ -1420,7 +1435,15 @@
 
         loadRxAckStore();
 
-        function rxPlanFor(dog) {
+        function chooseRxPlanCandidate(candidates) {
+            if (!candidates.length) return { planDog: null, ambiguous: false };
+            if (candidates.length === 1) return { planDog: candidates[0], ambiguous: false };
+            const medicationDog = candidates.find(planDog =>
+                planDog && planDog.feeding && planDog.feeding.medication === 'Yes');
+            return { planDog: medicationDog || candidates[0], ambiguous: true };
+        }
+
+        function rxPlanMatchFor(dog) {
             if (!dog || !rxPlanState || !rxPlanState.ok || !Array.isArray(rxPlanState.dogs)) return null;
             const boardName = normRxName(dog.matchedName || dog.inputName);
             if (!boardName) return null;
@@ -1432,8 +1455,7 @@
                 const fullName = normRxName(planDog.dogName + ' ' + (planDog.ownerSurname || ''));
                 if ((boardName === dogName || boardName === fullName) && !exact.includes(planDog)) exact.push(planDog);
             });
-            if (exact.length === 1) return exact[0];
-            if (exact.length > 1) return null;
+            if (exact.length) return chooseRxPlanCandidate(exact);
 
             const tokens = boardName.split(' ');
             if (tokens.length < 2) return null;
@@ -1448,11 +1470,16 @@
                 keys[dogTokens[0] + '|' + dogTokens[dogTokens.length - 1]] = true;
                 if (ownerTokens.length) keys[dogTokens[0] + '|' + ownerTokens[ownerTokens.length - 1]] = true;
                 Object.keys(keys).forEach(key => {
-                    if (!firstLast[key]) firstLast[key] = { dog: planDog, count: 1 };
-                    else firstLast[key].count++;
+                    if (!firstLast[key]) firstLast[key] = [];
+                    firstLast[key].push(planDog);
                 });
             });
-            return firstLast[wanted] && firstLast[wanted].count === 1 ? firstLast[wanted].dog : null;
+            return firstLast[wanted] ? chooseRxPlanCandidate(firstLast[wanted]) : null;
+        }
+
+        function rxPlanFor(dog) {
+            const match = rxPlanMatchFor(dog);
+            return match ? match.planDog : null;
         }
 
         function dogNeedsRx(dog) {
@@ -1460,6 +1487,20 @@
             if (!rxPlanState || !rxPlanState.ok) return null;
             const planDog = rxPlanFor(dog);
             return !!(planDog && planDog.feeding && planDog.feeding.medication === 'Yes');
+        }
+
+        function rxAmbiguousBoardDogs() {
+            if (!rxPlanState || !rxPlanState.ok) return [];
+            return dogs.filter(dog => {
+                const match = rxPlanMatchFor(dog);
+                return !!(match && match.ambiguous);
+            });
+        }
+
+        function rxPlanDogIsStayingToday(planDog) {
+            const today = rxLocalDate();
+            return !!(planDog && planDog.checkIn && planDog.checkOut &&
+                planDog.checkIn <= today && planDog.checkOut > today);
         }
 
         function rxMedicationPlanDogsNotOnBoard() {
@@ -1470,21 +1511,32 @@
                 if (planDog) joined.add(planDog);
             });
             return rxPlanState.dogs.filter(planDog =>
-                planDog && planDog.feeding && planDog.feeding.medication === 'Yes' && !joined.has(planDog));
+                rxPlanDogIsStayingToday(planDog) && planDog.feeding &&
+                planDog.feeding.medication === 'Yes' && !joined.has(planDog));
         }
 
         function rxPlanDogDisplayName(planDog) {
             return [planDog && planDog.dogName, planDog && planDog.ownerSurname].filter(Boolean).join(' ').trim();
         }
 
+        function rxPlanCapturedAtText() {
+            if (!rxPlanState || !rxPlanState.capturedAt) return '';
+            const captured = new Date(rxPlanState.capturedAt);
+            if (Number.isNaN(captured.getTime())) return '';
+            return ' Plan captured at ' + captured.toLocaleString('en-GB') + '.';
+        }
+
         function renderRxBanners() {
             const unavailable = document.getElementById('rxPlanBanner');
             const unjoined = document.getElementById('rxUnjoinedBanner');
             if (unavailable) {
-                if (!rxPlanState || !rxPlanState.ok || rxPlanState.stale) {
+                if (!rxPlanState || !rxPlanState.ok || rxPlanState.stale || rxPlanState.degraded) {
                     unavailable.innerHTML = '<strong>Medication data is unavailable.</strong> ' +
                         'Check the feeding-plan board before feeding. ' +
-                        (rxPlanState && rxPlanState.stale ? 'The last-known-good plan is shown on tiles where names still match.' : 'No live medication result is being treated as “none”.');
+                        (rxPlanState && rxPlanState.stale ? 'The last-known-good plan is shown on tiles where names still match.' :
+                            (rxPlanState && rxPlanState.degraded ? 'The usable part of the latest plan is shown, but the feed reported an error.' :
+                                'No live medication result is being treated as “none”.')) +
+                        rxPlanCapturedAtText();
                     unavailable.classList.remove('hidden');
                 } else {
                     unavailable.classList.add('hidden');
@@ -1492,9 +1544,15 @@
             }
             if (unjoined) {
                 const names = rxMedicationPlanDogsNotOnBoard().map(rxPlanDogDisplayName).filter(Boolean);
-                if (rxPlanState && rxPlanState.ok && names.length) {
-                    unjoined.innerHTML = '<strong>Prescription medication dogs not matched to the board:</strong> ' +
-                        names.map(esc).join(', ') + '. Check the feeding-plan board and match or add these dogs.';
+                const uncertainNames = rxAmbiguousBoardDogs()
+                    .map(dog => dog.matchedName || dog.inputName).filter(Boolean);
+                if (rxPlanState && rxPlanState.ok && (names.length || uncertainNames.length)) {
+                    const warnings = [];
+                    if (names.length) warnings.push('<strong>Prescription medication dogs not matched to the board:</strong> ' +
+                        names.map(esc).join(', ') + '. Check the feeding-plan board and match or add these dogs.');
+                    if (uncertainNames.length) warnings.push('<strong>Dogs with an uncertain plan match:</strong> ' +
+                        uncertainNames.map(esc).join(', ') + '. Medication candidates are shown red; check the feeding-plan board.');
+                    unjoined.innerHTML = warnings.join(' ');
                     unjoined.classList.remove('hidden');
                 } else {
                     unjoined.classList.add('hidden');
@@ -1502,35 +1560,75 @@
             }
         }
 
+        function renderRxPlanSurfaces() {
+            if (!isDragActive()) {
+                rxPlanRenderPending = false;
+                renderAllPens();
+                renderStagingArea();
+                renderRxBanners();
+                return;
+            }
+            rxPlanRenderPending = true;
+        }
+
+        function scheduleRxPlanFetch(succeeded) {
+            if (succeeded) {
+                rxPlanFailureCount = 0;
+                rxPlanNextFetchAt = Date.now() + RX_PLAN_REFRESH_INTERVAL_MS;
+                return;
+            }
+            rxPlanFailureCount++;
+            const delay = Math.min(RX_PLAN_RETRY_BASE_MS * Math.pow(2, rxPlanFailureCount - 1), RX_PLAN_RETRY_MAX_MS);
+            rxPlanNextFetchAt = Date.now() + delay;
+        }
+
+        function maybeRefreshRxPlan() {
+            if (!rxPlanFetchInFlight && Date.now() >= rxPlanNextFetchAt) fetchRxPlan();
+        }
+
         async function fetchRxPlan() {
             const sequence = ++rxPlanFetchSequence;
+            rxPlanFetchInFlight = true;
             const cached = readRxPlanCache();
+            let succeeded = false;
             try {
                 const url = BOARDING_PLANS_API_URL + '?mode=feeding&token=' + BOARDING_PLANS_API_TOKEN;
                 const response = await gasFetch(url, { method: 'GET', redirect: 'follow' }, PLAN_FETCH_TIMEOUT_MS);
                 if (!response || response.ok === false) throw new Error('Medication plan request failed');
                 const result = await response.json();
-                if (!result || !Array.isArray(result.dogs) || result.dogs.length === 0 || result.feedingError) {
+                if (!result || !Array.isArray(result.dogs) || result.dogs.length === 0) {
                     throw new Error((result && result.feedingError) || 'Medication plan returned no dogs');
                 }
                 if (sequence !== rxPlanFetchSequence) return;
-                rxPlanState = { ok: true, stale: false, dogs: result.dogs, fetchedAt: Date.now(), error: '' };
-                try {
-                    localStorage.setItem(RX_PLAN_CACHE_KEY, JSON.stringify({ dogs: result.dogs, fetchedAt: rxPlanState.fetchedAt }));
-                } catch (e) {}
+                const capturedAt = Date.now();
+                if (result.feedingError) {
+                    rxPlanState = { ok: true, stale: false, degraded: true, dogs: result.dogs,
+                        capturedAt: capturedAt, error: String(result.feedingError) };
+                } else {
+                    succeeded = true;
+                    rxPlanState = { ok: true, stale: false, degraded: false, dogs: result.dogs,
+                        capturedAt: capturedAt, error: '' };
+                    try {
+                        localStorage.setItem(RX_PLAN_CACHE_KEY, JSON.stringify({ dogs: result.dogs, capturedAt: capturedAt }));
+                    } catch (e) {}
+                }
             } catch (error) {
                 if (sequence !== rxPlanFetchSequence) return;
                 const fallback = cached || readRxPlanCache();
                 rxPlanState = fallback
-                    ? { ok: true, stale: true, dogs: fallback.dogs, fetchedAt: fallback.fetchedAt || 0,
+                    ? { ok: true, stale: true, degraded: false, dogs: fallback.dogs,
+                        capturedAt: fallback.capturedAt,
                         error: 'Live medication data is unavailable; using the last-known-good plan.' }
-                    : { ok: false, stale: false, dogs: [], fetchedAt: 0,
+                    : { ok: false, stale: false, degraded: false, dogs: [], capturedAt: 0,
                         error: 'Medication data is unavailable: ' + String(error && error.message ? error.message : error) };
                 console.warn('[rx-plan] ' + rxPlanState.error);
+            } finally {
+                if (sequence === rxPlanFetchSequence) {
+                    rxPlanFetchInFlight = false;
+                    scheduleRxPlanFetch(succeeded);
+                    renderRxPlanSurfaces();
+                }
             }
-            renderAllPens();
-            renderStagingArea();
-            renderRxBanners();
         }
 
         function confirmRxMedication(dog) {
@@ -2518,6 +2616,8 @@
         //    slow 12s call can't stack ticks behind it. That was the old heartbeatInFlight's job.
         async function pollForUpdates() {
             if (isSyncing || !initialLoadComplete) return;
+            if (rxPlanRenderPending && !isDragActive()) renderRxPlanSurfaces();
+            maybeRefreshRxPlan();
             isSyncing = true;
 
             try {
@@ -3744,12 +3844,17 @@
             const sub = document.getElementById('previewSheetSub');
 
             const penOrder = ['top-1', 'top-2', 'top-3', 'top-4', 'top-5', 'bottom-1', 'bottom-2', 'bottom-3', 'bottom-4', 'bottom-5'];
-            const unacknowledgedRx = dogs.filter(dog => dogNeedsRx(dog) === true && !isRxAcked(dog));
+            const unacknowledgedRx = dogs.filter(dog => {
+                const planDog = rxPlanFor(dog);
+                return planDog && planDog.feeding && planDog.feeding.medication === 'Yes' && !isRxAcked(dog);
+            });
             const unjoinedRx = rxMedicationPlanDogsNotOnBoard();
+            const uncertainRx = rxAmbiguousBoardDogs();
             let html = '';
-            if (!rxPlanState || !rxPlanState.ok || rxPlanState.stale || unacknowledgedRx.length || unjoinedRx.length) {
+            if (!rxPlanState || !rxPlanState.ok || rxPlanState.stale || rxPlanState.degraded ||
+                    unacknowledgedRx.length || unjoinedRx.length || uncertainRx.length) {
                 const warningParts = [];
-                if (!rxPlanState || !rxPlanState.ok || rxPlanState.stale) {
+                if (!rxPlanState || !rxPlanState.ok || rxPlanState.stale || rxPlanState.degraded) {
                     warningParts.push('Live medication data is unavailable — check the feeding-plan board before submitting.');
                 }
                 if (unacknowledgedRx.length) {
@@ -3759,6 +3864,10 @@
                 if (unjoinedRx.length) {
                     warningParts.push('Plan-medication dogs not matched to the board: ' +
                         unjoinedRx.map(planDog => esc(rxPlanDogDisplayName(planDog))).join(', ') + '.');
+                }
+                if (uncertainRx.length) {
+                    warningParts.push('Dogs with an uncertain plan match (medication candidates remain red): ' +
+                        uncertainRx.map(dog => esc(dog.matchedName || dog.inputName || 'Unknown dog')).join(', ') + '.');
                 }
                 html = '<div class="rx-preview-warning"><strong>Prescription medication check</strong>' +
                     warningParts.map(part => '<div>' + part + '</div>').join('') + '</div>';
