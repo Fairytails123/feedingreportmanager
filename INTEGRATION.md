@@ -26,7 +26,9 @@ has shipped and held.
 | 1A Repo unification | Copy the feeding-plans page and logo into `tv-plans/` byte-identically; move the sanitised 20-scenario harness into `tests/tv-plans/` | ✅ 2026-08-20 (source absorbed locally; live `fooddata` repo untouched) |
 | 1A | Add `publish_plans_tv.sh` with contract-first, verbatim staging and SHA-256 dry-run proof | ✅ 2026-08-20 (`--dry-run` only; no clone, push or publish) |
 | 1A | Gate the feeding-plans `API_URL` and `API_TOKEN` against the boarding backend mirror | ✅ 2026-08-20 (`scripts/check_contract.js`) |
-| 1A publish | First publish to the unchanged `fooddata` Pages URL and byte-compare the served page | ⬜ deferred to Kam's explicit publish call |
+| 1A | **EOL defect found by verifying merged main** (task `tv-plans-eol-fix`, Tier 1) | ✅ MERGED 2026-08-20 — the publisher staged the WORKING TREE copy, which `core.autocrlf=true` checks out as CRLF (90,511 B) while the blob and the live page are LF (88,289 B): a publish would have rewritten all 2,222 lines in the PUBLIC repo. Publisher now LF-normalises (as `assemble_display.js:29` always did); `.gitattributes` pins the page to LF + logo binary. 19 checks 0 fails; gate PASS |
+| 1A | Phase 1A smoke made portable (same task) | ✅ 2026-08-20 — it referenced `.task/seed/`, archived at merge, so it failed `want null` on every LATER task and would have poisoned the gate repo-wide. Now references the git blob + pinned live hashes |
+| 1A publish | First publish to the unchanged `fooddata` Pages URL and byte-compare the served page | ⬜ deferred to Kam's explicit publish call — **now safe: dry-run proves the staged payload hashes to the live page exactly** |
 | 2 Shared modules | `shared/name-match.js` + `shared/fetch-kit.js` (ES5), equivalence-tested, adopted per surface | ⬜ |
 | 3 Symbiosis | Plans + medication chips on tablet tiles; plan-vs-report flag in Telegram summary | ⬜ product details to confirm with Kam at contract time |
 | 4 Measured infra | Instrument checkinout/plans feeds 2 weeks → move to n8n ONLY on measured degradation; token rework | ⬜ conditional — may correctly never run |
@@ -48,6 +50,17 @@ has shipped and held.
   own test assets, found only by running the thing for real.
 - **Codex's sandbox denies nested spawns** (Chrome, and even git from Node): plan for the
   operator to run browser/spawn-dependent acceptance tests outside it, and make skips loud.
+- **A test may only reference things that outlive its own task.** `.task/seed/` is archived
+  at merge, so a seed-dependent acceptance suite starts failing on every LATER task in that
+  repo — and the gate runs ALL `tests/*.smoke.mjs`, so one stale suite poisons the gate
+  repo-wide. Reference the **git blob** (durable, and what actually gets published).
+- **`core.autocrlf=true` makes the working tree lie about what you will publish.** The blob
+  is LF; checkout gives CRLF. Any publisher that `cp`s the working tree pushes CRLF — a
+  whole-file diff on a public repo. `assemble_display.js:29` had always normalised; the new
+  publisher had to learn it. **Verify a publisher by hashing its STAGED payload against the
+  blob, never against the working tree.**
+- **Verify the MERGED result, not just the branch.** Both of the above only appeared after
+  commit → merge → checkout; the branch was green throughout.
 - **codex-run can appear to hang after a successful run:** Codex keeps a long-lived
   PowerShell AST-parser helper (its command-safety layer) that holds the stdout pipe
   open, so the wrapper's wait never returns even though the work is done and the last
