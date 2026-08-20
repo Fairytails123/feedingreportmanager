@@ -11,9 +11,20 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-MSG="${1:-Update TV feeding plans}"
 DRY_RUN=0
-[ "${1:-}" = "--dry-run" ] && DRY_RUN=1
+MSG_PARTS=()
+for arg in "$@"; do
+  if [ "$arg" = "--dry-run" ]; then
+    DRY_RUN=1
+  else
+    MSG_PARTS+=("$arg")
+  fi
+done
+if [ "${#MSG_PARTS[@]}" -eq 0 ]; then
+  MSG="Update TV feeding plans"
+else
+  MSG="${MSG_PARTS[*]}"
+fi
 
 echo "== 1/4 contract drift-check =="
 node "$REPO_DIR/scripts/check_contract.js"
@@ -29,7 +40,8 @@ INDEX_SHA256="$(sha256sum "$PAYLOAD_DIR/index.html" | awk '{print toupper($1)}')
 
 if [ "$DRY_RUN" = "1" ]; then
   echo "== dry-run: stopping before clone/push =="
-  echo "Staged payload: $PAYLOAD_DIR"
+  trap - EXIT
+  echo "Staged payload retained for inspection: $PAYLOAD_DIR"
   echo "Staged index.html SHA-256: $INDEX_SHA256"
   exit 0
 fi

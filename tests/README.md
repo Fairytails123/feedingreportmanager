@@ -1,7 +1,7 @@
 # tests/ — the pre-deploy gate
 
 ```bash
-bash tests/run.sh          # syntax + contract + backend + tablet + display.  MUST be green before deploying.
+bash tests/run.sh          # syntax + contract + backend + tablet + display + TV feeding plans.  MUST be green before deploying.
 LIVE=1 bash tests/run.sh   # ...plus 27 assertions against the REAL n8n board (refuses to run mid-round).
 ```
 
@@ -14,6 +14,7 @@ replay acceptance scenarios against it:
 | `backend.test.js` | 80 scenarios. |
 | `tablet_harness.js` | Extracts the inline `<script>` from the real `index.html` and evaluates it with DOM/`fetch`/`localStorage` stubs and a scriptable fake network. |
 | `tablet.test.js` | 82 scenarios. |
+| `tv-plans/build_and_run.ps1` | 20 headless-Chrome scenarios against `tv-plans/index.html`, covering dense boards, remote-control paths, failures, stale data, hostile text, rollover and screenshots. It protects the separately published `fooddata` TV surface from browser-only regressions that the stubbed tablet and display suites cannot detect. |
 | `android-scroll.smoke.mjs` | **Standalone — NOT in `run.sh`** (needs the local Playwright chromium cache): `node tests/android-scroll.smoke.mjs`. Real CDP **touch** events against the served `index.html` in an emulated Android phone viewport, every external request aborted. The one class the stubbed harnesses cannot see: Chromium's touch scroll-latching/chaining. |
 
 This formalises what `CLAUDE.md` already called the de-facto test step. It was throwaway before

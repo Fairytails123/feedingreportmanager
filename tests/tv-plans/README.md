@@ -1,7 +1,7 @@
 # Feeding-board verification harness
 
 This directory contains the portable verification harness for the Fairy Tails TV
-feeding board. It stamps the current `index.html` with controlled fetch responses,
+feeding board. It stamps `tv-plans/index.html` with controlled fetch responses,
 runs each scenario in headless Chrome at 1920×1080, inspects the rendered board and
 captures the scenarios selected for visual review. Generated pages, browser profiles,
 DOM dumps and screenshots are written beneath the system scratch directory at
@@ -47,7 +47,7 @@ rollover. The fixture adds representative matching, food, supplement, medication
 allergy and stay-date combinations.
 
 `fixtures/api_sample.synthetic.json` is deliberately synthetic because this repository
-and its GitHub Pages output are public. Every dog and owner name comes from the
+and the TV page published to `fooddata` are public. Every dog and owner name comes from the
 contract's fictional pools, and every food note and medication description is
 fabricated. The fixture provides realistic structure and edge cases without depending
 on any customer export.

@@ -23,11 +23,31 @@ run "TV display"       node tests/display.test.js
 if ! command -v powershell.exe >/dev/null 2>&1; then
   echo
   echo "!!! TV FEEDING-PLANS HARNESS — SKIPPED: powershell.exe is unavailable !!!"
-elif ! powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/tv-plans/build_and_run.ps1 -Validate >/dev/null 2>&1; then
-  echo
-  echo "!!! TV FEEDING-PLANS HARNESS — SKIPPED: Google Chrome is unavailable !!!"
 else
-  run "TV feeding plans (20 scenarios)" powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/tv-plans/build_and_run.ps1
+  tv_plans_probe_output="$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/tv-plans/build_and_run.ps1 -Validate 2>&1)"
+  tv_plans_probe_status=$?
+  if [ "$tv_plans_probe_status" -eq 0 ]; then
+    run "TV feeding plans (20 scenarios)" powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/tv-plans/build_and_run.ps1
+  elif [ "$tv_plans_probe_status" -eq 1 ] && printf '%s\n' "$tv_plans_probe_output" | node -e '
+    const lines = require("fs").readFileSync(0, "utf8").split(/\r?\n/);
+    const missing = lines.some((line) => {
+      try { return JSON.parse(line).chromeFound === false; } catch { return false; }
+    });
+    process.exit(missing ? 0 : 1);
+  '; then
+    echo
+    echo "!!! TV FEEDING-PLANS HARNESS — SKIPPED: Google Chrome is unavailable !!!"
+  else
+    echo
+    echo "!!! TV FEEDING-PLANS HARNESS — FAILED: validation probe exited $tv_plans_probe_status !!!"
+    echo "Probe output:"
+    if [ -n "$tv_plans_probe_output" ]; then
+      printf '%s\n' "$tv_plans_probe_output"
+    else
+      echo "(no output)"
+    fi
+    fail=1
+  fi
 fi
 
 # The n8n session API is NOT a file in this repo — nothing above can see it break. It is opt-in
