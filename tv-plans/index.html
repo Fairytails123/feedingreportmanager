@@ -1,0 +1,2222 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fairy Tails K9 Centre — Boarding Feeding Board</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    /* ============================================================
+       Fairy Tails K9 Centre — Boarding Feeding Board
+       Optimised for Hisense 40" 40E4QTUK FHD (1920x1080), wall-mounted,
+       read by staff from 3-5 metres. Dark theme for distance legibility.
+
+       Layout: header band -> one of two MANUALLY SELECTED pages (no
+       auto-rotation — the header count pills are remote buttons):
+         TODAY page — every dog staying today on ONE page (alphabetical,
+           per-card auto-sized so nothing is ever truncated), full height;
+         TOMORROW & PREP LIST page — two big alphabetical lists: FEED
+           PREP (all of today's dogs, checkbox bullets, MEDS/ALLERGY
+           flags) and ARRIVING TOMORROW (with full med detail).
+       Remote input: click/cursor-OK on a pill selects that page; bare
+       ArrowLeft/ArrowRight anywhere select (◄ TODAY / ► TOMORROW); and
+       OK/Enter anywhere TOGGLES the page (debounced against key-repeat
+       and dual keydown+click shells — see handleRemoteKey; its
+       preventDefault suppresses the native focused-pill re-click).
+       Dogs beyond tomorrow are filtered out client-side.
+
+       No-scroll TV dashboard — everything fits one 1920x1080 screen.
+       Content kept inside ~4% on every edge for TV overscan.
+       ============================================================ */
+
+    :root {
+      /* Brand family */
+      --ft-navy: #023E8A;
+      --ft-blue: #0077B6;
+      --ft-cyan: #00B4D8;
+      --ft-amber: #FFB703;
+      --ft-amber-deep: #E08D00;
+
+      /* Dark theme surfaces */
+      --bg-deep: #04101E;
+      --bg-mid: #0A2238;
+      --card-bg: #0D2440;
+      --card-bg-2: #102C4E;
+
+      /* Text */
+      --text: #F2F7FB;
+      --text-dim: #A7BFD4;
+      --text-faint: #7FA3C0;
+
+      /* Warnings */
+      --med-red: #D90429;
+      --allergy-amber: #F5A623;
+
+      /* School (boarding school) marker */
+      --school: #8B5CF6;
+
+      /* Dynamic — set by JS. --tz is measured & sized PER CARD by fitTodayZone()
+         to fill each card's cell; --med-clamp / --notes-clamp are generous line
+         ceilings that trimOverflowingCards() only tightens as a last resort. */
+      --tz: 1; /* Today-zone font scale (per-card fit overrides this) */
+      /* High line ceilings so the clamp itself never truncates real data — the
+         per-card auto-fit shrinks the font until the FULL med/notes fit, and
+         trimOverflowingCards() only reduces these if even TZ_MIN overflows. */
+      --med-clamp: 12;
+      --notes-clamp: 12;
+      --qty-clamp: 8;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: var(--bg-deep);
+      font-family: 'Nunito', 'Segoe UI', sans-serif;
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background: linear-gradient(160deg, var(--bg-mid) 0%, var(--bg-deep) 70%);
+    }
+
+    /* The board is laid out on a fixed 1920x1080 canvas and scaled to the
+       real viewport by JS (fitToScreen). TV browsers often report a smaller
+       CSS viewport (e.g. 1280x720 on Vidaa) than the panel — scaling the
+       whole canvas keeps the design identical on every device. */
+    .page {
+      display: flex;
+      flex-direction: column;
+      width: 1920px;
+      height: 1080px;
+      -webkit-transform-origin: 0 0;
+      transform-origin: 0 0;
+      /* TV-safe area: ~4% of each edge (overscan) */
+      padding: 38px 76px 38px;
+    }
+
+    /* ============================================================
+       HEADER BAND
+       ============================================================ */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      flex-shrink: 0;
+      height: 90px;
+      margin-bottom: 12px;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      min-width: 0;
+    }
+
+    .logo {
+      width: 72px;
+      height: 72px;
+      border-radius: 16px;
+      object-fit: cover;
+      border: 2px solid rgba(0, 180, 216, 0.4);
+      flex-shrink: 0;
+    }
+
+    .header-title h1 {
+      font-size: 30px;
+      font-weight: 900;
+      color: var(--text);
+      line-height: 1.15;
+      white-space: nowrap;
+    }
+
+    .header-title .subtitle {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-dim);
+      margin-top: 2px;
+      white-space: nowrap;
+    }
+
+    .header-mid {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+
+    .pill-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    /* The count pills are the page-select BUTTONS (remote-driven): the
+       selected page's pill is filled, the other is a dimmed outline. Real
+       <button> elements so cursor-mode TV browsers can click them and
+       spatial-nav browsers can focus them and send OK. */
+    .count-pill {
+      display: inline-block; /* old TV WebKit fallback — flex-in-button is patchy there */
+      display: inline-flex;
+      align-items: baseline;
+      gap: 8px;
+      padding: 10px 20px;
+      border: 0;
+      border-radius: 14px;
+      font-family: inherit;
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .count-pill .count-num { font-size: 30px; }
+
+    .count-pill.today-pill {
+      background: var(--ft-cyan);
+      color: #062C3E;
+    }
+
+    .count-pill.tomorrow-pill {
+      background: var(--ft-amber);
+      color: #3A2A00;
+    }
+
+    /* Unselected page: ghost/outline version of the same colour family, so
+       the filled pill unambiguously marks the page on screen. */
+    .count-pill.unselected.today-pill {
+      background: rgba(0, 180, 216, 0.10);
+      color: var(--ft-cyan);
+      box-shadow: inset 0 0 0 2px rgba(0, 180, 216, 0.55);
+    }
+
+    .count-pill.unselected.tomorrow-pill {
+      background: rgba(255, 183, 3, 0.10);
+      color: var(--ft-amber);
+      box-shadow: inset 0 0 0 2px rgba(255, 183, 3, 0.55);
+    }
+
+    /* Remote focus ring (spatial-nav browsers move focus with the arrows) */
+    .count-pill:focus {
+      outline: 3px solid var(--text);
+      outline-offset: 2px;
+    }
+
+    .pill-hint {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: var(--text-faint);
+      white-space: nowrap;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      flex-shrink: 0;
+    }
+
+    .clock-block { text-align: right; }
+
+    .clock {
+      font-size: 46px;
+      font-weight: 900;
+      line-height: 1;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .clock-date {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text-dim);
+      margin-top: 3px;
+    }
+
+    .status-block {
+      text-align: right;
+      border-left: 2px solid rgba(167, 191, 212, 0.25);
+      padding-left: 22px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.6px;
+      background: rgba(16, 185, 129, 0.15);
+      color: #34D399;
+    }
+
+    .status-pill .status-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #34D399;
+      animation: pulse 2.5s ease-in-out infinite;
+    }
+
+    .status-pill.stale {
+      background: rgba(255, 183, 3, 0.18);
+      color: var(--ft-amber);
+    }
+
+    .status-pill.stale .status-dot {
+      background: var(--ft-amber);
+      animation: none;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+
+    .status-line {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-dim);
+      margin-top: 3px;
+      white-space: nowrap;
+    }
+
+    .status-line .countdown { font-weight: 800; color: var(--ft-cyan); }
+
+    /* ============================================================
+       BANNERS (backend error / feeding warning) — slim, rare
+       ============================================================ */
+    .error-banner {
+      background: rgba(217, 4, 41, 0.16);
+      border: 1px solid rgba(217, 4, 41, 0.45);
+      border-radius: 10px;
+      padding: 7px 16px;
+      margin-bottom: 10px;
+      color: #FFB3BE;
+      font-size: 16px;
+      font-weight: 700;
+      display: none;
+      flex-shrink: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .feeding-warning {
+      background: rgba(255, 183, 3, 0.12);
+      border: 1px solid rgba(255, 183, 3, 0.4);
+      border-radius: 10px;
+      padding: 7px 16px;
+      margin-bottom: 10px;
+      color: #FFD477;
+      font-size: 16px;
+      font-weight: 700;
+      display: none;
+      flex-shrink: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ============================================================
+       ZONE BARS (section headers)
+       ============================================================ */
+    .zone-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      margin-bottom: 10px;
+    }
+
+    .zone-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 21px;
+      font-weight: 900;
+      letter-spacing: 2px;
+    }
+
+    .zone-title .zone-rule {
+      display: inline-block;
+      width: 46px;
+      height: 5px;
+      border-radius: 3px;
+    }
+
+    .zone-title.today-title { color: var(--ft-cyan); }
+    .zone-title.today-title .zone-rule { background: var(--ft-cyan); }
+
+    .zone-title.tomorrow-title { color: var(--ft-amber); font-size: 19px; }
+    .zone-title.tomorrow-title .zone-rule { background: var(--ft-amber); }
+
+    /* ============================================================
+       TODAY ZONE — the CARDS screen (never paged)
+       ============================================================ */
+    .today-zone {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .today-grid {
+      flex: 1;
+      display: grid;
+      gap: calc(16px * var(--tz)); /* breathes with the cards as --tz grows */
+      min-height: 0;
+    }
+
+    /* Layout classes set ONLY the grid geometry (columns x rows). The font
+       scale (--tz) is no longer pinned per-count: fitTodayZone() measures the
+       rendered cards and sizes EACH one to the largest scale that shows ALL of
+       its text, so a near-empty board reads BIG and a packed board shrinks
+       instead of truncating. Column choice (JS todayLayoutClass): 1=g1, 2=g2,
+       3=g3, 4=g4, 5-6=g6, 7-8=g8 (4x2 — taller cards let long meds grow),
+       9=g9 (3x3), 10=g10 (5x2), 11-12=g12 (4x3), 13-15=g15 (5x3),
+       16-18=g18 (6x3), 19-20=g20 (5x4). Never paged — beyond the 20-dog
+       design ceiling applyTodayLayout() derives an inline cols x rows so the
+       board STILL renders one page (cards just get smaller). */
+    .today-grid.g1 { grid-template-columns: minmax(0, 1100px); grid-template-rows: minmax(0, 1fr); justify-content: center; }
+    .today-grid.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); }
+    .today-grid.g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); }
+    .today-grid.g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+    .today-grid.g6 { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+    .today-grid.g8 { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+    .today-grid.g9 { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); }
+    .today-grid.g10 { grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+    .today-grid.g12 { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); }
+    .today-grid.g15 { grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); }
+    .today-grid.g18 { grid-template-columns: repeat(6, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); }
+    .today-grid.g20 { grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: repeat(4, minmax(0, 1fr)); }
+
+    /* Density relief for packed layouts (g8 = 7-8 dogs, and every 10+ layout
+       via the JS-added "dense" class). Food-type tags duplicate the quantity
+       rows, so they give way; the type pill and head padding tighten. The
+       auto-fit + trimOverflowingCards() still guarantee nothing is chopped
+       mid-line. */
+    .today-grid.g8 .meta-row .food-tag, .today-grid.dense .meta-row .food-tag { display: none; }
+    .today-grid.g8 .type-pill, .today-grid.dense .type-pill { font-size: 14px; padding: 2px 7px; }
+    .today-grid.g8 .tcard-head, .today-grid.dense .tcard-head { padding: 10px 16px 6px; }
+    .today-grid.g8 .tcard-body, .today-grid.dense .tcard-body { gap: 6px; padding: 0 16px 12px; }
+    /* Tighter gutters at 10+ so more of the fixed canvas goes to the cards. */
+    .today-grid.dense { gap: 10px; }
+    /* Note: med-card notes are NOT pre-hidden here — the per-card auto-fit shows
+       them when there's room and trimOverflowingCards() sheds them only when a
+       card genuinely cannot fit, so a 7-8 dog page keeps med-card notes. */
+
+    /* ============================================================
+       TODAY CARD
+       ============================================================ */
+    .tcard {
+      background: linear-gradient(150deg, var(--card-bg-2) 0%, var(--card-bg) 60%);
+      border: 1px solid rgba(0, 180, 216, 0.35);
+      border-left: 10px solid var(--ft-cyan);
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .tcard-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: calc(12px * var(--tz)) calc(18px * var(--tz)) calc(8px * var(--tz));
+      flex-shrink: 0;
+    }
+
+    .tcard-name {
+      flex: 1 1 auto;
+      font-size: calc(48px * var(--tz));
+      font-weight: 900;
+      color: var(--text);
+      /* 1.3 (not 1.1) so the tall Nunito-900 glyphs are never clipped top/bottom
+         and wrapped name lines don't overlap. */
+      line-height: 1.3;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0 0.25em;
+      min-width: 0;
+    }
+
+    /* Dog first name + owner surname — surnames disambiguate same-named dogs,
+       so both must stay visible. They share one line when they fit; in narrow
+       cards the surname wraps to its own full-width line. Each part stays on one
+       line (no mid-word break); if a part would overflow, cardFits() sees the
+       clip (scrollWidth > clientWidth) and the auto-fit backs --tz off until the
+       whole name fits — so the displayed name is never broken or truncated
+       except for a single token longer than the card at the minimum scale, where
+       overflow:hidden clips it cleanly rather than letting it spill over a
+       neighbour. Surname is em-sized so it scales with the name font. */
+    .name-first {
+      flex: 0 1 auto;
+      min-width: 0;
+      max-width: 100%;
+      white-space: normal;
+      overflow: hidden;
+    }
+
+    .name-surname {
+      flex: 0 1 auto;
+      min-width: 0;
+      max-width: 100%;
+      white-space: normal;
+      overflow: hidden;
+      font-size: 0.62em;
+      font-weight: 700;
+      color: var(--text-dim);
+    }
+
+    /* Sits OUTSIDE the name block so a long name never swallows it */
+    .type-pill {
+      display: inline-block;
+      font-size: calc(16px * var(--tz));
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: calc(2px * var(--tz)) calc(9px * var(--tz));
+      border-radius: 7px;
+      background: rgba(0, 119, 182, 0.45);
+      color: #BDE6F5;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+
+    .type-pill.school {
+      background: rgba(139, 92, 246, 0.4);
+      color: #D6C5FB;
+    }
+
+    /* Meals chip lives in the card body's meta row */
+    .meals-pill {
+      display: inline-flex;
+      align-items: center;
+      font-size: calc(24px * var(--tz));
+      font-weight: 800;
+      color: var(--ft-cyan);
+      background: rgba(0, 180, 216, 0.14);
+      border: 1px solid rgba(0, 180, 216, 0.4);
+      padding: calc(3px * var(--tz)) calc(11px * var(--tz));
+      border-radius: 8px;
+      white-space: nowrap;
+    }
+
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: calc(8px * var(--tz));
+      flex-shrink: 0;
+    }
+
+    .tcard-body {
+      display: flex;
+      flex-direction: column;
+      gap: calc(8px * var(--tz));
+      padding: 0 calc(18px * var(--tz)) calc(14px * var(--tz));
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* Medication chip — first in the body so it is never clipped */
+    .med-chip {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      background: var(--med-red);
+      border-radius: 10px;
+      padding: calc(8px * var(--tz)) calc(12px * var(--tz));
+      flex-shrink: 0;
+    }
+
+    .med-chip svg {
+      width: calc(28px * var(--tz));
+      height: calc(28px * var(--tz));
+      fill: #fff;
+      flex-shrink: 0;
+      margin-top: calc(3px * var(--tz));
+    }
+
+    .med-chip .med-text {
+      font-size: calc(28px * var(--tz));
+      font-weight: 800;
+      color: #fff;
+      line-height: 1.25; /* clears Nunito's ~1.23em glyphs under overflow:hidden */
+      display: -webkit-box;
+      -webkit-line-clamp: var(--med-clamp, 12);
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      overflow-wrap: anywhere;
+      min-width: 0;
+    }
+
+    .med-chip .med-text .med-label { text-transform: uppercase; letter-spacing: 1px; }
+
+    .allergy-chip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--allergy-amber);
+      border-radius: 10px;
+      padding: calc(7px * var(--tz)) calc(12px * var(--tz));
+      flex-shrink: 0;
+    }
+
+    .allergy-chip svg {
+      width: calc(26px * var(--tz));
+      height: calc(26px * var(--tz));
+      fill: #3A2A00;
+      flex-shrink: 0;
+    }
+
+    .allergy-chip .allergy-text {
+      font-size: calc(26px * var(--tz));
+      font-weight: 900;
+      color: #3A2A00;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Training-dog supplements (JotForm checklist qid 61) — their own subcard
+       so routine wellness items never blur into the RED prescription
+       medication chip. Green family = routine, not an alert. */
+    .supp-block {
+      padding: calc(6px * var(--tz)) calc(12px * var(--tz));
+      background: rgba(16, 185, 129, 0.10);
+      border-left: 5px solid #10B981;
+      border-radius: 8px;
+      overflow: hidden;
+      min-height: 0;
+      /* Same rationale as .notes-block: never flex-shrink, or the block would
+         clip its own text while the body still "fits", hiding it from the
+         auto-fit. Unfit supplements must overflow the body so fitCard sees it. */
+      flex-shrink: 0;
+    }
+
+    .supp-label {
+      font-size: calc(15px * var(--tz));
+      font-weight: 800;
+      color: #6EE7B7;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      margin-bottom: 2px;
+    }
+
+    .supp-text {
+      font-size: calc(26px * var(--tz));
+      font-weight: 700;
+      color: #C7F5E4;
+      line-height: 1.25; /* clears Nunito's ~1.23em glyphs under overflow:hidden */
+      overflow-wrap: anywhere;
+      min-width: 0;
+    }
+
+    /* Quantity rows — the core feeding details */
+    .qty-row {
+      display: flex;
+      align-items: flex-start; /* label stays top-aligned when the value wraps */
+      gap: 12px;
+      padding: calc(6px * var(--tz)) calc(12px * var(--tz));
+      background: rgba(255, 255, 255, 0.055);
+      border-left: 5px solid var(--ft-blue);
+      border-radius: 8px;
+      flex-shrink: 0;
+      min-width: 0;
+    }
+
+    .qty-label {
+      font-size: calc(20px * var(--tz));
+      font-weight: 800;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      line-height: 1.2;
+      min-width: calc(80px * var(--tz));
+      flex-shrink: 0;
+    }
+
+    .qty-value {
+      font-size: calc(30px * var(--tz));
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1.25; /* clears Nunito's ~1.23em glyphs under overflow:hidden without over-tall rows */
+      /* Wrap food quantities instead of ellipsizing them — staff must read the
+         full amount. The high line-clamp ceiling never truncates real (short)
+         food values; it only bounds a pathological free-text amount and gives
+         trimOverflowingCards() a lever to clamp food BEFORE medication on a card
+         that still cannot fit. The first qty-row is never dropped. */
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      display: -webkit-box;
+      -webkit-line-clamp: var(--qty-clamp, 8);
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    /* Food type tags — supplementary, shown in the meta row */
+    .food-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: calc(3px * var(--tz)) calc(11px * var(--tz));
+      border-radius: 8px;
+      font-size: calc(24px * var(--tz));
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .food-tag svg {
+      width: calc(20px * var(--tz));
+      height: calc(20px * var(--tz));
+      flex-shrink: 0;
+    }
+
+    .food-tag.kibble { background: rgba(217, 119, 6, 0.22); color: #FBBF77; }
+    .food-tag.wet { background: rgba(8, 145, 178, 0.25); color: #7DE3F4; }
+    .food-tag.tin { background: rgba(124, 58, 237, 0.25); color: #C9B2F8; }
+    .food-tag.parent { background: rgba(5, 150, 105, 0.25); color: #6EE7B7; }
+    .food-tag.special { background: rgba(220, 38, 38, 0.22); color: #FCA5A5; }
+
+    /* Notes — clipped last (lowest priority in body order) */
+    .notes-block {
+      padding: calc(6px * var(--tz)) calc(12px * var(--tz));
+      background: rgba(255, 183, 3, 0.09);
+      border-left: 5px solid var(--ft-amber-deep);
+      border-radius: 8px;
+      overflow: hidden;
+      min-height: 0;
+      /* Do NOT flex-shrink: shrinking would let the block clip its own notes
+         while the body still "fits", hiding truncation from the auto-fit. Keeping
+         it rigid forces unfit notes to overflow the body, so fitCard() shrinks the
+         font until they show in full (or trim sheds them as a last resort). */
+      flex-shrink: 0;
+    }
+
+    .notes-label {
+      font-size: calc(15px * var(--tz));
+      font-weight: 800;
+      color: var(--ft-amber);
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      margin-bottom: 2px;
+    }
+
+    .notes-text {
+      font-size: calc(28px * var(--tz));
+      font-weight: 600;
+      color: #F4E3B2;
+      line-height: 1.25; /* clears Nunito's ~1.23em glyphs under overflow:hidden */
+      display: -webkit-box;
+      -webkit-line-clamp: var(--notes-clamp, 12);
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      overflow-wrap: anywhere;
+    }
+
+    /* Unmatched dog — no feeding record found */
+    .no-match-banner {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: calc(10px * var(--tz)) calc(14px * var(--tz));
+      background: rgba(255, 183, 3, 0.1);
+      border: 2px dashed rgba(255, 183, 3, 0.5);
+      border-radius: 10px;
+      flex-shrink: 0;
+    }
+
+    .no-match-banner svg {
+      width: calc(28px * var(--tz));
+      height: calc(28px * var(--tz));
+      fill: var(--ft-amber);
+      flex-shrink: 0;
+    }
+
+    .no-match-banner .no-match-text {
+      font-size: calc(28px * var(--tz));
+      font-weight: 800;
+      color: var(--ft-amber);
+    }
+
+    /* ============================================================
+       LISTS SCREEN — the "TOMORROW & PREP LIST" page: feed-prep
+       checklist + tomorrow's arrivals, selected via the header pill.
+       Both lists are alphabetical; --lz is the per-panel font scale,
+       sized by renderNameList()/bisectScale() so every name shows.
+       ============================================================ */
+    .lists-zone {
+      flex: 1;
+      display: flex;
+      gap: 36px;
+      min-height: 0;
+    }
+
+    .list-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(0, 180, 216, 0.25);
+      border-radius: 16px;
+      padding: 22px 30px;
+    }
+
+    .list-panel.tomorrow-panel { border-color: rgba(255, 183, 3, 0.35); }
+
+    .list-panel .zone-bar { margin-bottom: 14px; }
+
+    .name-list {
+      --lz: 1;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      -webkit-column-gap: 44px; /* old TV WebKit — same reason as -webkit-transform */
+      column-gap: 44px;
+    }
+
+    .list-item {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: calc(6px * var(--lz)) calc(12px * var(--lz));
+      padding: calc(7px * var(--lz)) 0;
+      font-size: calc(36px * var(--lz));
+      font-weight: 800;
+      line-height: 1.3;
+      color: var(--text);
+      break-inside: avoid;
+      -webkit-column-break-inside: avoid;
+    }
+
+    /* Tick-box bullet — the prep list reads as a physical checklist */
+    .prep-box {
+      width: 0.7em;
+      height: 0.7em;
+      border: 3px solid var(--text-faint);
+      border-radius: 5px;
+      flex-shrink: 0;
+      align-self: center;
+    }
+
+    /* overflow:hidden so a single token longer than the column at the --lz
+       floor clips cleanly inside its own column instead of overlapping the
+       next column's text (listFits' per-span check backs --lz off first). */
+    .list-name { min-width: 0; overflow: hidden; }
+
+    .list-surname {
+      font-size: 0.62em;
+      font-weight: 700;
+      color: var(--text-dim);
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .list-flag {
+      font-size: 0.5em;
+      font-weight: 900;
+      letter-spacing: 1px;
+      padding: 0.15em 0.55em;
+      border-radius: 6px;
+      flex-shrink: 0;
+      align-self: center;
+      white-space: nowrap;
+    }
+
+    .list-flag.med { background: var(--med-red); color: #fff; }
+    .list-flag.allergy, .list-flag.norecord { background: var(--allergy-amber); color: #3A2A00; }
+
+    /* Full-width detail line under an ARRIVING TOMORROW name — arrivals have
+       no card on either screen, so med/allergy detail must live here. */
+    .list-detail {
+      flex-basis: 100%;
+      font-size: 0.55em;
+      font-weight: 700;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+      min-width: 0;
+    }
+    .list-detail.med-detail { color: #FF9DAB; }
+    .list-detail.allergy-detail { color: #FFD477; }
+    .list-detail.supp-detail { color: #A7EFD2; }
+
+    /* Honest-failure banner: shown only if a list cannot fit even at LZ_MIN
+       with 4 columns — silent clipping is never OK on a safety checklist. */
+    .list-clip-warn {
+      display: none;
+      font-size: 16px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      color: #3A2A00;
+      background: var(--allergy-amber);
+      border-radius: 8px;
+      padding: 4px 10px;
+      white-space: nowrap;
+    }
+
+    /* Zone-level empty messages */
+    .zone-empty {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-faint);
+      font-size: 26px;
+      font-weight: 700;
+    }
+
+    .today-zone .zone-empty { flex: 1; }
+    .list-panel .zone-empty { flex: 1; }
+
+    /* ============================================================
+       LOADING / EMPTY / ERROR STATES
+       ============================================================ */
+    .loading-overlay {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      gap: 20px;
+    }
+
+    .spinner {
+      width: 56px;
+      height: 56px;
+      border: 4px solid rgba(167, 191, 212, 0.2);
+      border-top-color: var(--ft-cyan);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-text {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-dim);
+    }
+
+    .empty-state {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      gap: 18px;
+      color: var(--text-dim);
+    }
+
+    .empty-state svg { width: 84px; height: 84px; opacity: 0.4; fill: var(--ft-cyan); }
+    .empty-state p { font-size: 32px; font-weight: 800; }
+    .empty-state .empty-sub { font-size: 20px; font-weight: 600; color: var(--text-faint); }
+
+    .offline-state {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      gap: 16px;
+    }
+
+    .offline-state svg { width: 72px; height: 72px; fill: var(--ft-amber); opacity: 0.8; }
+    .offline-state p { font-size: 30px; font-weight: 800; color: var(--text); }
+    .offline-state .offline-sub { font-size: 20px; font-weight: 600; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div class="page" id="page">
+
+    <div class="header">
+      <div class="header-left">
+        <img src="assets/img/logo.jpg" alt="Fairy Tails K9 Centre" class="logo" onerror="this.style.display='none'">
+        <div class="header-title">
+          <h1>Boarding Feeding Board</h1>
+          <div class="subtitle">Today's stays &amp; tomorrow's arrivals</div>
+        </div>
+      </div>
+      <div class="header-mid">
+        <div class="pill-row">
+          <button type="button" class="count-pill today-pill" id="todayPillBtn" aria-pressed="true"><span class="count-num" id="todayCount">—</span> TODAY</button>
+          <!-- Label also appears in renderTodayCards' pointer message — keep in sync -->
+          <button type="button" class="count-pill tomorrow-pill unselected" id="tomorrowPillBtn" aria-pressed="false"><span class="count-num" id="tomorrowCount">—</span> TOMORROW &amp; PREP LIST</button>
+        </div>
+        <div class="pill-hint">Remote arrows or OK change the page</div>
+      </div>
+      <div class="header-right">
+        <div class="clock-block">
+          <div class="clock" id="clock">--:--</div>
+          <div class="clock-date" id="clockDate">—</div>
+        </div>
+        <div class="status-block">
+          <div class="status-pill" id="statusPill"><span class="status-dot"></span><span id="statusText">LIVE</span></div>
+          <div class="status-line">Updated: <span id="lastUpdated">—</span></div>
+          <div class="status-line">Next refresh: <span class="countdown" id="countdown">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="error-banner" id="errorBanner"></div>
+    <div class="feeding-warning" id="feedingWarning"></div>
+
+    <div class="loading-overlay" id="loadingState">
+      <div class="spinner"></div>
+      <div class="loading-text">Fetching boarding &amp; feeding data&hellip;</div>
+    </div>
+
+    <div class="empty-state" id="emptyState">
+      <svg viewBox="0 0 24 24"><ellipse cx="8" cy="6.5" rx="2.2" ry="2.8"/><ellipse cx="16" cy="6.5" rx="2.2" ry="2.8"/><ellipse cx="4.5" cy="11.5" rx="2" ry="2.5"/><ellipse cx="19.5" cy="11.5" rx="2" ry="2.5"/><path d="M12 22c-3.5 0-6.5-2.5-7-5.5-.3-1.8.5-3.5 2-4.5 1-.7 2.2-1 3.3-1h3.4c1.1 0 2.3.3 3.3 1 1.5 1 2.3 2.7 2 4.5-.5 3-3.5 5.5-7 5.5z"/></svg>
+      <p>No dogs boarding today or arriving tomorrow</p>
+      <div class="empty-sub">The board refreshes automatically at 07:00, 13:00 and 18:00</div>
+    </div>
+
+    <div class="offline-state" id="offlineState">
+      <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+      <p>Unable to load boarding data</p>
+      <div class="offline-sub" id="offlineSub">Retrying shortly&hellip;</div>
+    </div>
+
+    <div class="today-zone" id="todayZone" style="display:none;">
+      <div class="zone-bar">
+        <div class="zone-title today-title"><span class="zone-rule"></span>STAYING TODAY</div>
+      </div>
+      <div class="today-grid" id="todayGrid"></div>
+      <div class="zone-empty" id="todayEmpty">No dogs boarding today</div>
+    </div>
+
+    <div class="lists-zone" id="listsZone" style="display:none;">
+      <div class="list-panel prep-panel">
+        <div class="zone-bar">
+          <div class="zone-title today-title"><span class="zone-rule"></span>FEED PREP — IN TONIGHT</div>
+          <span class="list-clip-warn" id="prepClipWarn">⚠ LIST TOO LONG — SOME NAMES CLIPPED</span>
+        </div>
+        <div class="name-list" id="prepList"></div>
+        <div class="zone-empty" id="prepEmpty">No dogs in tonight</div>
+      </div>
+      <div class="list-panel tomorrow-panel">
+        <div class="zone-bar">
+          <div class="zone-title tomorrow-title"><span class="zone-rule"></span>ARRIVING TOMORROW</div>
+          <span class="list-clip-warn" id="tomorrowClipWarn">⚠ LIST TOO LONG — SOME NAMES CLIPPED</span>
+        </div>
+        <div class="name-list" id="tomorrowList"></div>
+        <div class="zone-empty" id="tomorrowListEmpty">No new arrivals tomorrow</div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ============================================================
+    // CONFIGURATION
+    // ============================================================
+    var API_URL = 'https://script.google.com/macros/s/AKfycbz2kc3lJbrGk7lw9jVcZMdUrPWjRx4qBARM8YVAIARhYAlQwCzlhHBbKswyOcVHytmB7Q/exec';
+    var API_TOKEN = 'ft-k9-board-2024-sec';
+
+    // Refresh at 07:00, 13:00, 18:00 (browser local time — TV must be on Europe/London).
+    // Three calls a day keeps us well under Acuity's bandwidth quota and matches
+    // the shift boundaries when feeding info actually needs to be read.
+    var SCHEDULED_REFRESH_HOURS = [7, 13, 18];
+
+    // A failed fetch retries after this many minutes rather than waiting for the
+    // next scheduled slot. The backend serves from its own cache / stale fallback,
+    // so retries do not hit Acuity's quota.
+    var RETRY_MINUTES = 10;
+
+    // A fetch that never settles (stalled connection, TV Wi-Fi drop mid-response)
+    // is abandoned after this long so refreshes can never be wedged permanently.
+    var FETCH_TIMEOUT_MS = 90 * 1000;
+
+    // Page selection is MANUAL (owner decision 2026-07-26, revised same day):
+    // there is NO auto-rotation. The header count pills are remote buttons —
+    // TODAY shows the cards page, TOMORROW & PREP LIST shows the lists page —
+    // and the board stays on the chosen page until the other button is
+    // pressed. Dog cards are NEVER paged — a full house just makes each card
+    // smaller (see TZ_MIN).
+
+    // Auto-fit bounds. fitTodayZone() sizes EACH card independently: it grows a
+    // card's font scale (--tz) up to TZ_MAX to fill its cell (a near-empty card
+    // reads huge) or shrinks it toward TZ_MIN so a long medication shows in
+    // FULL rather than being clamped. The floor is deliberately LOW (owner
+    // decision 2026-07-26: shrink as far as needed, never truncate) — on a
+    // packed board a wordy card gets small text rather than hidden text. Only
+    // when even TZ_MIN overflows does trimOverflowingCards() shed lower-
+    // priority content. Per-card (not one global scale) is what stops a single
+    // very busy card — e.g. a 150-char med list — from pinning every other
+    // card small. FIT_ITERS bisections per card.
+    var TZ_MIN = 0.3;
+    var TZ_MAX = 2.2;
+    var FIT_ITERS = 8;
+
+    // Same idea for the lists screen: --lz is the per-panel list font scale.
+    var LZ_MIN = 0.4;
+    var LZ_MAX = 1.5;
+
+    var CACHE_KEY = 'ftFeedingBoardLastGood';
+
+    var DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    var MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    // ============================================================
+    // STATE — single source of truth, one master timer (no stacking)
+    // ============================================================
+    var state = {
+      lastGoodData: null,     // last successfully fetched API payload
+      haveLiveFetch: false,   // true once this page-load has fetched successfully
+      fetchFailed: false,     // last fetch attempt failed
+      lastFetchError: '',     // human-readable reason shown while stale
+      fetching: false,
+      fetchStartedAt: 0,      // watchdog: when the in-flight fetch began
+      fetchSeq: 0,            // watchdog: invalidates abandoned fetches
+      nextRefreshTime: null,
+      dayStamp: '',           // 'YYYY-MM-DD' — change triggers midnight re-classification
+      todayDogs: [],          // alphabetical (sortDogsAlpha) — the display order
+      tomorrowDogs: [],       // alphabetical
+      screen: 'cards',        // 'cards' | 'lists' — which page is selected
+      userSelected: false,    // true once a remote press chose a page — the
+                              // choice is then sticky until midnight resets it
+      // Data-version stamps: page switches skip the rebuild (innerHTML +
+      // ~9 forced reflows per card) when a page was already rendered for
+      // the current data — the switch becomes a pure display toggle.
+      renderVersion: 0,
+      todayRenderedVersion: -1,
+      listsRenderedVersion: -1
+    };
+
+    // Wrapped so the clock source is a single seam (and testable).
+    function nowDate() { return new Date(); }
+
+    // ============================================================
+    // DATE HELPERS
+    // ============================================================
+    function dateStamp(d) {
+      return d.getFullYear() + '-' +
+        ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
+        ('0' + d.getDate()).slice(-2);
+    }
+
+    function formatLastUpdated(isoStr) {
+      var d = new Date(isoStr);
+      if (isNaN(d.getTime())) return '—';
+      var hours = d.getHours();
+      var mins = ('0' + d.getMinutes()).slice(-2);
+      var ampm = hours >= 12 ? 'pm' : 'am';
+      hours = hours % 12 || 12;
+      return hours + ':' + mins + ampm + ', ' +
+             DAY_NAMES[d.getDay()] + ' ' + d.getDate() + ' ' + MONTH_NAMES[d.getMonth()];
+    }
+
+    function escapeHtml(str) {
+      var div = document.createElement('div');
+      div.appendChild(document.createTextNode(str));
+      return div.innerHTML;
+    }
+
+    // ============================================================
+    // CLASSIFICATION — today vs tomorrow, derived client-side
+    // ============================================================
+
+    /**
+     * Splits dogs into today's stays and tomorrow's arrivals.
+     * - "Staying today": checkIn <= today AND checkOut > today
+     * - "Arriving tomorrow": checkIn == tomorrow (and not already staying —
+     *   a dog both boarding now and staying tomorrow counts as TODAY)
+     * Dogs whose stay starts after tomorrow are dropped from the display.
+     * Recomputed on every render so the board rolls over at midnight.
+     */
+    function classifyDogs(dogs) {
+      var now = nowDate();
+      var todayStr = dateStamp(now);
+      var tomorrow = new Date(now.getTime());
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      var tomorrowStr = dateStamp(tomorrow);
+
+      var tagged = [];
+      for (var i = 0; i < dogs.length; i++) {
+        var dog = dogs[i];
+        if (!dog || !dog.checkIn || !dog.checkOut) continue;
+        var stayingToday = (dog.checkIn <= todayStr && dog.checkOut > todayStr);
+        var arrivingTomorrow = (dog.checkIn === tomorrowStr);
+        if (stayingToday) {
+          tagged.push({ dog: dog, zone: 'today' });
+        } else if (arrivingTomorrow) {
+          tagged.push({ dog: dog, zone: 'tomorrow' });
+        }
+        // Anything else (already gone, or arriving after tomorrow) is hidden.
+      }
+
+      var deduped = deduplicateTagged(tagged);
+
+      var todayDogs = [];
+      var tomorrowDogs = [];
+      for (var j = 0; j < deduped.length; j++) {
+        if (deduped[j].zone === 'today') todayDogs.push(deduped[j].dog);
+        else tomorrowDogs.push(deduped[j].dog);
+      }
+      return { today: todayDogs, tomorrow: tomorrowDogs };
+    }
+
+    /**
+     * De-duplicates dogs (same name + surname) across both zones. Output
+     * order is irrelevant (renderBoard re-sorts with sortDogsAlpha) — only
+     * WHICH record wins matters. Priority when records collide:
+     * today-zone beats tomorrow-zone, then medication, then matched,
+     * then the later check-in.
+     */
+    function deduplicateTagged(tagged) {
+      var seen = {};
+      var result = [];
+
+      for (var i = 0; i < tagged.length; i++) {
+        var entry = tagged[i];
+        var dog = entry.dog;
+        var key = (dog.dogName || '').toLowerCase() + '|' + (dog.ownerSurname || '').toLowerCase();
+
+        if (!seen[key]) {
+          seen[key] = { index: result.length, entry: entry };
+          result.push(entry);
+        } else {
+          var existing = seen[key].entry;
+          var replaceExisting = false;
+
+          if (existing.zone === 'tomorrow' && entry.zone === 'today') {
+            replaceExisting = true;
+          } else if (existing.zone === entry.zone) {
+            var existingHasMed = existing.dog.feeding && existing.dog.feeding.medication === 'Yes';
+            var newHasMed = dog.feeding && dog.feeding.medication === 'Yes';
+            if (!existingHasMed && newHasMed) {
+              replaceExisting = true;
+            } else if (existingHasMed === newHasMed) {
+              if (!existing.dog.matched && dog.matched) {
+                replaceExisting = true;
+              } else if (existing.dog.matched === dog.matched && dog.checkIn > existing.dog.checkIn) {
+                replaceExisting = true;
+              }
+            }
+          }
+
+          if (replaceExisting) {
+            result[seen[key].index] = entry;
+            seen[key].entry = entry;
+          }
+        }
+      }
+
+      return result;
+    }
+
+    /**
+     * Alphabetical display order: dog first name, then owner surname to break
+     * ties (two Rubys). The backend still sends medication dogs first — that
+     * order mattered when the board paged (meds had to land on page 1), but
+     * every dog is on screen at once now, so the board re-sorts into the A-Z
+     * scan staff expect. Case-insensitive.
+     */
+    function sortDogsAlpha(dogs) {
+      // localeCompare, not < : code-point order files 'Ébony' after 'Zeus',
+      // and staff scanning the checklist under E would skip the row.
+      return dogs.slice().sort(function(a, b) {
+        var cmp = (a.dogName || '').toLowerCase().localeCompare((b.dogName || '').toLowerCase());
+        if (cmp) return cmp;
+        return (a.ownerSurname || '').toLowerCase().localeCompare((b.ownerSurname || '').toLowerCase());
+      });
+    }
+
+    // ============================================================
+    // SVG ICONS
+    // ============================================================
+    var FOOD_TYPE_MAP = {
+      'Kibble': {
+        cls: 'kibble', label: 'Kibble',
+        icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C7 2 3 6 3 11c0 3 1.5 5.5 4 7v2c0 .6.4 1 1 1h8c.6 0 1-.4 1-1v-2c2.5-1.5 4-4 4-7 0-5-4-9-9-9zm-1 15h-1v-2h1v2zm3 0h-1v-2h1v2zm1.5-4.5c-.8.5-1.5 1-1.5 1.5h-4c0-.5-.7-1-1.5-1.5C7.5 12 7 10.5 7 9.5 7 7 9.2 5 12 5s5 2 5 4.5c0 1-.5 2.5-1.5 3z"/></svg>'
+      },
+      'Wet Food - Sachet/Tray': {
+        cls: 'wet', label: 'Wet — Sachet',
+        icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9zm0 16c-3.86 0-7-3.14-7-7s3.14-7 7-7 7 3.14 7 7-3.14 7-7 7z"/><circle cx="12" cy="12" r="4"/></svg>'
+      },
+      'Wet Food - Tin': {
+        cls: 'tin', label: 'Wet — Tin',
+        icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.1 2 5 3.3 5 5v14c0 1.7 3.1 3 7 3s7-1.3 7-3V5c0-1.7-3.1-3-7-3zm0 2c3.3 0 5 .9 5 1s-1.7 1-5 1-5-.9-5-1 1.7-1 5-1zm5 15c0 .1-1.7 1-5 1s-5-.9-5-1V7.9c1.2.7 3 1.1 5 1.1s3.8-.4 5-1.1V19z"/></svg>'
+      },
+      'Pre-Portioned by parents': {
+        cls: 'parent', label: 'Pre-Portioned',
+        icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-2.18c.11-.31.18-.65.18-1 0-1.66-1.34-3-3-3-1.05 0-1.96.54-2.5 1.35l-.5.67-.5-.68C10.96 2.54 10.05 2 9 2 7.34 2 6 3.34 6 5c0 .35.07.69.18 1H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-5-2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zM9 4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm11 15H4v-2h16v2zm0-5H4V8h5.08L7 10.83 8.62 12 12 7.4l3.38 4.6L17 10.83 14.92 8H20v6z"/></svg>'
+      },
+      'Special Requirements': {
+        cls: 'special', label: 'Special',
+        icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L1 21h22L12 2zm0 4l7.5 13h-15L12 6zm-1 6v4h2v-4h-2zm0 5v2h2v-2h-2z"/></svg>'
+      }
+    };
+
+    var medIconSVG = '<svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>';
+    var warningIconSVG = '<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>';
+    var allergyIconSVG = '<svg viewBox="0 0 24 24"><path d="M12 2L1 21h22L12 2zm0 4l7.5 13h-15L12 6zm-1 6v4h2v-4h-2zm0 5v2h2v-2h-2z"/></svg>';
+
+    // ============================================================
+    // CARD BUILDERS
+    // ============================================================
+    function getTypeBadgeLabel(type) {
+      return type === 'school' ? 'School' : 'Holiday';
+    }
+
+    function formatMealsBadge(mealsStr) {
+      if (!mealsStr) return '—';
+      var lower = mealsStr.toLowerCase();
+      var num = '?';
+      if (lower.indexOf('one') !== -1 || lower.indexOf('1') !== -1) num = '1';
+      else if (lower.indexOf('two') !== -1 || lower.indexOf('2') !== -1) num = '2';
+      else if (lower.indexOf('three') !== -1 || lower.indexOf('3') !== -1) num = '3';
+      return num + '×/day';
+    }
+
+    // Allergy detection: the JotForm has no dedicated allergy field, so owners
+    // write allergies into the special notes. Flag any note mentioning them.
+    function hasAllergyNote(feeding) {
+      return !!(feeding && feeding.specialNotes && /allerg/i.test(feeding.specialNotes));
+    }
+
+    // Pull the sentence mentioning the allergy out of the notes so the chip is
+    // self-contained even when the notes block is trimmed for space.
+    function allergyChipText(feeding) {
+      var parts = feeding.specialNotes.split(/[.;\n!]+/);
+      for (var i = 0; i < parts.length; i++) {
+        if (/allerg/i.test(parts[i]) && parts[i].replace(/\s+/g, ' ').trim()) {
+          return 'ALLERGY: ' + parts[i].replace(/\s+/g, ' ').trim();
+        }
+      }
+      return 'ALLERGY — see notes';
+    }
+
+    var MED_FALLBACK_TEXT = 'See medication bag / check with owner';
+
+    function buildFoodTags(foodTypes) {
+      if (!foodTypes || foodTypes.length === 0) return '';
+      var html = '';
+      for (var i = 0; i < foodTypes.length; i++) {
+        var type = foodTypes[i];
+        // Amount-less types are shown as their own feeding row (buildQuantityRows),
+        // so don't also render them as a tag — that would double them up.
+        if (type === 'Pre-Portioned by parents' || type === 'Special Requirements') continue;
+        var info = FOOD_TYPE_MAP[type];
+        if (info) {
+          html += '<span class="food-tag ' + info.cls + '">' + info.icon + escapeHtml(info.label) + '</span>';
+        } else {
+          html += '<span class="food-tag special">' + FOOD_TYPE_MAP['Special Requirements'].icon + escapeHtml(type) + '</span>';
+        }
+      }
+      return html;
+    }
+
+    function buildQuantityRows(feeding) {
+      var html = '';
+      if (feeding.kibbleSummary) {
+        html += '<div class="qty-row"><span class="qty-label">Kibble</span><span class="qty-value">' + escapeHtml(feeding.kibbleSummary) + '</span></div>';
+      }
+      if (feeding.wetFood) {
+        html += '<div class="qty-row"><span class="qty-label">Wet</span><span class="qty-value">' + escapeHtml(feeding.wetFood) + '</span></div>';
+      }
+      if (feeding.tinFood) {
+        html += '<div class="qty-row"><span class="qty-label">Tin</span><span class="qty-value">' + escapeHtml(feeding.tinFood) + '</span></div>';
+      }
+      // Food types that carry NO measured amount: render them as their own
+      // feeding row so they stay visible (the food-type tags are hidden in the
+      // dense g8 layout, which would otherwise drop a dog like Lola Hall whose
+      // only feeding info is "Pre-portioned by parents"). Pre-portioned needs no
+      // quantity — staff give the portion the parents send.
+      var types = feeding.foodTypes || [];
+      for (var t = 0; t < types.length; t++) {
+        if (types[t] === 'Pre-Portioned by parents') {
+          html += '<div class="qty-row"><span class="qty-label">Food</span><span class="qty-value">Pre-portioned by parents</span></div>';
+        } else if (types[t] === 'Special Requirements') {
+          html += '<div class="qty-row"><span class="qty-label">Special</span><span class="qty-value">See notes</span></div>';
+        }
+      }
+      return html;
+    }
+
+    function buildNotesBlock(notes) {
+      if (!notes) return '';
+      return '<div class="notes-block"><div class="notes-label">Notes</div><div class="notes-text">' + escapeHtml(notes) + '</div></div>';
+    }
+
+    function buildMedChip(feeding) {
+      if (!feeding || feeding.medication !== 'Yes') return '';
+      var details = feeding.medicationDetails || MED_FALLBACK_TEXT;
+      return '<div class="med-chip">' + medIconSVG +
+               '<div class="med-text"><span class="med-label">Medication:</span> ' + escapeHtml(details) + '</div>' +
+             '</div>';
+    }
+
+    /**
+     * Escaped supplement values, or [] — shared by the card subcard AND the
+     * arrivals detail line (an arriving dog's supplements must show on the
+     * TOMORROW & PREP LIST, its only surface, or they'd be invisible until
+     * the dog already checked in). Guarded for records parsed before the
+     * field existed (stale caches have no `supplements` key).
+     */
+    function suppParts(feeding) {
+      var supps = feeding && feeding.supplements;
+      if (!supps || supps.length === 0) return [];
+      var parts = [];
+      for (var i = 0; i < supps.length; i++) {
+        if (supps[i]) parts.push(escapeHtml(String(supps[i])));
+      }
+      return parts;
+    }
+
+    /**
+     * Training-dog supplements subcard (green) — deliberately SEPARATE from
+     * the red medication chip, which stays prescription-only. Values come
+     * from the JotForm checklist verbatim.
+     */
+    function buildSupplementsBlock(feeding) {
+      var parts = suppParts(feeding);
+      if (parts.length === 0) return '';
+      return '<div class="supp-block"><div class="supp-label">Supplements</div>' +
+             '<div class="supp-text">' + parts.join(' &middot; ') + '</div></div>';
+    }
+
+    function buildAllergyChip(feeding) {
+      if (!hasAllergyNote(feeding)) return '';
+      return '<div class="allergy-chip">' + allergyIconSVG +
+               '<span class="allergy-text">' + escapeHtml(allergyChipText(feeding)) + '</span>' +
+             '</div>';
+    }
+
+    function buildNoMatchBanner() {
+      return '<div class="no-match-banner">' + warningIconSVG +
+             '<span class="no-match-text">No feeding record — check JotForm</span></div>';
+    }
+
+    /* Dog name + owner surname (surname disambiguates same-named dogs). The
+       escape-both / surname-optional / never-drop-the-surname contract lives
+       ONLY here — cards and lists both render through it. */
+    function buildNamePartsHtml(dog, firstClass, surnameClass) {
+      var html = '<span class="' + firstClass + '">' + escapeHtml(dog.dogName) + '</span>';
+      if (dog.ownerSurname) {
+        html += '<span class="' + surnameClass + '">' + escapeHtml(dog.ownerSurname) + '</span>';
+      }
+      return html;
+    }
+
+    function buildDogNameHtml(dog) {
+      return buildNamePartsHtml(dog, 'name-first', 'name-surname');
+    }
+
+    function buildTodayCard(dog) {
+      var feeding = dog.feeding;
+      var stayType = dog.type || 'boarding';
+      var pillClass = 'type-pill' + (stayType === 'school' ? ' school' : '');
+      var hasMed = !!(feeding && feeding.medication === 'Yes');
+
+      // No "TODAY" badge here: the whole zone is titled "STAYING TODAY" (and the
+      // cyan left-border marks it), so a per-card badge is redundant and only
+      // steals header width from the dog/owner name. The type pill (Holiday /
+      // School) stays — that IS per-dog and drives the card colour.
+      var html = '<div class="tcard' + (hasMed ? ' has-med' : '') + '">';
+      html += '<div class="tcard-head">' +
+                '<div class="tcard-name">' + buildDogNameHtml(dog) + '</div>' +
+                '<span class="' + pillClass + '">' + getTypeBadgeLabel(stayType) + '</span>' +
+              '</div>';
+
+      html += '<div class="tcard-body">';
+      if (dog.matched && feeding) {
+        // Safety-critical chips first so they are never clipped; supplements
+        // sit below them (routine, not an alert) but above the food rows.
+        html += buildMedChip(feeding);
+        html += buildAllergyChip(feeding);
+        html += buildSupplementsBlock(feeding);
+        html += buildQuantityRows(feeding);
+        html += '<div class="meta-row">' +
+                  '<span class="meals-pill">' + formatMealsBadge(feeding.mealsPerDay) + '</span>' +
+                  buildFoodTags(feeding.foodTypes) +
+                '</div>';
+        html += buildNotesBlock(feeding.specialNotes);
+      } else {
+        html += buildNoMatchBanner();
+      }
+      html += '</div></div>';
+      return html;
+    }
+
+    /**
+     * One row of the lists screen: [checkbox] DogName Surname [MEDS] [ALLERGY].
+     * withBox=true adds the prep-checklist tick box (today dogs — their full
+     * detail lives on the cards page). withDetail=true is for the ARRIVING
+     * TOMORROW list, whose dogs have NO card on either page: it prints the
+     * medication details, allergy sentence AND supplements under the name,
+     * so arrival med/supplement info is never reduced to a bare flag.
+     */
+    function buildListItem(dog, withBox, withDetail) {
+      var feeding = dog.feeding;
+      var html = '<div class="list-item">';
+      if (withBox) html += '<span class="prep-box"></span>';
+      html += buildNamePartsHtml(dog, 'list-name', 'list-surname');
+      if (feeding && feeding.medication === 'Yes') {
+        html += '<span class="list-flag med">MEDS</span>';
+      }
+      if (hasAllergyNote(feeding)) {
+        html += '<span class="list-flag allergy">ALLERGY</span>';
+      }
+      if (!dog.matched) {
+        html += '<span class="list-flag norecord">NO RECORD</span>';
+      }
+      if (withDetail && feeding && feeding.medication === 'Yes') {
+        html += '<div class="list-detail med-detail">' +
+                escapeHtml(feeding.medicationDetails || MED_FALLBACK_TEXT) + '</div>';
+      }
+      if (withDetail && hasAllergyNote(feeding)) {
+        html += '<div class="list-detail allergy-detail">' + escapeHtml(allergyChipText(feeding)) + '</div>';
+      }
+      if (withDetail) {
+        var sd = suppParts(feeding);
+        if (sd.length) {
+          html += '<div class="list-detail supp-detail">' + sd.join(' &middot; ') + '</div>';
+        }
+      }
+      html += '</div>';
+      return html;
+    }
+
+    // ============================================================
+    // RENDER
+    // ============================================================
+    function el(id) { return document.getElementById(id); }
+
+    // Column geometry for ONE page of `count` dogs — the board NEVER pages.
+    // 7-8 use g8 (4x2): the taller cards let a long medication grow bigger
+    // than a wider-but-shorter 3-column card would. The ladder runs to the
+    // 20-dog design ceiling (g20 = 5x4); applyTodayLayout() handles beyond.
+    function todayLayoutClass(count) {
+      if (count <= 1) return 'g1';
+      if (count === 2) return 'g2';
+      if (count === 3) return 'g3';
+      if (count === 4) return 'g4';
+      if (count <= 6) return 'g6';
+      if (count <= 8) return 'g8';
+      if (count === 9) return 'g9';
+      if (count === 10) return 'g10';
+      if (count <= 12) return 'g12';
+      if (count <= 15) return 'g15';
+      if (count <= 18) return 'g18';
+      return 'g20';
+    }
+
+    /**
+     * Applies the one-page grid geometry for `count` dogs. 10+ adds "dense"
+     * (tighter gutters, food-tags hidden — their info is in the qty rows).
+     * Beyond the 20-dog design ceiling there is no class: derive an inline
+     * cols x rows (max 4 rows) so the board still renders every dog on one
+     * page rather than paging or spilling off-screen.
+     */
+    function applyTodayLayout(grid, count) {
+      grid.style.gridTemplateColumns = '';
+      grid.style.gridTemplateRows = '';
+      if (count <= 20) {
+        grid.className = 'today-grid ' + todayLayoutClass(count) + (count >= 10 ? ' dense' : '');
+        return;
+      }
+      var cols = Math.ceil(count / 4);
+      var rows = Math.ceil(count / cols);
+      grid.className = 'today-grid dense';
+      grid.style.gridTemplateColumns = 'repeat(' + cols + ', minmax(0, 1fr))';
+      grid.style.gridTemplateRows = 'repeat(' + rows + ', minmax(0, 1fr))';
+    }
+
+    function setMainView(view) {
+      el('loadingState').style.display = view === 'loading' ? 'flex' : 'none';
+      el('emptyState').style.display = view === 'empty' ? 'flex' : 'none';
+      el('offlineState').style.display = view === 'offline' ? 'flex' : 'none';
+      // 'board' shows exactly ONE of the two selectable pages.
+      el('todayZone').style.display = (view === 'board' && state.screen === 'cards') ? 'flex' : 'none';
+      el('listsZone').style.display = (view === 'board' && state.screen === 'lists') ? 'flex' : 'none';
+    }
+
+    function renderTodayCards() {
+      // Already rendered for this data version — the page switch only needs
+      // the display toggle (fitted --tz values persist in the DOM).
+      if (state.todayRenderedVersion === state.renderVersion) return;
+      state.todayRenderedVersion = state.renderVersion;
+
+      var grid = el('todayGrid');
+      var emptyMsg = el('todayEmpty');
+      var dogs = state.todayDogs;
+
+      if (dogs.length === 0) {
+        grid.style.display = 'none';
+        // With arrivals in the system this page is normally pinned away by
+        // renderBoard; if a manual press lands here anyway, say where the
+        // information went instead of showing a dead end.
+        // Page name below must stay in sync with #tomorrowPillBtn's label.
+        emptyMsg.textContent = state.tomorrowDogs.length > 0
+          ? 'No dogs boarding today — arrivals & feed prep are on the TOMORROW & PREP LIST page'
+          : 'No dogs boarding today';
+        emptyMsg.style.display = 'flex';
+        return;
+      }
+      emptyMsg.style.display = 'none';
+      grid.style.display = 'grid';
+
+      applyTodayLayout(grid, dogs.length);
+
+      var html = '';
+      for (var i = 0; i < dogs.length; i++) html += buildTodayCard(dogs[i]);
+      grid.innerHTML = html;
+      // Grow the font to fill the available space (few dogs / short text), then
+      // shed only what still cannot fit below the TZ_MIN floor. Order matters:
+      // fit first so trim measures the final, chosen scale.
+      fitTodayZone(grid);
+      trimOverflowingCards(grid);
+    }
+
+    /**
+     * Does this single card's content fit its (fixed-height) grid cell? Measured
+     * in pre-transform layout pixels (clientHeight / scrollHeight), which
+     * fitToScreen's CSS transform does not affect — never getBoundingClientRect().
+     */
+    function cardFits(card) {
+      if (card.scrollHeight > card.clientHeight + 1) return false;
+      var body = card.querySelector('.tcard-body');
+      if (body && (body.scrollHeight > body.clientHeight + 1 ||
+                   body.scrollWidth > body.clientWidth + 1)) return false;
+      // Name parts now WRAP (overflow-wrap:anywhere) rather than ellipsize, so a
+      // too-wide name grows the head vertically — caught by the card/body height
+      // checks above. These zero-tolerance width checks are a backstop for the
+      // rare unbreakable token and for the header row overflowing (type pill
+      // crowding the name); a clipped header means "does not fit" so --tz backs off.
+      var parts = card.querySelectorAll('.name-first, .name-surname');
+      for (var p = 0; p < parts.length; p++) {
+        if (parts[p].scrollWidth > parts[p].clientWidth) return false;
+      }
+      var head = card.querySelector('.tcard-head');
+      if (head && head.scrollWidth > head.clientWidth) return false;
+      return true;
+    }
+
+    /**
+     * Auto-fit: size EACH card independently. The grid cells are a fixed height
+     * (grid 1fr rows), so a card's content either has spare room (grow the font
+     * to fill it — a near-empty card reads BIG) or it doesn't (shrink toward
+     * TZ_MIN so a long medication / notes still show in FULL). Sizing per card
+     * stops one very busy card from pinning every other card small. If even
+     * TZ_MIN overflows, the card is left at the floor for trimOverflowingCards()
+     * to shed. ~9 reflows per card; runs once per page render (never on the 1s
+     * tick), so there is no loop and no measurable cost.
+     */
+    /**
+     * Shared floor/ceiling/bisect used by fitCard (--tz) and the list panels
+     * (--lz): sets `prop` to the largest scale in [min, max] where fitsFn()
+     * holds. Monotonic: a larger scale never reduces content size, so this
+     * cannot oscillate. Returns false when even the floor overflows (the
+     * floor is left set; the caller decides the fallback).
+     */
+    function bisectScale(node, prop, min, max, fitsFn) {
+      node.style.setProperty(prop, min);
+      void node.offsetHeight;
+      if (!fitsFn()) return false;
+
+      node.style.setProperty(prop, max);
+      void node.offsetHeight;
+      if (fitsFn()) return true;
+
+      var lo = min, hi = max;
+      for (var n = 0; n < FIT_ITERS; n++) {
+        var mid = (lo + hi) / 2;
+        node.style.setProperty(prop, mid);
+        void node.offsetHeight;
+        if (fitsFn()) lo = mid; else hi = mid;
+      }
+      node.style.setProperty(prop, lo);
+      void node.offsetHeight;
+      return true;
+    }
+
+    function fitCard(card) {
+      // A false return means even TZ_MIN overflows — the floor stays set and
+      // trimOverflowingCards() sheds content.
+      bisectScale(card, '--tz', TZ_MIN, TZ_MAX, function() { return cardFits(card); });
+    }
+
+    function fitTodayZone(grid) {
+      if (!grid || grid.clientHeight <= 0) return;
+      var cards = grid.children;
+      for (var i = 0; i < cards.length; i++) fitCard(cards[i]);
+    }
+
+    /**
+     * Busy cards (medication + allergy + several quantity rows + notes) can
+     * exceed the fixed card height. Rather than clipping text mid-line, shed
+     * the lowest-priority content until the card fits, in order: clamp the
+     * notes to one line; drop the notes; drop the supplements subcard; drop
+     * the meals/food-tags row; drop extra quantity rows from the bottom up
+     * (the first always stays); and finally clamp the medication details.
+     * The medication chip, allergy chip and primary quantity row are never
+     * removed — and medication (prescription) always outlives supplements.
+     */
+    function trimOverflowingCards(grid) {
+      var bodies = grid.querySelectorAll('.tcard-body');
+      for (var i = 0; i < bodies.length; i++) {
+        var body = bodies[i];
+        var fits = function() { return body.scrollHeight <= body.clientHeight + 1; };
+        if (fits()) continue;
+
+        var notesText = body.querySelector('.notes-text');
+        if (notesText) {
+          notesText.style.webkitLineClamp = '1';
+          if (fits()) continue;
+        }
+
+        var victims = ['.notes-block', '.supp-block', '.meta-row'];
+        var done = false;
+        for (var j = 0; j < victims.length; j++) {
+          var victim = body.querySelector(victims[j]);
+          if (victim) {
+            victim.style.display = 'none';
+            if (fits()) { done = true; break; }
+          }
+        }
+        if (done) continue;
+
+        var qtyRows = body.querySelectorAll('.qty-row');
+        for (var k = qtyRows.length - 1; k >= 1; k--) {
+          qtyRows[k].style.display = 'none';
+          if (fits()) { done = true; break; }
+        }
+        if (done) continue;
+
+        // Food yields BEFORE medication. The first qty-row is never dropped, so a
+        // very long (free-text) food amount is clamped here — keeping medication
+        // text at full length. Real food values are 1-2 lines, so this is a no-op
+        // unless an owner typed a paragraph into the amount.
+        var qtyVals = body.querySelectorAll('.qty-value');
+        if (qtyVals.length) {
+          var qtyClamps = ['3', '2', '1'];
+          for (var q = 0; q < qtyClamps.length; q++) {
+            for (var qv = 0; qv < qtyVals.length; qv++) qtyVals[qv].style.webkitLineClamp = qtyClamps[q];
+            if (fits()) { done = true; break; }
+          }
+          if (done) continue;
+        }
+
+        // Medication is the most safety-critical text, so it is clamped LAST and
+        // PROGRESSIVELY — keep as many lines as still fit (4 -> 3 -> 2 -> 1)
+        // rather than dropping straight to one line. The med chip itself is never
+        // removed.
+        var medText = body.querySelector('.med-chip .med-text');
+        if (medText) {
+          var medClamps = ['4', '3', '2', '1'];
+          for (var m = 0; m < medClamps.length; m++) {
+            medText.style.webkitLineClamp = medClamps[m];
+            if (fits()) { done = true; break; }
+          }
+          if (done) continue;
+        }
+
+        // Last resort: compress the body's own spacing.
+        body.style.gap = '4px';
+        body.style.paddingBottom = '4px';
+      }
+    }
+
+    /**
+     * The LISTS screen: feed-prep checklist (every dog staying today — they
+     * are all in overnight, so every feed gets prepped) and tomorrow's
+     * arrivals (withDetail: their med/allergy text lives HERE — arrivals have
+     * no card on either screen). Both alphabetical.
+     */
+    function renderListsScreen() {
+      if (state.listsRenderedVersion === state.renderVersion) return;
+      state.listsRenderedVersion = state.renderVersion;
+      renderNameList('prepList', 'prepEmpty', 'prepClipWarn', state.todayDogs, true, false);
+      renderNameList('tomorrowList', 'tomorrowListEmpty', 'tomorrowClipWarn', state.tomorrowDogs, false, true);
+    }
+
+    /**
+     * A panel "fits" only when the container overflows on NEITHER axis
+     * (overflow in a fixed column-count box spills into extra off-screen
+     * columns, growing scrollWidth) AND every name span shows in full — a
+     * long name overflowing its own column into the next one never grows the
+     * container, so the per-span check (same idea as cardFits) is what stops
+     * two dogs' names overlapping.
+     */
+    function listFits(list) {
+      if (list.scrollHeight > list.clientHeight + 1 ||
+          list.scrollWidth > list.clientWidth + 1) return false;
+      var parts = list.querySelectorAll('.list-name, .list-surname');
+      for (var p = 0; p < parts.length; p++) {
+        if (parts[p].scrollWidth > parts[p].clientWidth + 1) return false;
+      }
+      return true;
+    }
+
+    function renderNameList(listId, emptyId, warnId, dogs, withBox, withDetail) {
+      var list = el(listId);
+      var emptyMsg = el(emptyId);
+      el(warnId).style.display = 'none';
+      if (dogs.length === 0) {
+        list.style.display = 'none';
+        emptyMsg.style.display = 'flex';
+        return;
+      }
+      emptyMsg.style.display = 'none';
+      list.style.display = 'block';
+      var html = '';
+      for (var i = 0; i < dogs.length; i++) html += buildListItem(dogs[i], withBox, withDetail);
+      list.innerHTML = html;
+      // One column reads best; escalate columns — and finally show the clip
+      // banner — only when even the LZ_MIN floor overflows. A safety checklist
+      // must never clip silently.
+      var baseCols = dogs.length > 16 ? 3 : (dogs.length > 8 ? 2 : 1);
+      var fitted = false;
+      for (var cols = baseCols; cols <= 4 && !fitted; cols++) {
+        list.style.columnCount = String(cols);
+        list.style.webkitColumnCount = String(cols); // old TV WebKit
+        fitted = bisectScale(list, '--lz', LZ_MIN, LZ_MAX, function() { return listFits(list); });
+      }
+      if (!fitted) el(warnId).style.display = 'inline-block';
+    }
+
+    /**
+     * Full board render from state.lastGoodData. Re-classifies today/tomorrow
+     * from the device's current date (so midnight rollover only needs a render).
+     */
+    function renderBoard() {
+      var data = state.lastGoodData;
+      var errorEl = el('errorBanner');
+      var feedingWarnEl = el('feedingWarning');
+
+      // Day-change detection lives HERE (not only in masterTick) so it works
+      // even during a no-data outage: yesterday's manual page choice is stale
+      // the moment the date flips, data or no data.
+      var todayStamp = dateStamp(nowDate());
+      if (state.dayStamp && state.dayStamp !== todayStamp) {
+        state.userSelected = false;
+      }
+      state.dayStamp = todayStamp;
+
+      if (!data) {
+        // Nothing to show at all — keep a styled message up, never a blank screen.
+        if (state.fetchFailed) {
+          setMainView('offline');
+        } else {
+          setMainView('loading');
+        }
+        updateStatusDisplay();
+        return;
+      }
+
+      // Backend error string (e.g. "Showing last known data — upstream error: …")
+      // or a client-side fetch failure both mean the data may be out of date.
+      if (data.error) {
+        errorEl.textContent = data.error;
+        errorEl.style.display = 'block';
+      } else if (state.fetchFailed) {
+        errorEl.textContent = state.lastFetchError ||
+          'Connection problem — showing the last data received. The board will retry automatically.';
+        errorEl.style.display = 'block';
+      } else {
+        errorEl.style.display = 'none';
+      }
+
+      if (data.feedingError) {
+        feedingWarnEl.textContent = data.feedingError;
+        feedingWarnEl.style.display = 'block';
+      } else {
+        feedingWarnEl.style.display = 'none';
+      }
+
+      var zones = classifyDogs(data.dogs || []);
+      // Alphabetical display order for the cards AND both lists (owner rule
+      // 2026-07-26); the backend's med-first order is only a transport order now.
+      state.todayDogs = sortDogsAlpha(zones.today);
+      state.tomorrowDogs = sortDogsAlpha(zones.tomorrow);
+      state.renderVersion++; // both screens must rebuild for the new data
+
+      el('todayCount').textContent = String(zones.today.length);
+      el('tomorrowCount').textContent = String(zones.tomorrow.length);
+
+      if (zones.today.length === 0 && zones.tomorrow.length === 0) {
+        // With an error in play, "no dogs" would be a misleading factual claim —
+        // show the problem state instead of the cheerful empty board.
+        if (data.error || state.fetchFailed) {
+          el('offlineSub').textContent = data.error || state.lastFetchError ||
+                                         'Connection problem — retrying automatically.';
+          setMainView('offline');
+        } else {
+          setMainView('empty');
+        }
+      } else {
+        // Page choice per render. With NO today dogs the lists page is PINNED
+        // on every render — the cards page is a bare shell and the arrivals'
+        // med detail lives ONLY on the lists page, so safety overrides even a
+        // sticky manual TODAY choice (a manual press still shows cards until
+        // the next render, where the enriched empty message points the way).
+        // Otherwise an explicit remote choice is sticky; without one, TODAY.
+        if (zones.today.length === 0) {
+          // The pin also CLEARS the sticky flag: the manual choice it just
+          // overrode is void, and a stale flag would otherwise keep the board
+          // parked on the lists page even after today dogs appear hours later.
+          state.screen = 'lists';
+          state.userSelected = false;
+        } else if (!state.userSelected) {
+          state.screen = 'cards';
+        }
+        renderActiveScreen();
+      }
+
+      updatePillSelection();
+      updateStatusDisplay();
+    }
+
+    /**
+     * Shows whichever page is selected and renders it. The fit
+     * routines measure layout, so the zone must be visible (display set by
+     * setMainView) BEFORE its render runs — a display:none zone measures 0.
+     */
+    function renderActiveScreen() {
+      setMainView('board');
+      if (state.screen === 'cards') renderTodayCards();
+      else renderListsScreen();
+    }
+
+    function updateStatusDisplay() {
+      var pill = el('statusPill');
+      var statusText = el('statusText');
+      var data = state.lastGoodData;
+
+      var stale = state.fetchFailed || !state.haveLiveFetch || !!(data && data.error);
+      if (stale && data) {
+        pill.className = 'status-pill stale';
+        statusText.textContent = 'DATA MAY BE OUT OF DATE';
+      } else if (stale) {
+        pill.className = 'status-pill stale';
+        statusText.textContent = 'WAITING FOR DATA';
+      } else {
+        pill.className = 'status-pill';
+        statusText.textContent = 'LIVE';
+      }
+
+      el('lastUpdated').textContent = data && data.lastUpdated ? formatLastUpdated(data.lastUpdated) : '—';
+    }
+
+    // ============================================================
+    // PAGE SELECTION — the header pills are remote buttons; no rotation
+    // ============================================================
+
+    /**
+     * Reflects state.screen on the two pill buttons (filled = selected,
+     * ghost = the other page) and keeps focus on the selected pill so a
+     * spatial-nav remote's OK always has a sane target. Focus is safe to
+     * steal — the pills are the only focusable things on the page.
+     */
+    function updatePillSelection() {
+      var todayBtn = el('todayPillBtn');
+      var tomBtn = el('tomorrowPillBtn');
+      var cards = state.screen === 'cards';
+      todayBtn.className = 'count-pill today-pill' + (cards ? '' : ' unselected');
+      tomBtn.className = 'count-pill tomorrow-pill' + (cards ? ' unselected' : '');
+      todayBtn.setAttribute('aria-pressed', cards ? 'true' : 'false');
+      tomBtn.setAttribute('aria-pressed', cards ? 'false' : 'true');
+      var target = cards ? todayBtn : tomBtn;
+      if (document.activeElement !== target) {
+        try { target.focus(); } catch (e) { /* some TV browsers refuse — fine */ }
+      }
+    }
+
+    /**
+     * Selects a page ('cards' | 'lists') from a remote press. Only a press
+     * that actually CHANGES the page marks the choice sticky — a visibly
+     * no-op press must not silently disable the default/pin logic hours
+     * later. With NO dogs at all (empty/offline/loading view) the press is
+     * ignored entirely: there is no visible page to change, and an invisible
+     * sticky flip would make the next data render open on the wrong page.
+     */
+    function selectScreen(which) {
+      if (state.todayDogs.length === 0 && state.tomorrowDogs.length === 0) {
+        updatePillSelection();
+        return;
+      }
+      var changed = state.screen !== which;
+      if (changed) {
+        state.userSelected = true;
+        state.screen = which;
+        renderActiveScreen();
+      }
+      updatePillSelection();
+    }
+
+    /**
+     * Remote keys work from anywhere on the page (some TV browsers pass raw
+     * key events instead of doing spatial navigation): ◄ = TODAY,
+     * ► = TOMORROW & PREP LIST (deterministic — matches the pills' on-screen
+     * order), and OK/Enter TOGGLES the page. The toggle is what makes OK
+     * honest on spatial-nav browsers: focus always sits on the SELECTED pill
+     * (updatePillSelection), so OK's native button activation alone could
+     * only ever re-press the current page; preventDefault suppresses that
+     * redundant native click. Cursor-mode remotes still change pages via
+     * real click events on the pills, which this handler never sees.
+     * Checks e.key AND e.keyCode: old TV WebKits only set keyCode.
+     */
+    // Enter/OK toggle debounce. Two failure modes it closes: a HELD OK button
+    // auto-repeats keydown and would strobe the pages (old TV WebKits don't
+    // set e.repeat, so a time window is needed, not just the flag); and some
+    // TV shells send BOTH keydown(13) and an independent synthesized click
+    // for one OK press (ignoring keydown preventDefault) — the click lands
+    // inside the window and must not un-toggle the toggle. Arrows need no
+    // debounce (their target is idempotent).
+    var TOGGLE_DEBOUNCE_MS = 450;
+    var lastToggleAt = 0;
+
+    function handleRemoteKey(e) {
+      var key = e.key || '';
+      var code = e.keyCode || 0;
+      if (key === 'ArrowLeft' || code === 37) {
+        selectScreen('cards');
+      } else if (key === 'ArrowRight' || code === 39) {
+        selectScreen('lists');
+      } else if (key === 'Enter' || code === 13) {
+        var now = new Date().getTime();
+        if (!e.repeat && now - lastToggleAt > TOGGLE_DEBOUNCE_MS) {
+          lastToggleAt = now;
+          selectScreen(state.screen === 'cards' ? 'lists' : 'cards');
+        }
+      } else {
+        return;
+      }
+      if (e.preventDefault) e.preventDefault();
+    }
+
+    // ============================================================
+    // DATA LOADING & REFRESH
+    // ============================================================
+    function scheduleRetry() {
+      var retryAt = nowDate().getTime() + RETRY_MINUTES * 60 * 1000;
+      state.nextRefreshTime = Math.min(retryAt, computeNextRefreshTime());
+    }
+
+    function loadData() {
+      if (state.fetching) return;
+      state.fetching = true;
+      state.fetchStartedAt = nowDate().getTime();
+      state.fetchSeq++;
+      var seq = state.fetchSeq;
+
+      var fetchUrl = API_URL + (API_URL.indexOf('?') === -1 ? '?' : '&') +
+                     'mode=feeding&token=' + encodeURIComponent(API_TOKEN);
+
+      fetch(fetchUrl)
+        .then(function(response) {
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          return response.json();
+        })
+        .then(function(data) {
+          // Abandoned by the watchdog — a newer fetch owns the state now.
+          if (seq !== state.fetchSeq) return;
+          state.fetching = false;
+
+          // The backend can answer 200 OK with an error and no usable dogs
+          // (bad token, first-run failure with no stale copy). Never let such
+          // a payload replace genuine data or poison the localStorage cache.
+          var dogsOk = data && Object.prototype.toString.call(data.dogs) === '[object Array]';
+          var usable = dogsOk && (data.dogs.length > 0 || !data.error);
+
+          if (!usable && state.lastGoodData && state.lastGoodData.dogs &&
+              state.lastGoodData.dogs.length > 0) {
+            state.fetchFailed = true;
+            state.lastFetchError = ((data && data.error) ? data.error : 'Received an empty update') +
+                                   ' — keeping the last good data.';
+            scheduleRetry();
+            renderBoard();
+            return;
+          }
+
+          state.fetchFailed = false;
+          state.haveLiveFetch = true;
+          state.lastGoodData = data;
+          if (usable) {
+            try {
+              window.localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+            } catch (e) { /* storage unavailable on some TV browsers — fine */ }
+          }
+          state.nextRefreshTime = computeNextRefreshTime();
+          renderBoard();
+        })
+        .catch(function(err) {
+          if (seq !== state.fetchSeq) return;
+          state.fetching = false;
+          state.fetchFailed = true;
+          // Keep showing the last good data (never blank the board) and
+          // retry sooner than the next scheduled slot.
+          state.lastFetchError = 'Connection problem — showing the last data received. ' +
+                                 'The board will retry automatically.';
+          scheduleRetry();
+          el('offlineSub').textContent = 'Connection error: ' + (err && err.message ? err.message : err) +
+                                         ' — retrying automatically.';
+          renderBoard();
+        });
+    }
+
+    function computeNextRefreshTime() {
+      var now = nowDate();
+      for (var i = 0; i < SCHEDULED_REFRESH_HOURS.length; i++) {
+        var candidate = new Date(now.getTime());
+        candidate.setHours(SCHEDULED_REFRESH_HOURS[i], 0, 0, 0);
+        if (candidate.getTime() > now.getTime()) return candidate.getTime();
+      }
+      // All of today's slots have passed — schedule for tomorrow's first slot
+      var tomorrow = new Date(now.getTime());
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(SCHEDULED_REFRESH_HOURS[0], 0, 0, 0);
+      return tomorrow.getTime();
+    }
+
+    function formatCountdown(ms) {
+      if (ms <= 0) return 'now';
+      var totalSecs = Math.floor(ms / 1000);
+      var hours = Math.floor(totalSecs / 3600);
+      var mins = Math.floor((totalSecs % 3600) / 60);
+      var secs = totalSecs % 60;
+      if (hours > 0) return hours + 'h ' + ('0' + mins).slice(-2) + 'm';
+      if (mins >= 5) return mins + 'm';
+      return mins + 'm ' + ('0' + secs).slice(-2) + 's';
+    }
+
+    // ============================================================
+    // MASTER TICK — the only interval on the page, created once.
+    // Drives the clock, countdown, midnight rollover and scheduled
+    // refreshes. Page changes are remote-driven only (no rotation).
+    // ============================================================
+    function masterTick() {
+      var now = nowDate();
+
+      // Live clock + date
+      el('clock').textContent = ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
+      el('clockDate').textContent = DAY_NAMES[now.getDay()] + ' ' + now.getDate() + ' ' +
+                                    MONTH_NAMES[now.getMonth()] + ' ' + now.getFullYear();
+
+      // Countdown to next refresh / retry
+      if (state.nextRefreshTime) {
+        el('countdown').textContent = formatCountdown(state.nextRefreshTime - now.getTime());
+      }
+
+      // Midnight rollover: re-classify today/tomorrow without a reload.
+      // renderBoard itself notices the day change and resets the manual page
+      // choice — deliberately NOT gated on lastGoodData, so the reset happens
+      // even mid-outage (without data renderBoard just refreshes the status).
+      if (state.dayStamp && dateStamp(now) !== state.dayStamp) {
+        renderBoard();
+      }
+
+      // Watchdog: abandon a fetch that never settles so a single stalled
+      // request can never permanently block all future refreshes.
+      if (state.fetching && now.getTime() - state.fetchStartedAt > FETCH_TIMEOUT_MS) {
+        state.fetching = false;
+        state.fetchFailed = true;
+        state.fetchSeq++; // late responses from the hung request are discarded
+        state.lastFetchError = 'Request timed out — showing the last data received. ' +
+                               'The board will retry automatically.';
+        scheduleRetry();
+        el('offlineSub').textContent = 'Request timed out — retrying automatically.';
+        renderBoard();
+      }
+
+      // Scheduled refresh / failure retry
+      if (state.nextRefreshTime && now.getTime() >= state.nextRefreshTime && !state.fetching) {
+        // Push the marker forward immediately so a slow fetch can't double-fire.
+        state.nextRefreshTime = computeNextRefreshTime();
+        loadData();
+      }
+
+      // No page rotation: the selected page stays until a remote press picks
+      // the other one (handleRemoteKey / the pill buttons).
+    }
+
+    // ============================================================
+    // BOOT
+    // ============================================================
+
+    // Scale the fixed 1920x1080 canvas to fill the actual viewport.
+    function fitToScreen() {
+      var sx = (window.innerWidth || 1920) / 1920;
+      var sy = (window.innerHeight || 1080) / 1080;
+      var page = document.getElementById('page');
+      var value = 'scale(' + sx + ', ' + sy + ')';
+      page.style.webkitTransform = value;
+      page.style.transform = value;
+    }
+
+    function boot() {
+      fitToScreen();
+      window.addEventListener('resize', fitToScreen);
+      // Page-select inputs: pill clicks (cursor-mode remotes) plus raw keys
+      // (arrows select, OK/Enter toggles) for browsers that pass key events
+      // straight through. pillClick ignores a click landing inside the
+      // Enter-toggle debounce window — on shells that send BOTH keydown(13)
+      // and a synthesized click for one OK press, that click would otherwise
+      // instantly un-toggle the toggle.
+      function pillClick(which) {
+        if (new Date().getTime() - lastToggleAt <= TOGGLE_DEBOUNCE_MS) return;
+        selectScreen(which);
+      }
+      el('todayPillBtn').addEventListener('click', function() { pillClick('cards'); });
+      el('tomorrowPillBtn').addEventListener('click', function() { pillClick('lists'); });
+      document.addEventListener('keydown', handleRemoteKey);
+      // Stamp the day at boot: a remote press during the pre-data loading view
+      // must not leave a sticky choice that renderBoard's day-change reset
+      // can't see (the reset needs a prior stamp to compare against).
+      state.dayStamp = dateStamp(nowDate());
+      updatePillSelection();
+      // Restore the last good payload so the board is never blank on
+      // startup, even if the first fetch fails (e.g. overnight outage).
+      try {
+        var cached = window.localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          state.lastGoodData = JSON.parse(cached);
+          renderBoard();
+        }
+      } catch (e) { /* corrupt cache or no storage — start from loading state */ }
+
+      state.nextRefreshTime = computeNextRefreshTime();
+      loadData();
+      setInterval(masterTick, 1000);
+      masterTick();
+
+      // The auto-fit measures text, so it must run with the real web font (Nunito
+      // 900 is wider/taller than the Segoe UI fallback). If the first render
+      // happened before the font loaded, re-render once it is ready so the fit is
+      // computed against the final glyphs. Guarded for browsers without the API.
+      if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') {
+        document.fonts.ready.then(function() {
+          if (state.lastGoodData) renderBoard();
+        });
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', boot);
+  </script>
+</body>
+</html>

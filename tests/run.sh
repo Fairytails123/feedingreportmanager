@@ -20,6 +20,16 @@ run "backend (GAS)"      node tests/backend.test.js
 run "tablet (index.html)" node tests/tablet.test.js
 run "TV display"       node tests/display.test.js
 
+if ! command -v powershell.exe >/dev/null 2>&1; then
+  echo
+  echo "!!! TV FEEDING-PLANS HARNESS — SKIPPED: powershell.exe is unavailable !!!"
+elif ! powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/tv-plans/build_and_run.ps1 -Validate >/dev/null 2>&1; then
+  echo
+  echo "!!! TV FEEDING-PLANS HARNESS — SKIPPED: Google Chrome is unavailable !!!"
+else
+  run "TV feeding plans (20 scenarios)" powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/tv-plans/build_and_run.ps1
+fi
+
 # The n8n session API is NOT a file in this repo — nothing above can see it break. It is opt-in
 # because it writes to the REAL board (it refuses to run if a feeding round is in progress).
 if [ "${LIVE:-0}" = "1" ]; then

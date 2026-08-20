@@ -20,6 +20,7 @@ const contractSrc = read('shared/contract.js');
 const tablet = read('index.html');
 const backend = read('feeding_report_backend_v2.js');
 const display = read('display/display.html');
+const tvPlans = read('tv-plans/index.html');
 
 // Evaluate the contract to get canonical values
 const ctx = vm.createContext({});
@@ -60,6 +61,14 @@ C.STATUS_VALUES.forEach(v => check(tablet.includes(`'${v}'`), `tablet knows stat
 console.log('== backend (feeding_report_backend_v2.js) matches contract ==');
 check(backend.includes(penListSingleLine) || backend.includes(C.PEN_ORDER.map(p => `'${p}'`).join(',')), 'backend penOrder/penRank identical');
 C.STATUS_VALUES.forEach(v => check(backend.includes(`'${v}'`), `backend maps status '${v}'`));
+
+console.log('== TV feeding plans matches boarding backend ==');
+const tvPlansApiUrl = (tvPlans.match(/\bAPI_URL\s*=\s*(['"])([^'"]+)\1/) || [])[2];
+const backendCheckinoutUrl = (backend.match(/\bCHECKINOUT_URL\s*:\s*(['"])([^'"]+)\1/) || [])[2];
+check(tvPlansApiUrl !== undefined && tvPlansApiUrl === backendCheckinoutUrl, 'tv-plans/index.html API_URL identical to feeding_report_backend_v2.js CONFIG.CHECKINOUT_URL');
+const tvPlansApiToken = (tvPlans.match(/\bAPI_TOKEN\s*=\s*(['"])([^'"]+)\1/) || [])[2];
+const backendCheckinoutToken = (backend.match(/\bCHECKINOUT_TOKEN\s*:\s*(['"])([^'"]+)\1/) || [])[2];
+check(tvPlansApiToken !== undefined && tvPlansApiToken === backendCheckinoutToken, 'tv-plans/index.html API_TOKEN identical to feeding_report_backend_v2.js CONFIG.CHECKINOUT_TOKEN');
 
 console.log('== display (display/display.html) defines NO copies ==');
 check(display.includes('// @@CONTRACT@@'), 'display has the @@CONTRACT@@ injection marker');
