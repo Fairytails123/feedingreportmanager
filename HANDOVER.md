@@ -60,6 +60,11 @@ lost"*: the tablet was aborting **itself**.
 | edit any n8n workflow | load the `n8n-gotchas` skill. Every entry is a production bug that passed validation. |
 | edit any Apps Script | load the `gas-gotchas` skill. Same. |
 | deploy the backend | bump the version string, then smoke-check — and **retry 2–3×**, `/exec` is genuinely flaky. |
+| **`git push origin main` in THIS repo — for ANY reason, including a docs-only commit** | **that IS the tablet deployment.** GitHub Pages serves this repo's `index.html` to the staff tablet, so a push ships every merged commit that is an ancestor, whether you meant to or not. It happened on 2026-08-20: a tracker-doc push put the prescription-medication feature live. **Before pushing: check the live board is empty** (`curl -H 'Content-Type: application/json' -d '{"action":"getSessionVersion"}' https://auto.thefairytails.co.uk/webhook/feeding-session` → `count:0`) **and deploy outside feeding windows.** If you only want the docs live, there is no such thing here — push the lot deliberately or not at all. |
+| publish the plans TV (`bash scripts/publish_plans_tv.sh`) | it pushes via a TEMP clone, so afterwards **`git pull` in `..\Dog feed requirement display`** or your local copy is silently behind what is live — and `tests/canonical-sources.smoke.mjs` will fail against your stale working copy rather than against Pages. Then **refresh the browser on the TV itself**; it never reloads on its own. |
+| touch anything about prescription medication (red tiles, the join, the acknowledgement) | read §5's medication invariants first. The rule that matters: **an ambiguous name match must resolve TOWARD medication.** A build that passed 41 checks still let a medication dog render with no red because ambiguity returned a confident "no medication". `tests/rx-medication-warnings.smoke.mjs` reproduces it. |
+| change `tv-plans/index.html` | its hash is pinned in three suites as `CANONICAL_PAGE_SHA`, and `PUBLISHED_PAGE_SHA` separately tracks what Pages serves. Re-pin CANONICAL when you change the page; re-pin PUBLISHED only **after** publishing. Never "fix" a mismatch by copying one over the other — the mismatch is the signal that the TV is out of date. |
+| write or edit any `tests/*.smoke.mjs` | read `tests/README.md` → "Rules for writing a suite here". A permanent suite may only assert what stays true after its own task merges, and must fail for the right reason. |
 
 ## 3b. The @37 redesign (2026-08-05) — what it did and did not change
 
@@ -89,6 +94,29 @@ Both of these are why §3 says "validation is not proof".
    duplicates**. It is now ONE atomic fixed-height range write (`A2:M201`). Never reintroduce a
    separate clear step.
 
+3. **A medication dog rendered with NO red and NO warning — while 41 acceptance checks passed
+   (2026-08-20).** When a board dog's name matched more than one plan entry, the lookup returned
+   "no plan found", which the caller turned into a confident *"this dog needs no medication"* —
+   visually identical to a genuinely medication-free dog. Not hypothetical: the plans feed really
+   does contain same-name collisions, and the TV's own `deduplicateTagged` has always resolved
+   them **in favour of medication**. Found by the blind review tracing paths no test covered.
+   Ambiguity now resolves toward the medicated candidate; `tests/rx-medication-warnings.smoke.mjs`
+   reproduces the collision. **Lesson: when the cost of a miss is asymmetric, the ambiguous case
+   must fail LOUD, never quietly resolve to the cheap answer.**
+4. **A whole suite reported green while 19 of its checks never ran (2026-08-20).** A UTF-8 BOM
+   (PowerShell 5.1 `Out-File -Encoding utf8`) made Node reject an oracle JSON file, and the
+   comparison loop sat behind `if (oracle)` — so the run printed 107/109 with the real
+   verification simply absent. Its mirror image also happened: a test that reached for the wrong
+   interface (`h.rx` instead of `h.api.rx`) failed *every* behavioural check **without ever calling
+   the implementation**. **A check that cannot fail, and a check that cannot pass, are both lies.
+   Verify a new test fails for the RIGHT REASON before trusting it.**
+5. **A publish would have rewritten every line of a public page (2026-08-20).** `core.autocrlf=true`
+   checks the TV page out as CRLF while git's blob — and the live page — are LF. The publisher
+   copied the *working tree*, so publishing would have pushed a 2,222-line whole-file diff on a
+   page whose content had not changed. **Hash a publisher's STAGED payload against the git blob,
+   never against the working tree.** (`assemble_display.js` had always normalised; the new script
+   had to learn it.)
+
 Historical siblings, all documented in `CHANGELOG.md`: a green 30/30 suite shipped a silent
 data-loss bug (2026-08-04); an upstream outage was reported to staff as a quiet day for months; a
 non-idempotent `addDog` put 37 rows on the board for 16 dogs.
@@ -110,6 +138,31 @@ non-idempotent `addDog` put 37 rows on the board for 16 dogs.
 - **The poll runs while EDITING and while OFFLINE.** Only the board *write* is gated on the edit
   pause. Re-gate the loop and you recreate the gap the deleted 7 s heartbeat used to cover.
 - **Submit is enabled only when online with an empty queue.**
+
+### Prescription medication (added 2026-08-20 — a missed dose is the harm being prevented)
+
+- **An ambiguous name match resolves TOWARD medication.** If a board dog matches more than one
+  plan entry and *any* of them is medicated, that dog is red. Returning "no match" here once
+  produced a confident "no medication" and hid a dog entirely. Never trade a red for tidiness.
+- **A failed, empty or stale plan read is NEVER "no dog needs medication."** It raises a visible
+  banner. Plan-medication dogs that could not be joined to the board are named. This is the same
+  rule as "a failed read is never an empty day", applied where the cost is a missed dose.
+- **Acknowledging never clears the red.** The red tracks *medication is attached*; the
+  acknowledgement tracks *a human has seen it*. They are different facts and must stay separate.
+- **The acknowledgement must never live on the dog object.** `applyRemoteState` rebuilds every dog
+  from an explicit field whitelist, so anything not in that literal is dropped within ~5 s. It
+  lives in `localStorage['feedingManager.rxAck.v1']`, keyed dog + date + meal.
+- **The red is the union of plan-declared and staff-flagged.** A one-off vet medicine the owner's
+  form never mentioned must still read red.
+- **Red applies at EVERY feed.** The plan has no structured per-meal field — `medicationDetails`
+  is free text like "1 AM 1 PM". Parsing it to narrow the warning would turn a parsing miss into a
+  hidden dose. Fixing this properly needs a new field on the requirements form.
+- **The warning modal fires only for PLAN-declared medication**, never for a prescription the
+  staff member has just ticked. A modal that fires on your own input teaches people to dismiss
+  modals unread — which would disable the whole feature.
+- **Anything that re-renders the board from an async callback must check `isDragActive()`.** The
+  plan fetch does. A re-render mid-drag replaces the captured tile, fires `pointercancel`, and
+  drops the dog somewhere nobody asked for.
 
 ## 6. How to verify the whole thing is alive
 

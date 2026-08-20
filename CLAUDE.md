@@ -51,7 +51,7 @@ There is **no build, test, or lint tooling** in the traditional sense — the so
 
 There is no build/lint/test runner — the operations below are the full command surface. Details and rationale are in **Deployment checklist** at the bottom; this is the scannable summary. **Network ops (git push, clasp, curl) require the Bash tool's sandbox disabled.**
 
-- **Deploy `index.html`** (tablet UI) → `git push origin main`. GitHub Pages serves it (CDN cache ~1–2 min; cache-bust verification with `?cb=<ts>`). No other step.
+- **Deploy `index.html`** (tablet UI) → `git push origin main`. ⚠️ **Any push to `main` here deploys the tablet — a docs-only commit included** (it carries every merged ancestor with it; this shipped a feature unintentionally on 2026-08-20). Check the live board is empty and deploy outside feeding windows; see the warning box in **Deployment checklist**. GitHub Pages serves it (CDN cache ~1–2 min; cache-bust verification with `?cb=<ts>`).
 - **Deploy `feeding_report_backend_v2.js`** (GAS) → in a *throwaway temp dir*: `clasp clone-script <scriptId>` → copy this file over the cloned `Code.js` → `clasp push -f` → `clasp redeploy <deploymentId> -d "…"` (pushes a new version onto the **existing** web-app deployment, same `/exec` URL). **Never** `clasp deploy` fresh (mints a new URL the tablet doesn't use); **never** leave a stray `.js` in the clone dir (duplicate `const CONFIG` → whole web app 500s). IDs are in project memory `feeding-manager-deploy`.
 - **Smoke-check the GAS deploy** → always `curl ".../exec?action=getSessionVersion"` after every redeploy to confirm it compiled.
 - **POST an action to GAS via curl** → `curl -sL -d '{...}' <exec>`. Do **not** use `-X POST` — it forces POST onto the 302 redirect hop and 411s.
@@ -280,6 +280,23 @@ Still inline **intentionally** (not secrets): `TELEGRAM_CHAT_ID` (group id), `JO
 The `CONFIG` object at the top of `feeding_report_backend_v2.js` is the **canonical source of truth** for every ID, gid, and field map this app uses — tab gids, the lunch pen source `PEN_SHEET_ID`/`PEN_TAB_GID`/`PEN_COL_FALLBACK_INDEX`, the whiteboard/check-in-out URLs and token, the JotForm question-ID map (`JOTFORM_FIELDS`), and the full `SESSION_COLS`/`TEMP` schemas (the bot token now comes from Script Properties, not `CONFIG`). Constants quoted elsewhere in this doc are for context; read `CONFIG` rather than trusting a scattered mention if they ever disagree.
 
 ## Deployment checklist when you change a file
+
+> ⚠️ **`git push origin main` IN THIS REPO IS A PRODUCTION DEPLOYMENT OF THE STAFF TABLET —
+> including a docs-only commit.** GitHub Pages serves this repo's root `index.html` to the
+> tablet, so a push ships every merged commit that is an ancestor of what you push, whether you
+> intended to deploy or not. **This happened on 2026-08-20:** a push of `INTEGRATION.md` put the
+> prescription-medication feature live, because the feature merge was already an ancestor.
+> There is no docs-only push here.
+> **Before ANY push to this repo:**
+> 1. `bash tests/run.sh` green.
+> 2. Confirm no feeding round is in progress —
+>    `curl -H 'Content-Type: application/json' -d '{"action":"getSessionVersion"}' https://auto.thefairytails.co.uk/webhook/feeding-session`
+>    should report `count:0`. Deploy outside feeding windows (breakfast/lunch/dinner).
+> 3. `git log origin/main..main --oneline` — read what you are actually shipping.
+> 4. After pushing, verify the SERVED page, don't assume:
+>    `curl -s "https://fairytails123.github.io/feedingreportmanager/?cb=$(date +%s)"` and hash it
+>    against your local `index.html` (LF-normalised).
+> 5. The tablet needs a reload to pick it up.
 
 - **TV feeding plans (`tv-plans/index.html` + `tv-plans/assets/img/logo.jpg`)** → **`bash scripts/publish_plans_tv.sh "commit message"`** (Git Bash; network operations need the sandbox disabled). The script runs the estate contract check, stages the page verbatim with its logo, clones **`Fairytails123/fooddata`**, and publishes only when the payload differs. Use `--dry-run` to stage and print the page SHA-256 without cloning or pushing. Verify at `https://fairytails123.github.io/fooddata/?cb=<ts>`; **the TV needs a manual browser refresh**. Never edit `fooddata` directly.
 

@@ -123,6 +123,50 @@ Three traps worth knowing (1–2 hit on 2026-08-04, 3 on 2026-08-10):
 2. **A green suite is not a deployed system.** `CLAUDE.md`'s live-edit rule still applies: after
    deploying, exercise the real path and read the real response.
 3. **In a touch harness, measure client coordinates AFTER resetting scroll, never before.**
+
+---
+
+## The `*.smoke.mjs` suites (added 2026-08-19/20) — and what each one guards
+
+`gate.ps1` runs **every** `tests/*.smoke.mjs`, so each of these executes on every future task
+in this repo, forever. That is the point — and it is also the trap they each had to be fixed for.
+
+| Suite | Guards |
+|---|---|
+| `android-scroll.smoke.mjs` | real CDP touch: scroll, drag, row swipe. `overscroll-behavior-y` must stay `auto`. |
+| `tv-plans-absorb.smoke.mjs` | the TV page + its harness live in ONE place; the publisher stages the canonical bytes. |
+| `tv-plans-eol-fix.smoke.mjs` | the publisher LF-normalises, so a publish can never rewrite every line of the public page. |
+| `canonical-sources.smoke.mjs` | one maintained TV page; `fooddata` is a publish target; no competing boarding-script copy; the boarding drift checker stays read-only. Also reports whether the TV is showing the current design. |
+| `rx-medication-warnings.smoke.mjs` | prescription medication is impossible to overlook — red on both surfaces, acknowledgement that never clears it, ambiguity resolving toward medication, and a failed plan read never meaning "no meds". |
+
+## Rules for writing a suite here — each one is a real failure from 2026-08-19/20
+
+1. **Assert only what stays true after your own task merges.** Two suites asserted
+   "`index.html` unchanged on this branch" — correct scope control for *their* task, but once
+   merged they were asserting that **no future task may ever touch those files**, and they
+   produced three false failures on the very next task's correct work. Per-task scope control
+   belongs in the contract's MUST-NOT list and the blind review, both of which are per-task.
+2. **Never reference `.task/`.** It is archived when the task merges, so a seed-dependent suite
+   starts failing `want null` on every later task — and one stale suite reddens the whole gate.
+   Reference the **git blob** instead; it is durable and it is what actually gets published.
+3. **One constant, one fact.** A single pinned hash once meant both "the repo's page" and "what
+   the TV serves". Those diverge the moment source moves ahead of a publish. They are now
+   `CANONICAL_PAGE_SHA` and `PUBLISHED_PAGE_SHA`, and the gap between them is *reported*, not
+   hidden. Never resolve a mismatch by copying one over the other.
+4. **Prove a new check fails for the RIGHT REASON.** Run it against the unfixed build and read
+   the failure. Three real examples: a BOM made 19 checks silently skip while the suite read
+   green; an ambiguity check used a single-token name that was rejected by an earlier guard so it
+   never reached the logic it claimed to test; a suite reached for `h.rx` when the harness exposes
+   `h.api.rx`, failing everything **without ever calling the implementation**.
+5. **Watch for state leaking between checks.** One warning test failed against correct code
+   because an earlier check had already acknowledged the same dog id. Use fresh ids.
+6. **`tablet_harness.js`'s `EXPORTS` block is a TEMPLATE LITERAL.** A backtick in a comment there
+   terminates the string and breaks every suite that uses the harness.
+7. **Resolve `bash` explicitly on Windows.** A bare `bash` hits the distro-less WSL stub in
+   `WindowsApps` and dies with `execvpe(/bin/bash) failed`; Git Bash is the one that works.
+8. **Spawn-dependent checks must skip LOUDLY under `FTBOARD_SKIP_SPAWN=1`** (the Codex sandbox
+   denies nested Chrome/PowerShell), and the operator must run the full suite outside it before
+   the gate counts. A silent skip reads exactly like a pass.
    Coordinates captured in a scrolled page go stale the moment the scroll is reset — and if the
    bug under test is "scrolling doesn't work", the pre-fix build masks the harness bug entirely:
    `android-scroll.smoke.mjs` failed its own regression guards only *after* the fix landed,
