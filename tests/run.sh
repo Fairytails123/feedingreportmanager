@@ -67,6 +67,19 @@ else
   echo "  ⚠  AFTER ANY CHANGE TO THE n8n WORKFLOW, run:   LIVE=1 bash tests/run.sh"
 fi
 
+# The live Apps Script is the boarding source of truth. This opt-in check needs network
+# access and authenticated clasp, so it must not make the offline suite unavailable.
+if [ "${BOARDING:-0}" = "1" ]; then
+  run "boarding Apps Script drift" bash scripts/check_boarding_drift.sh
+else
+  echo
+  echo "════════════════════════════════════════════════════════════"
+  echo "  BOARDING Apps Script drift — SKIPPED"
+  echo "════════════════════════════════════════════════════════════"
+  echo "  This read-only check needs network access and authenticated clasp."
+  echo "  Run it with:   BOARDING=1 bash tests/run.sh"
+fi
+
 echo
 if [ "$fail" -eq 0 ]; then
   echo "✅ ALL SUITES PASSED — safe to deploy"
