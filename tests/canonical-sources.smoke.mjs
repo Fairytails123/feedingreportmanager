@@ -29,7 +29,12 @@ const sibling = (() => {
 })();
 
 // Pinned 2026-08-20. The TV page the kennel display actually serves.
-const LIVE_PAGE_SHA = '5d137a9405efdcfde3a80839dee48092252f82ecc8d907ff5b166845202b39d6';
+// CANONICAL = the repo's maintained TV page (the source of truth).
+const CANONICAL_PAGE_SHA = '72fe2b80389d10bd78732d7df5fe700181b3e51637adc46ad645416d8c806cee';
+// PUBLISHED = what https://fairytails123.github.io/fooddata/ actually serves right now.
+// These are equal ONLY when there is nothing waiting to be published. Re-pin this after
+// each publish; do not "fix" a mismatch by copying the canonical hash over it.
+const PUBLISHED_PAGE_SHA = '5d137a9405efdcfde3a80839dee48092252f82ecc8d907ff5b166845202b39d6';
 // Pinned 2026-08-20, EOL-normalised. The live Apps Script == Boardingplan == old mirror.
 const LIVE_GAS_SHA = 'd5cc2ff8a61a8fdbf5ad73a974448c810b7d3a6b34f38b17756aadee64c11cb8';
 const HARNESS_FIXTURES = ['api_sample.synthetic.json', 'expected_scenarios.json',
@@ -71,16 +76,29 @@ const skipSpawn = process.env.FTBOARD_SKIP_SPAWN === '1';
 // one-canonical-tv-page
 {
   const canonical = join(repoRoot, 'tv-plans', 'index.html');
-  report('canonical: tv-plans/index.html is the live TV page',
-    shaFileLF(canonical) === LIVE_PAGE_SHA, `got ${String(shaFileLF(canonical)).slice(0, 16)}`);
-  report('canonical: its committed blob is the live TV page too',
-    shaBuf(lfNorm(gitBlob(repoRoot, 'tv-plans/index.html'))) === LIVE_PAGE_SHA);
+  report('canonical: tv-plans/index.html matches the pinned canonical source',
+    shaFileLF(canonical) === CANONICAL_PAGE_SHA, `got ${String(shaFileLF(canonical)).slice(0, 16)}`);
+  report('canonical: its committed blob matches the working tree',
+    shaBuf(lfNorm(gitBlob(repoRoot, 'tv-plans/index.html'))) === CANONICAL_PAGE_SHA);
 
-  // The sibling copy is the PUBLISH ARTEFACT: it must still exist (Pages serves it)
-  // and must still be the same bytes — it is generated output, not a second source.
+  // CANONICAL (the repo's source) and PUBLISHED (what Pages actually serves) are two
+  // DIFFERENT facts, and conflating them hides the one that matters operationally:
+  // whether the TV is showing the current design. They diverge legitimately whenever the
+  // source has moved ahead of the last publish — which is the state right now, because
+  // the prescription-medication red styling has not been published yet.
   const published = join(sibling, 'index.html');
-  report('publish artefact: sibling index.html still present and identical (Pages serves it)',
-    shaFileLF(published) === LIVE_PAGE_SHA, `got ${String(shaFileLF(published)).slice(0, 16)}`);
+  report('publish artefact: sibling index.html still present (Pages serves it)',
+    existsSync(published));
+  report('publish artefact: it matches the pinned PUBLISHED page',
+    shaFileLF(published) === PUBLISHED_PAGE_SHA, `got ${String(shaFileLF(published)).slice(0, 16)}`);
+  // Not a failure — a visible statement of fact, so nobody has to guess whether the TV
+  // is current. Re-pin PUBLISHED_PAGE_SHA to the canonical hash after publishing.
+  const pending = shaFileLF(canonical) !== shaFileLF(published);
+  console.log(pending
+    ? 'NOTE  UNPUBLISHED CHANGES PENDING: the TV page source has moved ahead of what fooddata serves.\n' +
+      `      canonical=${String(shaFileLF(canonical)).slice(0, 16)}  published=${String(shaFileLF(published)).slice(0, 16)}\n` +
+      '      Publish with: bash scripts/publish_plans_tv.sh "msg"  (then refresh the TV browser)'
+    : 'NOTE  The TV page source and the published page are identical — the TV is current.');
 
   // No THIRD copy anywhere: scan both repos for any other file that looks like the TV page.
   const isTvPage = p => {
@@ -214,18 +232,17 @@ const skipSpawn = process.env.FTBOARD_SKIP_SPAWN === '1';
   report('protected: sibling index.html + assets have no uncommitted change',
     sibTracked !== null && sibTracked.trim() === '', (sibTracked || '').trim());
 
-  // Platform surfaces this task must not touch.
-  const diff = git(repoRoot, ['diff', 'main...HEAD', '--name-only']);
-  if (diff !== null) {
-    const changed = diff.split(/\r?\n/).filter(Boolean);
-    for (const f of ['index.html', 'display/display.html', 'shared/contract.js',
-      'feeding_report_backend_v2.js', 'tv-plans/index.html',
-      'scripts/publish_plans_tv.sh', 'scripts/check_contract.js']) {
-      report(`protected: ${f} unchanged on this branch`, !changed.includes(f));
-    }
-  } else {
-    report('protected: branch diff readable', false);
-  }
+  // REMOVED 2026-08-20: "unchanged on this branch" guards.
+  // They were correct scope-control for the canonical-sources TASK, but this suite runs
+  // permanently and the gate runs every tests/*.smoke.mjs — so once that task merged, the
+  // checks began asserting that NO LATER TASK may ever touch index.html, tv-plans/index.html
+  // or check_contract.js. The very next task (prescription-medication warnings) legitimately
+  // changes all three, and these turned into three false failures on a correct change.
+  // Same family as the .task/seed lesson: a permanent suite may only assert things that stay
+  // true after its own task merges. Scope control belongs in the CONTRACT (MUST-NOT lists)
+  // and in the blind review, both of which are per-task. The durable properties this suite
+  // exists for — one canonical page, harness deduplicated, no competing boarding copy, the
+  // drift checker's read-only shape — are all asserted above and are unaffected.
 
   if (skipSpawn) {
     skip('protected: tests/run.sh exits 0 offline', 'FTBOARD_SKIP_SPAWN=1');
@@ -243,7 +260,7 @@ const skipSpawn = process.env.FTBOARD_SKIP_SPAWN === '1';
       { encoding: 'utf8', cwd: repoRoot, timeout: 5 * 60 * 1000 });
     const dout = (d.stdout || '') + (d.stderr || '');
     report('protected: publish dry-run still stages the live page byte-exactly',
-      d.status === 0 && dout.toLowerCase().includes(LIVE_PAGE_SHA),
+      d.status === 0 && dout.toLowerCase().includes(CANONICAL_PAGE_SHA),
       `exit=${d.status}`);
   }
 }

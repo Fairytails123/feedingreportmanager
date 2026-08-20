@@ -70,6 +70,14 @@ const tvPlansApiToken = (tvPlans.match(/\bAPI_TOKEN\s*=\s*(['"])([^'"]+)\1/) || 
 const backendCheckinoutToken = (backend.match(/\bCHECKINOUT_TOKEN\s*:\s*(['"])([^'"]+)\1/) || [])[2];
 check(tvPlansApiToken !== undefined && tvPlansApiToken === backendCheckinoutToken, 'tv-plans/index.html API_TOKEN identical to feeding_report_backend_v2.js CONFIG.CHECKINOUT_TOKEN');
 
+console.log('== tablet medication plan matches TV and boarding backend ==');
+const tabletPlansApiUrl = (tablet.match(/\bBOARDING_PLANS_API_URL\s*=\s*(['"])([^'"]+)\1/) || [])[2];
+const tabletPlansApiToken = (tablet.match(/\bBOARDING_PLANS_API_TOKEN\s*=\s*(['"])([^'"]+)\1/) || [])[2];
+check(tabletPlansApiUrl !== undefined && tabletPlansApiUrl === backendCheckinoutUrl, 'index.html BOARDING_PLANS_API_URL identical to feeding_report_backend_v2.js CONFIG.CHECKINOUT_URL');
+check(tabletPlansApiUrl !== undefined && tabletPlansApiUrl === tvPlansApiUrl, 'index.html BOARDING_PLANS_API_URL identical to tv-plans/index.html API_URL');
+check(tabletPlansApiToken !== undefined && tabletPlansApiToken === backendCheckinoutToken, 'index.html BOARDING_PLANS_API_TOKEN identical to feeding_report_backend_v2.js CONFIG.CHECKINOUT_TOKEN');
+check(tabletPlansApiToken !== undefined && tabletPlansApiToken === tvPlansApiToken, 'index.html BOARDING_PLANS_API_TOKEN identical to tv-plans/index.html API_TOKEN');
+
 console.log('== display (display/display.html) defines NO copies ==');
 check(display.includes('// @@CONTRACT@@'), 'display has the @@CONTRACT@@ injection marker');
 check(!display.includes('const APPS_SCRIPT_URL'), 'display does not define its own APPS_SCRIPT_URL');

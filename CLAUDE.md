@@ -81,6 +81,8 @@ copy.
 | Tripwire | Required action |
 |---|---|
 | About to change the TV feeding-plans page | Edit `tv-plans/index.html`, run the harness, then publish with `bash scripts/publish_plans_tv.sh`; never edit `fooddata`. |
+| About to restyle the TV card | `.tcard.has-med` may recolour the existing border, but must never resize it: `box-sizing` feeds the auto-fit calculation. |
+| About to add a per-dog field | Add it at BOTH construction sites (`addDog` and `addDogsForToday`) and both `applyRemoteState` whitelists, or it will be dropped. |
 
 ## ⚠️ THE LIVE SESSION IS IN n8n, NOT THE SHEET (since @36, 2026-08-05)
 
@@ -129,6 +131,38 @@ The repo also owns the **TV feeding-plans surface** in `tv-plans/`: `index.html`
    - **Session** (real-time sync, 13 cols): live editing state shared across tablets. Schema in the GAS `CONFIG.SESSION_COLS`. Col 13 (`POSITION`, index 12) holds the within-pen feeding order — added 2026-06-03 for drag-to-reorder; legacy rows default to 0.
    - **Temp** (7 cols): submission staging that n8n reads. `Dog Name | Parent Email | Meal | Food Consumed | Medicine Supplement | Supplement Types | Comments`.
    - **Meta** (hidden, GAS-owned, added 2026-07-26 @29): `A2` = the real session version, `B2` = session row count. Bumped inside every mutation's script lock; both read endpoints serve it (see "Session versioning is REAL now"). Never edit it by hand and never point an n8n node at it — if it's deleted or blanked, the next read self-heals by minting a fresh version.
+
+## Prescription-medication safety warnings (2026-08-20)
+
+The feeding-plans TV and the tablet now make prescription medication deliberately hard to
+miss. A dog is red when the boarding plans feed declares
+`feeding.medication === 'Yes'` **OR** staff have set `dog.prescription`; this union favours
+over-warning because an under-warning can mean a missed dose. The entire medication tile is
+red on both surfaces, including tablet staging, and acknowledgement never clears that red
+state.
+
+A plan-declared medication dog stays red at EVERY feed. The plan has no structured
+per-meal medication field: `medicationDetails` is free text, so parsing it to narrow the
+warning by meal would turn a parsing miss into a hidden dose. This is a known limitation;
+the proper fix is a structured per-meal field on the requirements form.
+
+On the first tablet interaction with a plan-declared medication dog in a meal, a blocking
+`confirm()` names the dog, shows the medication detail and asks staff to confirm that they
+have checked it. It deliberately does not fire for a prescription that the staff member has
+just ticked themselves, because that would encourage alarm fatigue. Acknowledgements live
+in `localStorage['feedingManager.rxAck.v1']`, keyed by dog ID + date + meal. They must NEVER
+move onto the dog object: `applyRemoteState` rebuilds dogs from explicit whitelists and
+would silently drop an acknowledgement within roughly five seconds.
+
+An unavailable or empty plan response is never interpreted as "no dog needs medication".
+The tablet shows a persistent unavailable-data banner, and separately names plan-medication
+dogs that could not be joined safely to the board.
+
+Submission remains non-blocking beyond the established connection/queue gate. Every submit
+passes through the mandatory preview route — `submitReport()` → `showPreview()` → **Submit
+report** → `confirmSubmit()` — where unacknowledged and unjoined medication dogs are shown
+prominently at the top. No native `confirm()` or new hard block was added to that path, and
+the existing `isOnline && queue empty` gate is unchanged.
 
 ## Critical architecture fact: there is no direct device-to-device connection
 

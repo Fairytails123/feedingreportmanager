@@ -135,6 +135,30 @@ function load(indexPath) {
         pause() { pauseSync(); },
         unpause() { syncPausedUntil = 0; },
       },
+
+      // --- prescription-medication surface (added 2026-08-20, rx-medication-warnings) ---
+      // Every entry is typeof-guarded so this harness still LOADS against a build that
+      // predates the feature: the tests-first run must FAIL on missing behaviour, never
+      // crash the whole file on a ReferenceError.
+      // NB: this whole EXPORTS block is a TEMPLATE LITERAL - never put a backtick in a
+      // comment here, it terminates the string and breaks the harness for every suite.
+      rx: {
+        get present() { return typeof dogNeedsRx !== 'undefined'; },
+        needs: (...a) => (typeof dogNeedsRx !== 'undefined' ? dogNeedsRx(...a) : undefined),
+        planFor: (...a) => (typeof rxPlanFor !== 'undefined' ? rxPlanFor(...a) : undefined),
+        ackKey: (...a) => (typeof rxAckKey !== 'undefined' ? rxAckKey(...a) : undefined),
+        isAcked: (...a) => (typeof isRxAcked !== 'undefined' ? isRxAcked(...a) : undefined),
+        markAcked: (...a) => (typeof markRxAcked !== 'undefined' ? markRxAcked(...a) : undefined),
+        normName: (...a) => (typeof normRxName !== 'undefined' ? normRxName(...a) : undefined),
+        get planState() { return typeof rxPlanState !== 'undefined' ? rxPlanState : undefined; },
+        set planState(v) { if (typeof rxPlanState !== 'undefined') rxPlanState = v; },
+      },
+      setDogs(v) { dogs = v; },
+      setMealType(v) { currentMealType = v; },
+      callApplyRemoteState: (...a) => applyRemoteState(...a),
+      toggleTile: (...a) => (typeof toggleTile !== 'undefined' ? toggleTile(...a) : undefined),
+      updateDogStatus: (...a) => (typeof updateDogStatus !== 'undefined' ? updateDogStatus(...a) : undefined),
+
       stub(o) {
         if (o.flushQueue) flushQueue = o.flushQueue;
         if (o.applyRemoteState) applyRemoteState = o.applyRemoteState;

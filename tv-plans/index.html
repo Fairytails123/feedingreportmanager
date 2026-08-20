@@ -433,6 +433,50 @@
       overflow: hidden;
     }
 
+    /* Prescription medication is the card state, not a small badge state. Keep the
+       existing 10px border geometry and all measured content unchanged: cardFits()
+       must size medication and non-medication cards from the same envelope. */
+    .tcard.has-med {
+      background: linear-gradient(150deg, #86182A 0%, #5C0A18 100%);
+      border-color: rgba(255, 184, 194, 0.72);
+      border-left-color: #FF6B7D;
+    }
+
+    .tcard.has-med .name-surname { color: #FFE5E9; }
+    .tcard.has-med .type-pill,
+    .tcard.has-med .type-pill.school {
+      background: rgba(255, 255, 255, 0.18);
+      color: #FFFFFF;
+    }
+    .tcard.has-med .meals-pill {
+      background: #FFF0F2;
+      border-color: #FFD0D7;
+      color: #6A0C1B;
+    }
+    .tcard.has-med .allergy-chip {
+      background: #FFD477;
+      color: #3A2A00;
+    }
+    .tcard.has-med .allergy-chip .allergy-text { color: #3A2A00; }
+    .tcard.has-med .supp-block {
+      background: #E2F7EC;
+      border-left-color: #10B981;
+    }
+    .tcard.has-med .supp-label { color: #075E43; }
+    .tcard.has-med .supp-text { color: #123B30; }
+    .tcard.has-med .notes-block {
+      background: #FFF1C7;
+      border-left-color: #F5A623;
+    }
+    .tcard.has-med .notes-label { color: #704700; }
+    .tcard.has-med .notes-text { color: #352400; }
+    .tcard.has-med .qty-row {
+      background: rgba(255, 255, 255, 0.92);
+      border-left-color: #0077B6;
+    }
+    .tcard.has-med .qty-label { color: #5C2430; }
+    .tcard.has-med .qty-value { color: #241014; }
+
     .tcard-head {
       display: flex;
       align-items: center;
@@ -812,6 +856,17 @@
       break-inside: avoid;
       -webkit-column-break-inside: avoid;
     }
+
+    .list-item.has-med {
+      background: #6F0D1B;
+      box-shadow: inset 6px 0 #FF6B7D;
+      border-radius: 8px;
+      color: #FFFFFF;
+    }
+    .list-item.has-med .list-surname { color: #FFE5E9; }
+    .list-item.has-med .med-detail { color: #FFFFFF; }
+    .list-item.has-med .allergy-detail { color: #FFE09A; }
+    .list-item.has-med .supp-detail { color: #C9F5E3; }
 
     /* Tick-box bullet — the prep list reads as a physical checklist */
     .prep-box {
@@ -1473,7 +1528,8 @@
      */
     function buildListItem(dog, withBox, withDetail) {
       var feeding = dog.feeding;
-      var html = '<div class="list-item">';
+      var hasMed = !!(feeding && feeding.medication === 'Yes');
+      var html = '<div class="list-item' + (hasMed ? ' has-med' : '') + '">';
       if (withBox) html += '<span class="prep-box"></span>';
       html += buildNamePartsHtml(dog, 'list-name', 'list-surname');
       if (feeding && feeding.medication === 'Yes') {

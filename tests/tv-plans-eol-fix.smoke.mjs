@@ -23,8 +23,8 @@ const skipSpawn = process.env.FTBOARD_SKIP_SPAWN === '1';
 
 // The live fooddata page, measured 2026-08-20. This is the invariant the whole
 // task exists to protect.
-const LIVE_PAGE_SHA = '5d137a9405efdcfde3a80839dee48092252f82ecc8d907ff5b166845202b39d6';
-const LIVE_PAGE_BYTES = 88289;
+const CANONICAL_PAGE_SHA = '72fe2b80389d10bd78732d7df5fe700181b3e51637adc46ad645416d8c806cee';
+const CANONICAL_PAGE_BYTES = 90277;
 
 let failures = 0, checks = 0;
 function report(name, ok, detail) {
@@ -58,7 +58,7 @@ const logoBlob = gitBlob('tv-plans/assets/img/logo.jpg');
   report('baseline: page blob readable', pageBlob !== null);
   if (pageBlob) {
     report('baseline: page blob still byte-identical to the live fooddata page',
-      shaBuf(pageBlob) === LIVE_PAGE_SHA && pageBlob.length === LIVE_PAGE_BYTES,
+      shaBuf(pageBlob) === CANONICAL_PAGE_SHA && pageBlob.length === CANONICAL_PAGE_BYTES,
       `sha=${shaBuf(pageBlob).slice(0, 16)} bytes=${pageBlob.length}`);
   }
   report('baseline: logo blob readable', logoBlob !== null);
@@ -107,8 +107,8 @@ const logoBlob = gitBlob('tv-plans/assets/img/logo.jpg');
 
     // Criterion 1: the SHA the dry-run prints must equal the blob's (== live page).
     report('staged-payload-matches-blob: dry-run SHA equals the git blob / live page',
-      out.toLowerCase().includes(LIVE_PAGE_SHA),
-      `expected ${LIVE_PAGE_SHA.slice(0, 16)}... in: ${out.replace(/\s+/g, ' ').slice(-300)}`);
+      out.toLowerCase().includes(CANONICAL_PAGE_SHA),
+      `expected ${CANONICAL_PAGE_SHA.slice(0, 16)}... in: ${out.replace(/\s+/g, ' ').slice(-300)}`);
 
     // Criteria 2 + 4: inspect the retained staged payload itself.
     const m = out.match(/Staged payload[^:]*:\s*(\S+)/);
@@ -126,10 +126,10 @@ const logoBlob = gitBlob('tv-plans/assets/img/logo.jpg');
       if (existsSync(stagedPage)) {
         const buf = readFileSync(stagedPage);
         report('staged-payload-is-lf: zero CRLF pairs', !buf.includes(Buffer.from('\r\n')));
-        report('staged-payload-is-lf: byte count matches the blob', buf.length === LIVE_PAGE_BYTES,
-          `${buf.length} vs ${LIVE_PAGE_BYTES}`);
+        report('staged-payload-is-lf: byte count matches the blob', buf.length === CANONICAL_PAGE_BYTES,
+          `${buf.length} vs ${CANONICAL_PAGE_BYTES}`);
         report('staged-payload-matches-blob: staged bytes hash to the live page',
-          shaBuf(buf) === LIVE_PAGE_SHA, shaBuf(buf).slice(0, 16));
+          shaBuf(buf) === CANONICAL_PAGE_SHA, shaBuf(buf).slice(0, 16));
       } else {
         report('staged-payload-is-lf: staged page present for inspection', false, stagedPage);
       }
