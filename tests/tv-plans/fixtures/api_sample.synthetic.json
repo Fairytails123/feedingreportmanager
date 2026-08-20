@@ -1,0 +1,380 @@
+{
+  "_synthetic": true,
+  "dogs": [
+    {
+      "dogName": "Axo",
+      "ownerSurname": "Zorblatt",
+      "checkIn": "2026-01-03",
+      "checkOut": "2026-01-08",
+      "type": "boarding",
+      "matched": true,
+      "matchType": "exact",
+      "ambiguousMatch": true,
+      "feeding": {
+        "mealsPerDay": "Two meals per day",
+        "foodTypes": ["Kibble"],
+        "kibbleSummary": "Two silver scoops daily",
+        "wetFood": "",
+        "tinFood": "",
+        "specialNotes": "",
+        "medication": "No",
+        "medicationDetails": ""
+      }
+    },
+    {
+      "dogName": "Axo Zorblatt",
+      "ownerSurname": "Nebulon",
+      "checkIn": "2026-01-04",
+      "checkOut": "2026-01-07",
+      "type": "school",
+      "matched": true,
+      "matchType": "fullname",
+      "ambiguousMatch": false,
+      "feeding": {
+        "mealsPerDay": "One meal per day",
+        "foodTypes": ["Pre-Portioned by parents"],
+        "kibbleSummary": "",
+        "wetFood": "",
+        "tinFood": "",
+        "specialNotes": "Use the labelled blue container.",
+        "medication": "No",
+        "medicationDetails": "",
+        "supplements": []
+      }
+    },
+    {
+      "dogName": "Bolt",
+      "ownerSurname": "Quixling",
+      "checkIn": "2026-01-02",
+      "checkOut": "2026-01-09",
+      "type": "boarding",
+      "matched": true,
+      "matchType": "fuzzy",
+      "ambiguousMatch": false,
+      "feeding": {
+        "mealsPerDay": "Three meals per day",
+        "foodTypes": ["Kibble", "Wet Food - Sachet/Tray"],
+        "kibbleSummary": "Three small scoops daily",
+        "wetFood": "One tray with supper",
+        "tinFood": "",
+        "specialNotes": "Keep each portion in the green bowl.",
+        "medication": "Yes",
+        "medicationDetails": "Give one fictional star-shaped test tablet with breakfast and another with supper; record both doses on the synthetic chart.",
+        "supplements": ["Hemp Oil", "Probiotic Powder/Tab"]
+      }
+    },
+    {
+      "dogName": "Glimmer",
+      "ownerSurname": "Vexworth",
+      "checkIn": "2026-01-05",
+      "checkOut": "2026-01-10",
+      "type": "school",
+      "matched": true,
+      "matchType": "exact",
+      "ambiguousMatch": false,
+      "feeding": {
+        "mealsPerDay": "Two meals per day",
+        "foodTypes": ["Wet Food - Tin"],
+        "kibbleSummary": "",
+        "wetFood": "",
+        "tinFood": "Half a tin each meal",
+        "specialNotes": "This fabricated dog is allergic to silver-coloured treats, so use only the labelled test snacks.",
+        "medication": "No",
+        "medicationDetails": "",
+        "supplements": ["Multivitamin Tabs"]
+      }
+    },
+    {
+      "dogName": "Luna",
+      "ownerSurname": "Snorkelby",
+      "checkIn": "2026-01-01",
+      "checkOut": "2026-01-06",
+      "type": "boarding",
+      "matched": false,
+      "matchType": "none",
+      "ambiguousMatch": false,
+      "feeding": null
+    },
+    {
+      "dogName": "Momo",
+      "ownerSurname": "Fablewick",
+      "checkIn": "2026-01-04",
+      "checkOut": "2026-01-08",
+      "type": "boarding",
+      "matched": true,
+      "matchType": "name_only",
+      "ambiguousMatch": false,
+      "feeding": {
+        "mealsPerDay": "Two meals per day",
+        "foodTypes": ["Kibble"],
+        "kibbleSummary": "One moon scoop each meal",
+        "wetFood": "",
+        "tinFood": "",
+        "specialNotes": "",
+        "medication": "No",
+        "medicationDetails": "",
+        "supplements": ["Calming Tabs"]
+      }
+    },
+    {
+      "dogName": "Misty",
+      "ownerSurname": "Pretendle",
+      "checkIn": "2026-01-03",
+      "checkOut": "2026-01-11",
+      "type": "school",
+      "matched": true,
+      "matchType": "surname",
+      "ambiguousMatch": false,
+      "feeding": {
+        "mealsPerDay": "Two meals per day",
+        "foodTypes": ["Special Requirements"],
+        "kibbleSummary": "",
+        "wetFood": "",
+        "tinFood": "",
+        "specialNotes": "Serve the sealed synthetic portions exactly as labelled.",
+        "medication": "No",
+        "medicationDetails": "",
+        "supplements": []
+      }
+    },
+    {
+      "dogName": "Tock",
+      "ownerSurname": "Mockingham",
+      "checkIn": "2026-01-04",
+      "checkOut": "2026-01-09",
+      "type": "boarding",
+      "matched": true,
+      "matchType": "exact",
+      "ambiguousMatch": false,
+      "feeding": {
+        "mealsPerDay": "One meal per day",
+        "foodTypes": ["Kibble", "Wet Food - Tin"],
+        "kibbleSummary": "One large scoop",
+        "wetFood": "",
+        "tinFood": "Quarter tin",
+        "specialNotes": "",
+        "medication": "No",
+        "medicationDetails": "",
+        "supplements": ["Hemp Oil", "Multivitamin Tabs", "Calming Tabs"]
+      }
+    },
+    {
+      "dogName": "Zephyr",
+      "ownerSurname": "Testerly",
+      "checkIn": "2026-01-02",
+      "checkOut": "2026-01-07",
+      "type": "boarding",
+      "matched": true,
+      "matchType": "exact",
+      "ambiguousMatch": false,
+      "feeding": {
+        "mealsPerDay": "Two meals per day",
+        "foodTypes": ["Wet Food - Sachet/Tray"],
+        "kibbleSummary": "",
+        "wetFood": "One sachet each meal",
+        "tinFood": "",
+        "specialNotes": "Warm the unopened sachet in water before serving.",
+        "medication": "No",
+        "medicationDetails": "",
+        "supplements": []
+      }
+    },
+    {
+      "dogName": "Quill",
+      "ownerSurname": "Fictionford",
+      "checkIn": "2026-01-05",
+      "checkOut": "2026-01-06",
+      "type": "school",
+      "matched": true,
+      "matchType": "fuzzy",
+      "ambiguousMatch": false,
+      "feeding": {
+        "mealsPerDay": "Two meals per day",
+        "foodTypes": ["Kibble"],
+        "kibbleSummary": "Two small cups daily",
+        "wetFood": "",
+        "tinFood": "",
+        "specialNotes": "",
+        "medication": "No",
+        "medicationDetails": "",
+        "supplements": []
+      }
+    },
+    {
+      "dogName": "Nimbus",
+      "ownerSurname": "Imaginer",
+      "checkIn": "2026-01-03",
+      "checkOut": "2026-01-08",
+      "type": "boarding",
+      "matched": true,
+      "matchType": "exact",
+      "ambiguousMatch": false,
+      "feeding": {
+        "mealsPerDay": "Three meals per day",
+        "foodTypes": ["Kibble", "Wet Food - Sachet/Tray", "Wet Food - Tin"],
+        "kibbleSummary": "One small scoop each meal",
+        "wetFood": "Half a tray at breakfast",
+        "tinFood": "Quarter tin at supper",
+        "specialNotes": "Mix all fabricated food entries thoroughly.",
+        "medication": "No",
+        "medicationDetails": "",
+        "supplements": ["Probiotic Powder/Tab"]
+      }
+    },
+    {
+      "dogName": "Pixel",
+      "ownerSurname": "Storybrook",
+      "checkIn": "2026-01-01",
+      "checkOut": "2026-01-10",
+      "type": "school",
+      "matched": true,
+      "matchType": "exact",
+      "ambiguousMatch": false,
+      "feeding": {
+        "mealsPerDay": "Two meals per day",
+        "foodTypes": ["Kibble"],
+        "kibbleSummary": "One purple scoop each meal",
+        "wetFood": "",
+        "tinFood": "",
+        "specialNotes": "",
+        "medication": "No",
+        "medicationDetails": "",
+        "supplements": []
+      }
+    },
+    {
+      "dogName": "Waffle",
+      "ownerSurname": "Zorblatt",
+      "checkIn": "2026-01-04",
+      "checkOut": "2026-01-07",
+      "type": "boarding",
+      "matched": true,
+      "matchType": "exact",
+      "ambiguousMatch": false,
+      "feeding": {
+        "mealsPerDay": "One meal per day",
+        "foodTypes": ["Pre-Portioned by parents"],
+        "kibbleSummary": "",
+        "wetFood": "",
+        "tinFood": "",
+        "specialNotes": "Use the numbered container from the test bag.",
+        "medication": "No",
+        "medicationDetails": "",
+        "supplements": []
+      }
+    },
+    {
+      "dogName": "Biscuit",
+      "ownerSurname": "Nebulon",
+      "checkIn": "2026-01-06",
+      "checkOut": "2026-01-09",
+      "type": "boarding",
+      "matched": true,
+      "matchType": "exact",
+      "ambiguousMatch": false,
+      "feeding": {
+        "mealsPerDay": "Two meals per day",
+        "foodTypes": ["Kibble"],
+        "kibbleSummary": "Two test cups daily",
+        "wetFood": "",
+        "tinFood": "",
+        "specialNotes": "",
+        "medication": "No",
+        "medicationDetails": "",
+        "supplements": []
+      }
+    },
+    {
+      "dogName": "Comet",
+      "ownerSurname": "Quixling",
+      "checkIn": "2026-01-06",
+      "checkOut": "2026-01-10",
+      "type": "school",
+      "matched": true,
+      "matchType": "fuzzy",
+      "ambiguousMatch": false,
+      "feeding": {
+        "mealsPerDay": "Two meals per day",
+        "foodTypes": ["Wet Food - Sachet/Tray"],
+        "kibbleSummary": "",
+        "wetFood": "One tray daily",
+        "tinFood": "",
+        "specialNotes": "",
+        "medication": "No",
+        "medicationDetails": "",
+        "supplements": []
+      }
+    },
+    {
+      "dogName": "Fig",
+      "ownerSurname": "Vexworth",
+      "checkIn": "2026-01-06",
+      "checkOut": "2026-01-11",
+      "type": "boarding",
+      "matched": true,
+      "matchType": "exact",
+      "ambiguousMatch": false,
+      "feeding": {
+        "mealsPerDay": "Three meals per day",
+        "foodTypes": ["Kibble"],
+        "kibbleSummary": "Three small test scoops",
+        "wetFood": "",
+        "tinFood": "",
+        "specialNotes": "",
+        "medication": "No",
+        "medicationDetails": "",
+        "supplements": []
+      }
+    },
+    {
+      "dogName": "Juniper",
+      "ownerSurname": "Snorkelby",
+      "checkIn": "2026-01-01",
+      "checkOut": "2026-01-04",
+      "type": "boarding",
+      "matched": true,
+      "matchType": "exact",
+      "ambiguousMatch": false,
+      "feeding": {
+        "mealsPerDay": "Two meals per day",
+        "foodTypes": ["Kibble"],
+        "kibbleSummary": "Two small scoops daily",
+        "wetFood": "",
+        "tinFood": "",
+        "specialNotes": "",
+        "medication": "No",
+        "medicationDetails": "",
+        "supplements": []
+      }
+    },
+    {
+      "dogName": "Orbit",
+      "ownerSurname": "Fablewick",
+      "checkIn": "2026-01-02",
+      "checkOut": "2026-01-05",
+      "type": "school",
+      "matched": true,
+      "matchType": "surname",
+      "ambiguousMatch": false,
+      "feeding": {
+        "mealsPerDay": "One meal per day",
+        "foodTypes": ["Wet Food - Tin"],
+        "kibbleSummary": "",
+        "wetFood": "",
+        "tinFood": "Half a tin daily",
+        "specialNotes": "",
+        "medication": "No",
+        "medicationDetails": "",
+        "supplements": []
+      }
+    }
+  ],
+  "dogCount": 18,
+  "dateRange": {
+    "start": "2026-01-05",
+    "end": "2026-01-11"
+  },
+  "lastUpdated": "2026-01-05T12:00:00.000Z",
+  "error": null,
+  "feedingError": null
+}

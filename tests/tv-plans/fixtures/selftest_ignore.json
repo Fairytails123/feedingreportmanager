@@ -1,0 +1,59 @@
+{
+    "two":  {
+                "errors":  [
+
+                           ],
+                "screen":  "cards",
+                "selPill":  "today",
+                "focusedPill":  "todayPillBtn",
+                "todayCount":  "2",
+                "tomorrowCount":  "1",
+                "tcards":  2,
+                "prepItems":  0,
+                "tomItems":  0,
+                "namePx":  999.5,
+                "qtyPx":  1.25,
+                "notesPx":  48.7156,
+                "medPx":  48.7156,
+                "listPx":  null,
+                "alphaCards":  true,
+                "alphaPrep":  true,
+                "alphaTom":  true,
+                "todayInd":  null,
+                "loading":  false,
+                "empty":  false,
+                "offline":  false,
+                "board":  true,
+                "statusText":  "MUTATED FOR IGNORE TEST",
+                "stale":  false,
+                "errBanner":  "",
+                "warnBanner":  "",
+                "medChips":  1,
+                "allergyChips":  1,
+                "suppBlocks":  2,
+                "suppText":  "Probiotic Powder/Tab",
+                "medFlags":  0,
+                "listDetails":  0,
+                "suppDetails":  0,
+                "clipWarns":  0,
+                "noMatch":  0,
+                "gridClass":  "today-grid g2",
+                "tzs":  [
+                            9,
+                            9
+                        ],
+                "overflows":  0,
+                "listOverflow":  0,
+                "trunc":  {
+                              "count":  0,
+                              "items":  [
+
+                                        ]
+                          },
+                "cacheHasDogs":  true,
+                "clock":  "XX:XX",
+                "countdown":  "n/a",
+                "logoOk":  true,
+                "xssText":  "BellaSmith"
+            }
+}

@@ -23,6 +23,10 @@ has shipped and held.
 | 0 | Harness rescue + synthetic fixture (task `harness-rescue`, **Tier 3** — client PII) | ✅ **MERGED 2026-08-20** (`3a9e9d4`, Kam-approved, NOT pushed — DFRD local main is ahead of origin). Contract v3 after 2 critique rounds / 33 findings; 128 acceptance checks 0 fails on real Chrome; gate PASS ×2 incl. gitleaks; blind review APPROVE 0 blocking; 1 remediation cycle. Merged main re-verified green. Archive: `_dev-system\archive\Dog feed requirement display--harness-rescue-20260820-005728` |
 | 0 | PII sweep of scratch artefacts | ✅ 2026-08-20 — 81 pre-task files deleted from `%TEMP%\ftboard-tests\`, incl. June renders of the `live` scenario (real customer data as pixels) |
 | 1 Repo unification | Move DFRD page in as `tv-plans/` + publish script to `fooddata`; backend mirror in as `backend-boarding/`; extend `check_contract.js` (token, exec URLs, JotForm maps); carry Claude project memory | ⬜ after Phase 0 |
+| 1A Repo unification | Copy the feeding-plans page and logo into `tv-plans/` byte-identically; move the sanitised 20-scenario harness into `tests/tv-plans/` | ✅ 2026-08-20 (source absorbed locally; live `fooddata` repo untouched) |
+| 1A | Add `publish_plans_tv.sh` with contract-first, verbatim staging and SHA-256 dry-run proof | ✅ 2026-08-20 (`--dry-run` only; no clone, push or publish) |
+| 1A | Gate the feeding-plans `API_URL` and `API_TOKEN` against the boarding backend mirror | ✅ 2026-08-20 (`scripts/check_contract.js`) |
+| 1A publish | First publish to the unchanged `fooddata` Pages URL and byte-compare the served page | ⬜ deferred to Kam's explicit publish call |
 | 2 Shared modules | `shared/name-match.js` + `shared/fetch-kit.js` (ES5), equivalence-tested, adopted per surface | ⬜ |
 | 3 Symbiosis | Plans + medication chips on tablet tiles; plan-vs-report flag in Telegram summary | ⬜ product details to confirm with Kam at contract time |
 | 4 Measured infra | Instrument checkinout/plans feeds 2 weeks → move to n8n ONLY on measured degradation; token rework | ⬜ conditional — may correctly never run |
