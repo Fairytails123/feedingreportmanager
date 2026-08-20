@@ -60,6 +60,28 @@ There is no build/lint/test runner — the operations below are the full command
 - **Edit the SESSION API** (the live board) → n8n workflow **`hdGUbrd0PffVnwDS`** via `n8n_update_partial_workflow`, then `n8n_validate_workflow` (0 errors) **and a real curl round-trip** — validation passed a `table/clear` that silently did nothing. Test with `curl -H 'Content-Type: application/json' -d '{"action":"getSessionVersion"}' https://auto.thefairytails.co.uk/webhook/feeding-session`.
 - **Verify before any deploy** → **`bash tests/run.sh`** (syntax + contract + 80 backend + 82 tablet + 9 display + 20 TV feeding-plans scenarios). Must be green. Do not hand-deploy unverified edits.
 
+## Canonical sources
+
+The TV feeding-plans page has exactly **one maintained copy**: `tv-plans/index.html` in
+this repository. Its harness is `tests/tv-plans/`, and it is published with
+`bash scripts/publish_plans_tv.sh`. `Fairytails123/fooddata` is a **PUBLISH TARGET ONLY**:
+never edit the page there. The sibling folder's `CLAUDE.md` and `HANDOVER.md` are redirect
+stubs recording the same rule.
+
+The **live Apps Script is the only source of truth** for the boarding script (script ID
+`12ZBH5zualFVdVz23pmC7orrqcf6wyUA8YbXKa6kR3kxm4T4KdBubh5gM`).
+`Fairytails123/Boardingplan` is its guarded deploy vehicle: its CI refuses to deploy when
+live matches no committed state and rolls back after a failed smoke test. The old local
+mirror was deleted on 2026-08-20 after it was verified identical to both live and the
+deploy vehicle. Read the truth into a scratch directory with `clasp clone-script
+12ZBH5zualFVdVz23pmC7orrqcf6wyUA8YbXKa6kR3kxm4T4KdBubh5gM`, and prove live agrees with
+the deploy vehicle using `BOARDING=1 bash tests/run.sh`. Never push to live from a local
+copy.
+
+| Tripwire | Required action |
+|---|---|
+| About to change the TV feeding-plans page | Edit `tv-plans/index.html`, run the harness, then publish with `bash scripts/publish_plans_tv.sh`; never edit `fooddata`. |
+
 ## ⚠️ THE LIVE SESSION IS IN n8n, NOT THE SHEET (since @36, 2026-08-05)
 
 **Every session read and write — `getSessionVersion`, `getSession`, `addDog`, `updateDog`,
