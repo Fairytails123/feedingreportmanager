@@ -207,6 +207,16 @@ function sh(args, opts) {
     const out = (r.stdout || '') + (r.stderr || '');
     report('run.sh: exits 0', r.status === 0, `exit=${r.status}; ${out.slice(-300).replace(/\s+/g, ' ')}`);
     report('run.sh: reports all suites passed', /ALL SUITES PASSED/.test(out));
+    // R-7: a skipped step must never read as a pass. On this (Chrome-equipped) box the
+    // tv-plans suite must demonstrably RUN — banner present, skip line absent. Without
+    // this, a broken harness would be reported as "Chrome unavailable" and skipped
+    // silently inside the pre-deploy gate.
+    report('run.sh: the tv-plans suite actually RAN (banner present)',
+      /TV feeding plans \(20 scenarios\)/.test(out), out.slice(-300).replace(/\s+/g, ' '));
+    report('run.sh: did NOT report the Chrome-unavailable skip on a Chrome-equipped box',
+      !/Chrome is unavailable/i.test(out));
+    report('run.sh: did NOT report the PowerShell-unavailable skip on Windows',
+      !/powershell\.exe is unavailable/i.test(out));
   }
 }
 
