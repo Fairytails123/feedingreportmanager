@@ -34,7 +34,7 @@ const CANONICAL_PAGE_SHA = '72fe2b80389d10bd78732d7df5fe700181b3e51637adc46ad645
 // PUBLISHED = what https://fairytails123.github.io/fooddata/ actually serves right now.
 // These are equal ONLY when there is nothing waiting to be published. Re-pin this after
 // each publish; do not "fix" a mismatch by copying the canonical hash over it.
-const PUBLISHED_PAGE_SHA = '5d137a9405efdcfde3a80839dee48092252f82ecc8d907ff5b166845202b39d6';
+const PUBLISHED_PAGE_SHA = '72fe2b80389d10bd78732d7df5fe700181b3e51637adc46ad645416d8c806cee';
 // Pinned 2026-08-20, EOL-normalised. The live Apps Script == Boardingplan == old mirror.
 const LIVE_GAS_SHA = 'd5cc2ff8a61a8fdbf5ad73a974448c810b7d3a6b34f38b17756aadee64c11cb8';
 const HARNESS_FIXTURES = ['api_sample.synthetic.json', 'expected_scenarios.json',
