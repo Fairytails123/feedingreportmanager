@@ -34,7 +34,7 @@ has shipped and held.
 | 2 Shared modules | `shared/name-match.js` + `shared/fetch-kit.js` (ES5), equivalence-tested, adopted per surface | ⬜ |
 | 3 Symbiosis | Prescription-medication red tiles on TV and tablet; plan-data join, blocking tablet acknowledgement, failure banners and preview-sheet warning | ✅ delivered 2026-08-20 (`rx-medication-warnings`; 41 checks / 0 failures with real Chrome; not published) |
 | 3 | Plan-vs-report flag in Telegram summary | ⬜ separate later contract |
-| 4 Measured infra | Instrument checkinout/plans feeds 2 weeks → move to n8n ONLY on measured degradation; token rework | ⬜ conditional — may correctly never run |
+| 4 Measured infra | Instrument checkinout/plans feeds 2 weeks → move to n8n ONLY on measured degradation; token rework | 🟡 **PAUSED MID-BUILD 2026-08-21 20:22 — see "Phase 4: exactly where it stopped" below.** Owner overrode the measure-first gate and asked to build now. Stage A is built but **INERT**: nothing runs, nothing consumes it, no consumer repointed. |
 | Endgame | Merge the OneDrive folders (PII file disposed, memory carried on BOTH machines, redirect stub) | ⬜ after Phase 1 shipped + held |
 
 ## Kam's three requirements, 2026-08-20 — ALL MERGED (nothing pushed or published)
@@ -56,6 +56,73 @@ medication (one that fires on your own input trains people to dismiss modals); b
 `confirm()` per the house rule; ack in `localStorage` keyed dog+date+meal, never on the dog
 object. **Known limitation:** true per-meal precision needs a structured field on the
 requirements form — same gap as the missing allergy field.
+
+## Phase 4: exactly where it stopped (paused 2026-08-21 20:22, resume here)
+
+**Nothing is live. Nothing is half-deployed.** The workflow is INACTIVE and has NEVER RUN;
+the table is EMPTY; no consumer was repointed. Walking away permanently is safe — deleting
+the two artefacts below returns the estate to its pre-Phase-4 state with zero effect on the
+tablet, the TV or the boarding script.
+
+### What exists on the VPS
+
+| Thing | ID | State |
+|---|---|---|
+| Data table `boarding_feed_mirror` | `3XBHNDieDwURytuC` | created, **empty** |
+| Workflow "Boarding Plans Mirror — Refresh (Phase 4)" | `SIpnV8ESIbBHjZYB` | created, **INACTIVE, never executed**; `n8n_validate_workflow` = 0 errors |
+
+Table columns: `feed_key`(str) `payload`(str) `captured_at`(str) `ok`(bool) `source_ms`(num)
+`error_text`(str) `dog_count`(num). **The n8n Data Table schema is IMMUTABLE via the API** —
+to change a column you must create a new table.
+
+### Scope decision already taken
+Mirror **`mode=feeding` ONLY**. That is what the tablet and TV read directly, and it is what
+carries the prescription-medication signal. The `checkinout` leg is consumed server-side by
+the Apps Script feeding backend (GAS→GAS), so mirroring it would need a backend change for
+much less benefit. Out of scope here.
+
+### Design rules already encoded (do not "simplify" these away)
+- **Apps Script stays the fallback.** Consumers will try n8n first and fall back to GAS on
+  any doubt, so a bad mirror degrades to today's behaviour instead of breaking anything.
+  This is what makes deploying it low-risk on any day.
+- **The response is fetched as TEXT and `JSON.parse`d manually.** GAS sometimes answers with
+  an HTML error page; a json-mode node would crash on it, and this turns it into a
+  classified failure instead.
+- **A failure NEVER overwrites the last good snapshot.** Failures are written under the
+  separate key `feeding:error`. Mirrors the GAS-side rule that a failed read is never cached.
+- **A 200 without a `dogs` array is an OUTAGE, not an empty day.** Writing it as a snapshot
+  would confidently tell every consumer that no dog needs medication — the exact harm the
+  medication feature exists to prevent.
+- **Every run stopwatches Apps Script** (`source_ms`), so the measurement Phase 4 was
+  originally gated on accrues whether or not the migration ever proceeds.
+
+### Next steps, in order
+1. **Run it manually once and READ THE EXECUTION** (`n8n_executions`). Validation passing
+   proves nothing — see every entry in the `n8n-gotchas` skill. Specifically check the
+   **Data Table node's OUTPUT SHAPE**: an upsert whose output echoes its input wrote NOTHING.
+2. **Prove the snapshot equals the source**: compare the stored `payload` against a live
+   `curl` of the GAS `?mode=feeding` URL. They must match.
+3. Only then **activate** the schedule (30-minute cadence).
+4. Build the serving webhook (planned name "Boarding Plans API"): read the row, and return
+   `{dogs, dogCount, dateRange, lastUpdated, error, feedingError}` **plus** a `_mirror`
+   block with `captured_at` / `age_ms` / `stale`. **If the row is missing or hard-stale
+   (suggest >3h, i.e. ~6 consecutive refresh failures), return a NON-2xx** so consumers fall
+   back to GAS rather than trusting an old board. Never return an empty `dogs` array as if
+   it were an answer.
+5. Repoint consumers **with the GAS fallback kept**, through the dual-model pipeline
+   (source edits): `tv-plans/index.html` and the tablet's `BOARDING_PLANS_API_URL`. Note
+   `scripts/check_contract.js` asserts those endpoint constants across three files — update
+   the contract FIRST, then the copies.
+6. Token rework (per-consumer credentials replacing the shared `ft-k9-board-2024-sec`) was
+   always the tail of Phase 4 and is untouched.
+
+### Timing note recorded at the pause
+The owner's stated reason for it being a safe window ("it's the weekend") did not hold: it
+was **Friday evening**, and for a boarding business **weekends are peak occupancy**, not
+quiet. The build was done anyway at the owner's explicit override — safely, because Stage A
+touches nothing live. **The step that genuinely needs a quiet window is step 5**, the
+repoint. Check the live board is empty first:
+`curl -H 'Content-Type: application/json' -d '{"action":"getSessionVersion"}' https://auto.thefairytails.co.uk/webhook/feeding-session`
 
 ## Findings worth keeping
 
