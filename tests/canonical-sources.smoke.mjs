@@ -15,18 +15,16 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..');
-// The sibling repo becomes a publish target; it still exists on disk until the
-// folder-merge endgame. NOTE: this suite runs BOTH from the real repo
-// (…\CODING\Feeding manager_Telegram) and from a worktree
-// (…\CODING\_worktrees\<repo>--<task>), which sits one level deeper — so probe
-// both candidates rather than assuming a fixed depth.
-const sibling = (() => {
-  for (const c of [
-    resolve(repoRoot, '..', 'Dog feed requirement display'),
-    resolve(repoRoot, '..', '..', 'Dog feed requirement display'),
-  ]) if (existsSync(c)) return c;
-  return resolve(repoRoot, '..', 'Dog feed requirement display'); // report a clear miss
-})();
+// FOLDER MERGE, 2026-08-21: the sibling folder `CODING\Dog feed requirement display`
+// is GONE. It was only ever a local clone of the `fooddata` publish target, and the
+// publisher clones fooddata fresh into a temp dir every time, so nothing needed it.
+//
+// The published page is now verified against what GitHub ACTUALLY SERVES, which is
+// strictly better than reading a local clone: a local clone goes stale the moment
+// publish_plans_tv.sh pushes via its temp clone (that bit us on 2026-08-20 — the check
+// failed against a stale working copy rather than against Pages).
+const PUBLISHED_URL = 'https://raw.githubusercontent.com/Fairytails123/fooddata/main/index.html';
+const sibling = null; // retired; kept as an explicit null so any stray use fails loudly
 
 // Pinned 2026-08-20. The TV page the kennel display actually serves.
 // CANONICAL = the repo's maintained TV page (the source of truth).
@@ -86,21 +84,26 @@ const skipSpawn = process.env.FTBOARD_SKIP_SPAWN === '1';
   // whether the TV is showing the current design. They diverge legitimately whenever the
   // source has moved ahead of the last publish — which is the state right now, because
   // the prescription-medication red styling has not been published yet.
-  const published = join(sibling, 'index.html');
-  report('publish artefact: sibling index.html still present (Pages serves it)',
-    existsSync(published));
-  report('publish artefact: it matches the pinned PUBLISHED page',
-    shaFileLF(published) === PUBLISHED_PAGE_SHA, `got ${String(shaFileLF(published)).slice(0, 16)}`);
-  // Not a failure — a visible statement of fact, so nobody has to guess whether the TV
-  // is current. Re-pin PUBLISHED_PAGE_SHA to the canonical hash after publishing.
-  const pending = shaFileLF(canonical) !== shaFileLF(published);
-  console.log(pending
-    ? 'NOTE  UNPUBLISHED CHANGES PENDING: the TV page source has moved ahead of what fooddata serves.\n' +
-      `      canonical=${String(shaFileLF(canonical)).slice(0, 16)}  published=${String(shaFileLF(published)).slice(0, 16)}\n` +
-      '      Publish with: bash scripts/publish_plans_tv.sh "msg"  (then refresh the TV browser)'
-    : 'NOTE  The TV page source and the published page are identical — the TV is current.');
+  // Fetch what GitHub actually serves. Network-dependent, so a failure to reach it is a
+  // LOUD skip rather than a false red — but a reachable-and-different page IS a failure.
+  const fetched = spawnSync('curl', ['-sS', '--max-time', '45', PUBLISHED_URL], { encoding: 'buffer' });
+  if (fetched.status !== 0 || !fetched.stdout || fetched.stdout.length === 0) {
+    skip('publish artefact: matches the pinned PUBLISHED page', 'could not reach GitHub (offline?)');
+  } else {
+    const publishedSha = shaBuf(lfNorm(fetched.stdout));
+    report('publish artefact: what fooddata serves matches the pinned PUBLISHED page',
+      publishedSha === PUBLISHED_PAGE_SHA, `got ${String(publishedSha).slice(0, 16)}`);
+    // Not a failure — a visible statement of fact, so nobody has to guess whether the TV
+    // is current. Re-pin PUBLISHED_PAGE_SHA only AFTER publishing.
+    console.log(shaFileLF(canonical) !== publishedSha
+      ? 'NOTE  UNPUBLISHED CHANGES PENDING: the TV page source has moved ahead of what fooddata serves.\n' +
+        `      canonical=${String(shaFileLF(canonical)).slice(0, 16)}  published=${String(publishedSha).slice(0, 16)}\n` +
+        '      Publish with: bash scripts/publish_plans_tv.sh "msg"  (then refresh the TV browser)'
+      : 'NOTE  The TV page source and the published page are identical — the TV is current.');
+  }
 
-  // No THIRD copy anywhere: scan both repos for any other file that looks like the TV page.
+  // No SECOND copy anywhere in this repo. (Before the 2026-08-21 folder merge this also
+  // scanned the sibling clone; that folder is gone, and its absence is asserted below.)
   const isTvPage = p => {
     const t = readText(p);
     return t !== null && t.includes('Boarding Feeding Board') && t.includes('API_TOKEN');
@@ -112,27 +115,40 @@ const skipSpawn = process.env.FTBOARD_SKIP_SPAWN === '1';
       if (['.git', 'node_modules', '.task', '.gate-evidence', '_worktrees'].includes(e.name)) continue;
       const r = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory()) walk(root, r);
-      else if (e.name.endsWith('.html') && isTvPage(join(root, r))) found.push(`${basename(root)}/${r}`);
+      else if (e.name.endsWith('.html') && isTvPage(join(root, r))) found.push(r);
     }
   };
-  walk(repoRoot); walk(sibling);
-  const expected = ['Feeding manager_Telegram/tv-plans/index.html',
-    'Dog feed requirement display/index.html'];
-  report('canonical: exactly TWO TV-page files exist (1 source + 1 publish artefact)',
-    found.length === 2 && expected.every(e => found.some(f => f.endsWith(e.split('/').slice(-2).join('/')))),
+  walk(repoRoot);
+  report('canonical: exactly ONE TV-page file exists in this repo',
+    found.length === 1 && found[0] === 'tv-plans/index.html',
     `found: ${found.join(', ') || 'none'}`);
+}
+
+// ---------------------------------------------------------------- 1b
+// folder-merge-is-complete (2026-08-21) — this must never silently regress
+{
+  const retired = [
+    resolve(repoRoot, '..', 'Dog feed requirement display'),
+    resolve(repoRoot, '..', '..', 'Dog feed requirement display'),
+  ];
+  const stillThere = retired.filter(p => existsSync(p));
+  report('folder merge: the retired Dog-feed-requirement-display folder is gone',
+    stillThere.length === 0, stillThere.join(', '));
+  // Its only local-only files were the PII capture and a settings file. The PII was
+  // disposed of at the merge (Kam's standing decision); if a copy ever reappears anywhere
+  // under CODING, that is a client-data problem, not an untidiness problem.
+  for (const p of retired) {
+    report(`folder merge: no live_api_sample.json at ${basename(dirname(p))}/${basename(p)}`,
+      !existsSync(join(p, 'live_api_sample.json')));
+  }
 }
 
 // ---------------------------------------------------------------- 2
 // harness-deduplicated
 {
-  report('dedup: sibling repo has NO tests/ directory', !existsSync(join(sibling, 'tests')),
-    'the duplicated harness must be gone');
-  const tracked = git(sibling, ['ls-files']);
-  report('dedup: sibling repo tracks no tests/ files',
-    tracked !== null && !tracked.split(/\r?\n/).some(f => f.startsWith('tests/')));
-
-  // The platform copy must be INTACT — deduplication must not have removed the survivor.
+  // The duplicated harness lived in the sibling folder, which no longer exists (asserted
+  // in 1b above). What remains to guard is that the SURVIVOR here is intact — a
+  // deduplication that removes the wrong copy is the real risk.
   const hDir = join(repoRoot, 'tests', 'tv-plans');
   report('dedup: platform harness intact (build_and_run.ps1)', existsSync(join(hDir, 'build_and_run.ps1')));
   report('dedup: platform checker intact (assert_results.ps1)', existsSync(join(hDir, 'assert_results.ps1')));
@@ -142,29 +158,26 @@ const skipSpawn = process.env.FTBOARD_SKIP_SPAWN === '1';
 }
 
 // ---------------------------------------------------------------- 3
-// sibling-is-publish-target-only
+// fooddata-is-publish-target-only
+// The redirect stubs live in the fooddata REPO (verified there at the 2026-08-20
+// consolidation, commit 34fd274) — there is no longer a local clone to read them from,
+// and re-fetching two docs over the network on every gate run would buy little. The
+// property that actually matters — that this repo holds the ONE maintained page and the
+// live page matches it — is asserted in block 1 against what GitHub serves.
 {
-  for (const doc of ['CLAUDE.md', 'HANDOVER.md']) {
-    const t = readText(join(sibling, doc));
-    report(`stub: sibling ${doc} exists`, t !== null);
-    if (t !== null) {
-      report(`stub: ${doc} says the repo is a publish target`, /publish target/i.test(t));
-      report(`stub: ${doc} names the canonical source location`, /tv-plans/i.test(t));
-      report(`stub: ${doc} names the publish command`, /publish_plans_tv\.sh/.test(t));
-      report(`stub: ${doc} is short (a stub, not a second manual)`, t.length < 4000, `${t.length} chars`);
-      // It must NOT still tell people to run a harness here or edit the page here.
-      report(`stub: ${doc} no longer points at a local tests\\ harness`,
-        !/tests[\\/]build_and_run\.ps1/.test(t));
-    }
-  }
+  const claudeMd = readText(join(repoRoot, 'CLAUDE.md')) || '';
+  report('publish target: CLAUDE.md states fooddata is a publish target only',
+    /fooddata/i.test(claudeMd) && /publish target/i.test(claudeMd));
+  report('publish target: CLAUDE.md names the publish command',
+    /publish_plans_tv\.sh/.test(claudeMd));
 }
 
 // ---------------------------------------------------------------- 4
 // no-competing-boarding-copy
 {
-  report('boarding: the sibling local mirror is gone',
-    !existsSync(join(sibling, 'supersetplanner&feed.gs')));
-  // And no copy has been smuggled into the platform repo.
+  // The sibling local mirror went with the folder (asserted in 1b). What must keep holding
+  // is that no boarding-script copy has been smuggled into THIS repo — the live Apps Script
+  // and Boardingplan are the only two places it may exist.
   const found = [];
   const walk = (root, rel = '') => {
     let entries; try { entries = readdirSync(join(root, rel), { withFileTypes: true }); } catch { return; }
@@ -221,16 +234,26 @@ const skipSpawn = process.env.FTBOARD_SKIP_SPAWN === '1';
 // ---------------------------------------------------------------- 7
 // protected-behaviour-holds
 {
-  // Client PII stays exactly where Kam decided it stays.
-  const pii = join(sibling, 'live_api_sample.json');
-  report('protected: live_api_sample.json still present in the sibling repo', existsSync(pii));
-  const ignored = spawnSync('git', ['-C', sibling, 'check-ignore', '-q', 'live_api_sample.json']);
-  report('protected: live_api_sample.json still gitignored', ignored.status === 0);
-
-  // The sibling publish artefact and its logo are untouched.
-  const sibTracked = git(sibling, ['status', '--porcelain', '--', 'index.html', 'assets']);
-  report('protected: sibling index.html + assets have no uncommitted change',
-    sibTracked !== null && sibTracked.trim() === '', (sibTracked || '').trim());
+  // Client PII: Kam's decision was "keep until the folder merge, then dispose". The merge
+  // happened 2026-08-21, so the correct state is now ABSENT — and it must not come back.
+  // Replays use tests/tv-plans/fixtures/api_sample.synthetic.json instead.
+  const piiFound = [];
+  const codingRoot = resolve(repoRoot, '..');
+  const scanForPii = (root, rel = '', depth = 0) => {
+    if (depth > 3) return;
+    let entries; try { entries = readdirSync(join(root, rel), { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (['.git', 'node_modules', '_worktrees', '.task'].includes(e.name)) continue;
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) scanForPii(root, r, depth + 1);
+      else if (e.name.toLowerCase() === 'live_api_sample.json') piiFound.push(r);
+    }
+  };
+  scanForPii(codingRoot);
+  report('protected: the PII capture live_api_sample.json is gone from CODING',
+    piiFound.length === 0, piiFound.join(', '));
+  report('protected: the synthetic replacement fixture is present',
+    existsSync(join(repoRoot, 'tests', 'tv-plans', 'fixtures', 'api_sample.synthetic.json')));
 
   // REMOVED 2026-08-20: "unchanged on this branch" guards.
   // They were correct scope-control for the canonical-sources TASK, but this suite runs
