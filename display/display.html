@@ -58,6 +58,11 @@
             --color-accent-2-800: #3d472b;
             --color-accent-2-900: #272e1b;
 
+            /* prescription medication danger */
+            --color-danger:      #b42318;
+            --color-danger-dark: #7a1710;
+            --color-danger-text: #fff5f4;
+
             /* dark ground */
             --tv-bg:         #201e1d;
             --tv-card:       #2e2b25;
@@ -331,6 +336,27 @@
         .dog-card.status-none .dog-name   { color: var(--color-accent-100); }
         .dog-card.status-none .dog-status { color: var(--color-accent-200); }
 
+        /* Medication recolours only: the status-owned left border and every card
+           dimension remain untouched so calculateScale() keeps the same fit. */
+        .dog-card.has-rx {
+            background: var(--color-danger);
+            color: var(--color-danger-text);
+            box-shadow: 0 0 calc(2.4 * var(--u)) rgba(180, 35, 24, .48);
+        }
+        .dog-card.has-rx .dog-name,
+        .dog-card.has-rx .dog-status { color: var(--color-danger-text); }
+        .rx-badge {
+            flex: none;
+            padding: calc(.28 * var(--u)) calc(.62 * var(--u));
+            border-radius: 99px;
+            background: var(--color-danger-text);
+            color: var(--color-danger-dark);
+            font-size: calc(1.35 * var(--u));
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: .04em;
+        }
+
         /* ----------------------------------------------------------- footer */
         .footer {
             flex: none;
@@ -464,6 +490,8 @@
         const OFFLINE_THRESHOLD = 2;          // consecutive failures before "connection lost"
         const BANNER_TICK_MS = 5000;          // staleness banner refresh cadence
         const CLOCK_TICK_MS = 20000;          // the TV sits on this page for days
+        const PLAN_FETCH_TIMEOUT_MS = 45000;  // the boarding feed legitimately exceeds 12s
+        const PLAN_FETCH_INTERVAL_MS = 15 * 60 * 1000;
         const REFRESH_MODE_NORMAL = 'normal';
         const REFRESH_MODE_FAST = 'fast';
 
@@ -488,6 +516,7 @@
         };
 
         const gasFetch = frmMakeGasFetch(FRM_CONTRACT.FETCH_TIMEOUT_MS);
+        const planFetch = frmMakeGasFetch(PLAN_FETCH_TIMEOUT_MS);
 
         function esc(value) {
             return String(value === null || value === undefined ? '' : value)
@@ -524,11 +553,116 @@
         // (the pre-2026-07-26 display had none and could apply out-of-order responses).
         let loadInFlight = false;
         let versionCheckInFlight = false;
+        let planFetchInFlight = false;
+
+        // Nothing known at boot is deliberately unavailable, never an empty plan.
+        // Failed reads retain `dogs` and `capturedAt` as the last-known-good snapshot,
+        // but set ok:false so callers cannot mistake that snapshot for current data.
+        let rxPlanState = {
+            ok: false,
+            dogs: null,
+            error: 'Medication data is unavailable.',
+            capturedAt: 0
+        };
+        let planMonitoringStarted = false;
 
         let currentRefreshMode = REFRESH_MODE_NORMAL;
         let refreshTimer = null;
         let versionCheckTimer = null;
         let fastModeTimer = null;
+        let planFetchTimer = null;
+
+        function normRxName(value) {
+            return String(value === null || value === undefined ? '' : value)
+                .replace(/[\u2018\u2019\u02bc\u2032`]/g, "'")
+                .toLowerCase()
+                .trim()
+                .replace(/\s+/g, ' ');
+        }
+
+        function chooseRxPlanCandidate(candidates) {
+            if (!candidates.length) return null;
+            if (candidates.length === 1) return candidates[0];
+            const medicationDog = candidates.find(planDog =>
+                planDog && planDog.feeding && planDog.feeding.medication === 'Yes');
+            return medicationDog || candidates[0];
+        }
+
+        function applyRxPlanResult(result, errorText) {
+            const usable = result && typeof result === 'object' &&
+                Array.isArray(result.dogs) && result.dogs.length > 0;
+            if (usable) {
+                rxPlanState = {
+                    ok: true,
+                    dogs: result.dogs,
+                    error: result.feedingError ? String(result.feedingError) : '',
+                    capturedAt: Date.now()
+                };
+                return true;
+            }
+
+            const lastGoodDogs = rxPlanState && Array.isArray(rxPlanState.dogs)
+                ? rxPlanState.dogs : null;
+            const lastGoodCapturedAt = lastGoodDogs && rxPlanState.capturedAt
+                ? rxPlanState.capturedAt : 0;
+            rxPlanState = {
+                ok: false,
+                dogs: lastGoodDogs,
+                error: String(errorText || (result && result.feedingError) ||
+                    'Medication data is unavailable.'),
+                capturedAt: lastGoodCapturedAt
+            };
+            return false;
+        }
+
+        function rxPlanFor(dog) {
+            if (!dog || !rxPlanState || !rxPlanState.ok || !Array.isArray(rxPlanState.dogs)) return null;
+            const boardName = normRxName(dog.matchedName || dog.inputName);
+            if (!boardName) return null;
+
+            const exact = [];
+            rxPlanState.dogs.forEach(planDog => {
+                if (!planDog || !planDog.dogName) return;
+                const dogName = normRxName(planDog.dogName);
+                const fullName = normRxName(planDog.dogName + ' ' + (planDog.ownerSurname || ''));
+                if ((boardName === dogName || boardName === fullName) && !exact.includes(planDog)) {
+                    exact.push(planDog);
+                }
+            });
+            if (exact.length) return chooseRxPlanCandidate(exact);
+
+            const tokens = boardName.split(' ');
+            if (tokens.length < 2) return null;
+            const wanted = tokens[0] + '|' + tokens[tokens.length - 1];
+            const firstLast = {};
+            rxPlanState.dogs.forEach(planDog => {
+                if (!planDog || !planDog.dogName) return;
+                const dogTokens = normRxName(planDog.dogName).split(' ').filter(Boolean);
+                if (!dogTokens.length) return;
+                const ownerTokens = normRxName(planDog.ownerSurname || '').split(' ').filter(Boolean);
+                const keys = {};
+                keys[dogTokens[0] + '|' + dogTokens[dogTokens.length - 1]] = true;
+                if (ownerTokens.length) {
+                    keys[dogTokens[0] + '|' + ownerTokens[ownerTokens.length - 1]] = true;
+                }
+                Object.keys(keys).forEach(key => {
+                    if (!firstLast[key]) firstLast[key] = [];
+                    firstLast[key].push(planDog);
+                });
+            });
+            return firstLast[wanted] ? chooseRxPlanCandidate(firstLast[wanted]) : null;
+        }
+
+        function dogNeedsRx(dog) {
+            if (dog && dog.prescription === true) return true;
+            if (!rxPlanState || !rxPlanState.ok) return null;
+            const planDog = rxPlanFor(dog);
+            return !!(planDog && planDog.feeding && planDog.feeding.medication === 'Yes');
+        }
+
+        function rxPlanUnavailable() {
+            return !rxPlanState || rxPlanState.ok !== true;
+        }
 
         // ============================================
         // INITIALIZATION
@@ -540,6 +674,7 @@
             updateClock();
             loadData();
             startAutoRefresh();
+            startRxPlanPolling();
             setInterval(updateStaleBanner, BANNER_TICK_MS);
             setInterval(updateClock, CLOCK_TICK_MS);
         });
@@ -630,6 +765,18 @@
             const unconfirmedMs = Date.now() - lastSuccessAt;
             const stale = unconfirmedMs > STALE_AFTER_MS;
 
+            if (planMonitoringStarted && rxPlanUnavailable()) {
+                const snapshotTime = rxPlanState && rxPlanState.capturedAt
+                    ? ' Last confirmed plan: ' + hhmm(new Date(rxPlanState.capturedAt)) + '.' : '';
+                const boardWarning = disconnected || stale
+                    ? ' The feeding board connection may also be stale.' : '';
+                text.textContent = 'Medication data unavailable - check the feeding plan before handling dogs.' +
+                    snapshotTime + boardWarning;
+                banner.classList.add('visible');
+                if (page) page.classList.add('is-stale');
+                return;
+            }
+
             if (!disconnected && !stale) {
                 banner.classList.remove('visible');
                 if (page) page.classList.remove('is-stale');
@@ -648,6 +795,37 @@
         // ============================================
         // DATA LOADING
         // ============================================
+
+        function startRxPlanPolling() {
+            if (planFetchTimer) clearInterval(planFetchTimer);
+            planMonitoringStarted = true;
+            updateStaleBanner();
+            fetchRxPlan();
+            planFetchTimer = setInterval(fetchRxPlan, PLAN_FETCH_INTERVAL_MS);
+        }
+
+        async function fetchRxPlan() {
+            if (planFetchInFlight) return;
+            planFetchInFlight = true;
+            try {
+                const url = FRM_CONTRACT.BOARDING_PLANS_URL +
+                    '?mode=feeding&token=' + FRM_CONTRACT.BOARDING_PLANS_TOKEN;
+                const response = await planFetch(url, { method: 'GET', redirect: 'follow' });
+                if (!response || response.ok === false) {
+                    throw new Error('Medication plan request failed');
+                }
+                const result = await response.json();
+                applyRxPlanResult(result, 'Medication plan returned no dogs.');
+            } catch (error) {
+                const detail = error && error.message ? error.message : String(error);
+                applyRxPlanResult(null, 'Medication data is unavailable: ' + detail);
+                console.warn('[rx-plan] ' + rxPlanState.error);
+            } finally {
+                planFetchInFlight = false;
+                renderAllPens();
+                updateStaleBanner();
+            }
+        }
 
         async function loadData() {
             if (loadInFlight) return;
@@ -754,8 +932,12 @@
                 const status = dog.status || 'all';
                 const statusLabel = STATUS_LABELS[status] || status;
                 const style = STATUS_STYLE[status] || STATUS_STYLE.all;
+                const needsRx = dogNeedsRx(dog);
 
                 let indicators = '';
+                if (needsRx === true) {
+                    indicators += '<span class="rx-badge" title="Prescription medication">MED</span>';
+                }
                 if (dog.prescription) {
                     indicators += '<span class="indicator indicator-p" title="Medicine">' +
                         '<svg width="60%" height="60%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><rect x="2.5" y="8.5" width="19" height="7" rx="3.5" transform="rotate(-45 12 12)"></rect><path d="M8.5 8.5 15.5 15.5"></path></svg></span>';
@@ -766,7 +948,7 @@
                 }
 
                 return `
-                    <div class="dog-card status-${esc(status)} tv-in${style.alarm ? ' tv-alarm' : ''}">
+                    <div class="dog-card status-${esc(status)} tv-in${style.alarm ? ' tv-alarm' : ''}${needsRx === true ? ' has-rx' : ''}">
                         <span class="dog-name">${esc(displayName)}</span>
                         ${indicators}
                         <span class="dog-status">${statusLabel}</span>

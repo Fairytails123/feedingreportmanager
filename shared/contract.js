@@ -33,6 +33,11 @@ var FRM_CONTRACT = {
   // each with its own generous budget.
   SESSION_API_URL: 'https://auto.thefairytails.co.uk/webhook/feeding-session',
 
+  // Boarding-plan medication feed. The tablet and both TV surfaces must use the
+  // same endpoint and access token so their prescription warnings agree.
+  BOARDING_PLANS_URL: 'https://script.google.com/macros/s/AKfycbz2kc3lJbrGk7lw9jVcZMdUrPWjRx4qBARM8YVAIARhYAlQwCzlhHBbKswyOcVHytmB7Q/exec',
+  BOARDING_PLANS_TOKEN: 'ft-k9-board-2024-sec',
+
   // Pen IDs in canonical feeding order. Hardcoded in the tablet (PEN_ORDER + the
   // submit-preview penOrder) and the backend (sendTelegramSummary penOrder +
   // submitReport penRank) — keep every copy identical.
