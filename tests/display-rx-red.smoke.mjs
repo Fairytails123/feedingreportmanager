@@ -462,6 +462,29 @@ if (skipSpawn) {
         'no seam exposing unjoined plan-medication dogs');
     }
 
+    // C36 (G2): an UNEXPECTED same-day empty roster must not silently erase a confirmed one.
+    // 09:00 healthy -> 09:15 a 200 with dogs:[] and no error would otherwise drop every red
+    // with no warning at all - a confident 'no medication' produced by a transition.
+    api.planState = { ok: false, dogs: null, error: '', capturedAt: 0 };
+    api.applyPlan({ dogs: PLAN_DOGS.map(x => ({ ...x })) }, '');
+    api.applyPlan({ success: true, dogs: [] }, '');
+    {
+      const kept = api.planState && Array.isArray(api.planState.dogs) ? api.planState.dogs.length : -1;
+      const still = api.needs(mk('Wilbur Quandle', false));
+      report('outage a same-day empty roster does not erase a confirmed one',
+        api.planState.ok === false && kept === PLAN_DOGS.length && still === true,
+        `ok=${api.planState.ok} (want false) kept=${kept} (want ${PLAN_DOGS.length}) needs=${JSON.stringify(still)} (want true)`);
+    }
+
+    // C37 (G2): ...and the guard must RELEASE, or a stale snapshot pins it forever.
+    // A quiet day whose last good snapshot came from an earlier local day is legitimate.
+    api.planState = { ok: true, dogs: PLAN_DOGS.map(x => ({ ...x })), error: '',
+                      capturedAt: Date.now() - 36 * 3600 * 1000 };
+    api.applyPlan({ success: true, dogs: [] }, '');
+    report('outage the same-day guard releases on a later day',
+      api.planState.ok === true,
+      `a snapshot from a previous day must not pin the guard; ok=${api.planState.ok} (want true)`);
+
     // C34 (F7): dark-brown-on-red is illegible at TV distance and redundant beside MED.
     if (api.pens && api.renderPen) {
       api.planState = goodPlan();
@@ -497,7 +520,9 @@ if (skipSpawn) {
                      'banner a degraded payload raises the medication warning',
                      'banner a plan medication dog that joins no tile is named',
                      'render a red tile suppresses the duplicate prescription pill',
-                     'banner an empty board raises no unjoined-medication warning']) {
+                     'banner an empty board raises no unjoined-medication warning',
+                     'outage a same-day empty roster does not erase a confirmed one',
+                     'outage the same-day guard releases on a later day']) {
       report(n, false, 'the display rx surface does not exist yet');
     }
   }
