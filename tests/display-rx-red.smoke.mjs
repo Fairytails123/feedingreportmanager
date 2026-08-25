@@ -220,6 +220,10 @@ function bootDisplay() {
     '  get sessionTimeout() { return FRM_CONTRACT.FETCH_TIMEOUT_MS; },',
     '  get pens() { return typeof pens !== "undefined" ? pens : undefined; },',
     '  renderPen: (...a) => (typeof renderPen !== "undefined" ? renderPen(...a) : undefined),',
+    '  setPlanMonitoring: (v) => { if (typeof planMonitoringStarted !== "undefined") planMonitoringStarted = v; },',
+    '  setConnState: (o) => { if (o && typeof consecutiveFailures !== "undefined" && "failures" in o) consecutiveFailures = o.failures; if (o && typeof lastSuccessAt !== "undefined" && "lastSuccessAt" in o) lastSuccessAt = o.lastSuccessAt; },',
+    '  updateBanner: (...a) => (typeof updateStaleBanner !== "undefined" ? updateStaleBanner(...a) : undefined),',
+    '  unjoined: (...a) => (typeof rxPlanMedicationDogsNotOnBoard !== "undefined" ? rxPlanMedicationDogsNotOnBoard(...a) : undefined),',
     '};',
   ].join('\n');
 
@@ -357,6 +361,95 @@ if (skipSpawn) {
       report('parity display and tablet agree on the same inputs', false,
         'tablet harness rx surface unavailable');
     }
+
+    // --- R1: defects found by the independent blind review (criteria 28-34) ---
+    // Each one below is a real failure mode of the FIRST implementation, not a style point.
+
+    // C28 (F1): the medication warning must EXTEND the board banner, never replace it.
+    // The two feeds fail together (one TV network drop), so replacing the board message
+    // destroys the as-of time in exactly the scenario the banner exists for.
+    if (api.updateBanner && api.setPlanMonitoring && api.setConnState) {
+      api.setPlanMonitoring(true);
+      api.planState = { ok: false, dogs: null, error: 'plan feed down', capturedAt: 0 };
+      api.setConnState({ failures: 5, lastSuccessAt: Date.now() - 20 * 60 * 1000 });
+      api.updateBanner();
+      const bt = (d.els['staleBannerText'] || {}).textContent || '';
+      report('banner medication warning composes with the board connection message',
+        /medication/i.test(bt) && /d{1,2}:d{2}/.test(bt)
+          && /connection lost|board as it stood/i.test(bt),
+        `the board message AND its as-of time must survive; banner read: "${bt.slice(0, 240)}"`);
+      api.setPlanMonitoring(false);
+      api.setConnState({ failures: 0, lastSuccessAt: Date.now() });
+    } else {
+      report('banner medication warning composes with the board connection message', false,
+        'harness cannot reach planMonitoringStarted / consecutiveFailures / updateStaleBanner');
+    }
+
+    // C29 (F2): an empty roster with NO error is a legitimate quiet boarding day.
+    // Treating it as an outage parks a red banner on the TV all day (the 2026-08-04 pattern).
+    api.planState = { ok: false, dogs: null, error: '', capturedAt: 0 };
+    api.applyPlan({ success: true, dogs: [] }, '');
+    report('outage an empty dogs array with no error is a quiet day',
+      !!(api.planState && api.planState.ok === true),
+      `a quiet day must not black the TV out; planState=${JSON.stringify(api.planState)}`);
+
+    // C30 (F2): ...but an empty roster that CARRIES an error is still an outage.
+    api.planState = { ok: false, dogs: null, error: '', capturedAt: 0 };
+    api.applyPlan({ success: false, dogs: [], error: 'upstream failed' }, '');
+    report('outage an empty dogs array carrying an error is an outage',
+      !!(api.planState && api.planState.ok === false),
+      `planState=${JSON.stringify(api.planState)}`);
+
+    // C31 (F3): the retained snapshot must be READ, positively, during an outage -
+    // otherwise the TV drops the red while the tablet keeps it, and the two disagree again.
+    api.planState = { ok: false, dogs: null, error: '', capturedAt: 0 };
+    api.applyPlan({ dogs: PLAN_DOGS.map(x => ({ ...x })) }, '');
+    api.applyPlan(null, 'plan feed down');
+    {
+      const medDog = api.needs(mk('Wilbur Quandle', false));
+      const plainDog = api.needs(mk('Luna Snorkelby', false));
+      report('outage a retained snapshot still reads red for a plan-declared dog',
+        medDog === true && plainDog === null,
+        `med=${JSON.stringify(medDog)} (want true) plain=${JSON.stringify(plainDog)} (want null, never false)`);
+    }
+
+    // C32 (F5): a degraded payload (dogs AND an error) can be missing a dog's feeding
+    // block entirely, so it must warn rather than answer a confident "no medication".
+    api.planState = { ok: false, dogs: null, error: '', capturedAt: 0 };
+    api.applyPlan({ dogs: PLAN_DOGS.map(x => ({ ...x })), error: 'partial roster' }, '');
+    report('banner a degraded payload raises the medication warning',
+      api.planState.ok === true && api.unavailable() === true,
+      `ok=${api.planState.ok} (want true) unavailable=${api.unavailable()} (want true)`);
+
+    // C33 (F6): a medication dog the join misses is currently invisible on the TV.
+    // The tablet names these; the surface staff read at the kennel must too.
+    if (api.unjoined && api.unjoined() !== undefined) {
+      api.planState = goodPlan();
+      if (api.pens) Object.keys(api.pens).forEach(k => { api.pens[k].length = 0; });
+      const names = api.unjoined() || [];
+      report('banner a plan medication dog that joins no tile is named',
+        Array.isArray(names) && names.some(n => /Wilbur/i.test(String(n))),
+        `got ${JSON.stringify(names).slice(0, 200)}`);
+    } else {
+      report('banner a plan medication dog that joins no tile is named', false,
+        'no seam exposing unjoined plan-medication dogs (expected rxPlanMedicationDogsNotOnBoard())');
+    }
+
+    // C34 (F7): dark-brown-on-red is illegible at TV distance and redundant beside MED.
+    if (api.pens && api.renderPen) {
+      api.planState = goodPlan();
+      api.pens['top-4'] = api.pens['top-4'] || [];
+      api.pens['top-4'].length = 0;
+      api.pens['top-4'].push(mk('Wilbur Quandle', true));  // staff-flagged AND plan-declared
+      api.renderPen('top-4');
+      const h = (d.els['dogs-top-4'] || {}).innerHTML || '';
+      report('render a red tile suppresses the duplicate prescription pill',
+        /has-rx/.test(h) && /MED/.test(h) && !/indicator-p/.test(h),
+        h.replace(/s+/g, ' ').slice(0, 220));
+    } else {
+      report('render a red tile suppresses the duplicate prescription pill', false,
+        'renderPen/pens not reachable');
+    }
   } else {
     for (const n of ['union staff-flagged prescription reads red', 'union plan-declared medication reads red',
                      'union both reads red', 'union neither does not read red',
@@ -369,7 +462,14 @@ if (skipSpawn) {
                      'budget the plan fetch does not use the session timeout',
                      'render a medication dog tile carries has-rx and a MED badge',
                      'render a non-medication dog tile carries neither',
-                     'parity display and tablet agree on the same inputs']) {
+                     'parity display and tablet agree on the same inputs',
+                     'banner medication warning composes with the board connection message',
+                     'outage an empty dogs array with no error is a quiet day',
+                     'outage an empty dogs array carrying an error is an outage',
+                     'outage a retained snapshot still reads red for a plan-declared dog',
+                     'banner a degraded payload raises the medication warning',
+                     'banner a plan medication dog that joins no tile is named',
+                     'render a red tile suppresses the duplicate prescription pill']) {
       report(n, false, 'the display rx surface does not exist yet');
     }
   }
