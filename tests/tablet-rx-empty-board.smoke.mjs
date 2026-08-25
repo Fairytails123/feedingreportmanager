@@ -17,6 +17,7 @@
 // Env: FTBOARD_SKIP_SPAWN=1 loudly skips spawn-dependent checks (Codex sandbox).
 // OPERATOR-owned: the implementer must not edit this file.
 
+import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
@@ -27,7 +28,19 @@ const repoRoot = resolve(here, '..');
 const require = createRequire(import.meta.url);
 const skipSpawn = process.env.FTBOARD_SKIP_SPAWN === '1';
 const TABLET = join(repoRoot, 'index.html');
-const BASH = process.env.FTBOARD_BASH || 'bash';
+// Bare 'bash' resolves to the distro-less System32 WSL shim when the gate spawns this
+// from PowerShell (execvpe(/bin/bash) failed). Probe Git Bash explicitly - same helper
+// the other suites in tests/ already use.
+function resolveBash() {
+  if (process.env.FTBOARD_BASH && existsSync(process.env.FTBOARD_BASH)) return process.env.FTBOARD_BASH;
+  for (const c of [
+    join(process.env.ProgramFiles || 'C:/Program Files', 'Git', 'bin', 'bash.exe'),
+    join(process.env['ProgramFiles(x86)'] || 'C:/Program Files (x86)', 'Git', 'bin', 'bash.exe'),
+    join(process.env.LOCALAPPDATA || '', 'Programs', 'Git', 'bin', 'bash.exe'),
+  ]) if (existsSync(c)) return c;
+  return 'bash';
+}
+const BASH = resolveBash();
 
 let failures = 0, checks = 0;
 function report(name, ok, detail) {
@@ -58,7 +71,7 @@ const planDog = (dogName, ownerSurname, medication, over) => ({
 const PLAN_DOGS = [
   planDog('Wilbur', 'Quandle', 'Yes'),
   planDog('Bolt', 'Quixling', 'Yes'),
-  planDog('Luna', 'Snorkelby', 'No'),
+  planDog('Pinwheel', 'Snorkelby', 'No'),
   // arrives tomorrow -> must never be named, even in-round
   planDog('Marbles', 'Fenwicket', 'Yes', { checkIn: isoDay(1), checkOut: isoDay(4) }),
 ];
@@ -107,7 +120,7 @@ if (!h || !h.rx || !h.rx.present) {
 
   // 2 - the in-round signal must survive: a live board missing a medication dog still warns.
   h.rx.planState = goodPlan();
-  h.setDogs([boardDog('Luna Snorkelby')]);   // on the board, NOT on medication
+  h.setDogs([boardDog('Pinwheel Snorkelby')]);   // on the board, NOT on medication
   {
     const got = names();
     report('in-round a missing medication dog is still named',
@@ -126,7 +139,7 @@ if (!h || !h.rx || !h.rx.present) {
 
   // 4 - not staying today => never named (guards the date filter while we are in here).
   h.rx.planState = goodPlan();
-  h.setDogs([boardDog('Luna Snorkelby')]);
+  h.setDogs([boardDog('Pinwheel Snorkelby')]);
   {
     const got = names();
     report('a dog arriving tomorrow is not named', !got.some(n => /Marbles/i.test(n)),
@@ -135,7 +148,7 @@ if (!h || !h.rx || !h.rx.present) {
 
   // 5 - an unavailable plan is handled by the existing guard and must stay unchanged.
   h.rx.planState = { ok: false, dogs: null, fetchedAt: 0 };
-  h.setDogs([boardDog('Luna Snorkelby')]);
+  h.setDogs([boardDog('Pinwheel Snorkelby')]);
   {
     const got = h.rx.unjoined() || [];
     report('an unavailable plan returns empty', got.length === 0,
