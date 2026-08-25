@@ -36,6 +36,8 @@ function check(cond, label) {
 console.log('== contract sanity ==');
 check(C && typeof C.APPS_SCRIPT_URL === 'string' && /\/exec$/.test(C.APPS_SCRIPT_URL), 'contract exposes APPS_SCRIPT_URL (/exec)');
 check(C && typeof C.SESSION_API_URL === 'string' && /^https:\/\/auto\.thefairytails\.co\.uk\/webhook\//.test(C.SESSION_API_URL), 'contract exposes SESSION_API_URL (n8n VPS webhook)');
+check(C && typeof C.BOARDING_PLANS_URL === 'string' && /\/exec$/.test(C.BOARDING_PLANS_URL), 'contract exposes BOARDING_PLANS_URL (/exec)');
+check(C && typeof C.BOARDING_PLANS_TOKEN === 'string' && C.BOARDING_PLANS_TOKEN.length > 0, 'contract exposes BOARDING_PLANS_TOKEN');
 check(Array.isArray(C.PEN_ORDER) && C.PEN_ORDER.length === 10, 'contract PEN_ORDER has 10 pens');
 check(Array.isArray(C.STATUS_VALUES) && C.STATUS_VALUES.length === 5, 'contract STATUS_VALUES has 5 values');
 check(typeof ctx.frmMakeGasFetch === 'function' && typeof ctx.frmSortPenByPosition === 'function', 'contract helpers present');
@@ -77,13 +79,23 @@ check(tabletPlansApiUrl !== undefined && tabletPlansApiUrl === backendCheckinout
 check(tabletPlansApiUrl !== undefined && tabletPlansApiUrl === tvPlansApiUrl, 'index.html BOARDING_PLANS_API_URL identical to tv-plans/index.html API_URL');
 check(tabletPlansApiToken !== undefined && tabletPlansApiToken === backendCheckinoutToken, 'index.html BOARDING_PLANS_API_TOKEN identical to feeding_report_backend_v2.js CONFIG.CHECKINOUT_TOKEN');
 check(tabletPlansApiToken !== undefined && tabletPlansApiToken === tvPlansApiToken, 'index.html BOARDING_PLANS_API_TOKEN identical to tv-plans/index.html API_TOKEN');
+check(C.BOARDING_PLANS_URL === tabletPlansApiUrl, 'contract BOARDING_PLANS_URL identical to index.html BOARDING_PLANS_API_URL');
+check(C.BOARDING_PLANS_URL === tvPlansApiUrl, 'contract BOARDING_PLANS_URL identical to tv-plans/index.html API_URL');
+check(C.BOARDING_PLANS_URL === backendCheckinoutUrl, 'contract BOARDING_PLANS_URL identical to feeding_report_backend_v2.js CONFIG.CHECKINOUT_URL');
+check(C.BOARDING_PLANS_TOKEN === tabletPlansApiToken, 'contract BOARDING_PLANS_TOKEN identical to index.html BOARDING_PLANS_API_TOKEN');
+check(C.BOARDING_PLANS_TOKEN === tvPlansApiToken, 'contract BOARDING_PLANS_TOKEN identical to tv-plans/index.html API_TOKEN');
+check(C.BOARDING_PLANS_TOKEN === backendCheckinoutToken, 'contract BOARDING_PLANS_TOKEN identical to feeding_report_backend_v2.js CONFIG.CHECKINOUT_TOKEN');
 
 console.log('== display (display/display.html) defines NO copies ==');
 check(display.includes('// @@CONTRACT@@'), 'display has the @@CONTRACT@@ injection marker');
 check(!display.includes('const APPS_SCRIPT_URL'), 'display does not define its own APPS_SCRIPT_URL');
 check(!display.includes(C.APPS_SCRIPT_URL), 'display does not hardcode the exec URL');
 check(!display.includes(C.SESSION_API_URL), 'display does not hardcode the n8n webhook URL');
+check(!display.includes(C.BOARDING_PLANS_URL), 'display does not hardcode the boarding-plans URL');
+check(!display.includes(C.BOARDING_PLANS_TOKEN), 'display does not hardcode the boarding-plans token');
 check(display.includes('FRM_CONTRACT.SESSION_API_URL'), 'display reads the session from n8n via the contract');
+check(display.includes('FRM_CONTRACT.BOARDING_PLANS_URL'), 'display reads the boarding-plans URL via FRM_CONTRACT.BOARDING_PLANS_URL');
+check(display.includes('FRM_CONTRACT.BOARDING_PLANS_TOKEN'), 'display reads the boarding-plans token via FRM_CONTRACT.BOARDING_PLANS_TOKEN');
 check(!/APPS_SCRIPT_URL\s*\+\s*'\?action=/.test(display), 'display makes NO session calls to Apps Script');
 check(!/pens\s*=\s*\{\s*'top-1'/.test(display), 'display builds pens from FRM_CONTRACT.PEN_ORDER, not a literal');
 check(display.includes('FRM_CONTRACT.PEN_ORDER') && display.includes('frmSortPenByPosition') && display.includes('frmMakeGasFetch(FRM_CONTRACT.FETCH_TIMEOUT_MS)'), 'display consumes the contract helpers');
