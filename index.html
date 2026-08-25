@@ -1505,6 +1505,7 @@
 
         function rxMedicationPlanDogsNotOnBoard() {
             if (!rxPlanState || !rxPlanState.ok || !Array.isArray(rxPlanState.dogs)) return [];
+            if (!dogs.length) return [];
             const joined = new Set();
             dogs.forEach(dog => {
                 const planDog = rxPlanFor(dog);
