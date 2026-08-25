@@ -435,16 +435,31 @@ if (skipSpawn) {
 
     // C33 (F6): a medication dog the join misses is currently invisible on the TV.
     // The tablet names these; the surface staff read at the kennel must too.
+    // NOTE: a ROUND MUST BE IN PROGRESS for this warning to mean anything. The board is
+    // cleared by submitReport after every meal, so an empty board is the normal
+    // between-rounds state - warning then would light the banner most of the day
+    // (owner decision, Kam 25/08: suppress on an empty board, keep the in-round signal).
+    // C35 below pins the empty-board half; this one pins the in-round half.
     if (api.unjoined && api.unjoined() !== undefined) {
       api.planState = goodPlan();
       if (api.pens) Object.keys(api.pens).forEach(k => { api.pens[k].length = 0; });
+      api.pens['top-1'].push(mk('Luna Snorkelby', false));   // a round IS in progress
       const names = api.unjoined() || [];
       report('banner a plan medication dog that joins no tile is named',
         Array.isArray(names) && names.some(n => /Wilbur/i.test(String(n))),
-        `got ${JSON.stringify(names).slice(0, 200)}`);
+        `a medication dog missing from a LIVE board must still be named; got ${JSON.stringify(names).slice(0, 200)}`);
+
+      // C35: ...but say nothing when no round is in progress.
+      Object.keys(api.pens).forEach(k => { api.pens[k].length = 0; });
+      const quiet = api.unjoined() || [];
+      report('banner an empty board raises no unjoined-medication warning',
+        Array.isArray(quiet) && quiet.length === 0,
+        `the board is cleared after every meal - warning between rounds lights the banner all day; got ${JSON.stringify(quiet).slice(0, 200)}`);
     } else {
       report('banner a plan medication dog that joins no tile is named', false,
         'no seam exposing unjoined plan-medication dogs (expected rxPlanMedicationDogsNotOnBoard())');
+      report('banner an empty board raises no unjoined-medication warning', false,
+        'no seam exposing unjoined plan-medication dogs');
     }
 
     // C34 (F7): dark-brown-on-red is illegible at TV distance and redundant beside MED.
@@ -481,7 +496,8 @@ if (skipSpawn) {
                      'outage a retained snapshot still reads red for a plan-declared dog',
                      'banner a degraded payload raises the medication warning',
                      'banner a plan medication dog that joins no tile is named',
-                     'render a red tile suppresses the duplicate prescription pill']) {
+                     'render a red tile suppresses the duplicate prescription pill',
+                     'banner an empty board raises no unjoined-medication warning']) {
       report(n, false, 'the display rx surface does not exist yet');
     }
   }
