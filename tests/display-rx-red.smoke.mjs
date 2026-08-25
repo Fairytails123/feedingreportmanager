@@ -220,6 +220,10 @@ function bootDisplay() {
     '  get sessionTimeout() { return FRM_CONTRACT.FETCH_TIMEOUT_MS; },',
     '  get pens() { return typeof pens !== "undefined" ? pens : undefined; },',
     '  renderPen: (...a) => (typeof renderPen !== "undefined" ? renderPen(...a) : undefined),',
+    '  setPlanMonitoring: (v) => { if (typeof planMonitoringStarted !== "undefined") planMonitoringStarted = v; },',
+    '  setConnState: (o) => { if (o && typeof consecutiveFailures !== "undefined" && "failures" in o) consecutiveFailures = o.failures; if (o && typeof lastSuccessAt !== "undefined" && "lastSuccessAt" in o) lastSuccessAt = o.lastSuccessAt; },',
+    '  updateBanner: (...a) => (typeof updateStaleBanner !== "undefined" ? updateStaleBanner(...a) : undefined),',
+    '  unjoined: (...a) => (typeof rxPlanMedicationDogsNotOnBoard !== "undefined" ? rxPlanMedicationDogsNotOnBoard(...a) : undefined),',
     '};',
   ].join('\n');
 
@@ -233,12 +237,24 @@ const mk = (name, presc) => ({
   possibleMatches: [], status: 'all', prescription: !!presc, prescriptionComment: '',
   supplements: false, supplementTypes: [], penId: 'top-1', position: 1000,
 });
+// Fixture stays are computed RELATIVE TO TODAY on purpose. rxPlanDogIsStayingToday()
+// compares against the real clock, so hard-coded dates would silently expire and this
+// permanent suite would then fail every LATER task in this repo (the gate runs them all).
+const isoDay = (offset) => {
+  const t = new Date();
+  t.setDate(t.getDate() + offset);
+  const p2 = (n) => String(n).padStart(2, '0');
+  return t.getFullYear() + '-' + p2(t.getMonth() + 1) + '-' + p2(t.getDate());
+};
+const STAY_FROM = isoDay(-1);   // checked in yesterday
+const STAY_TO   = isoDay(2);    // leaves the day after tomorrow -> staying today, any day
+
 const PLAN_DOGS = [
-  { dogName: 'Wilbur', ownerSurname: 'Quandle', checkIn: '2026-08-25', checkOut: '2026-08-27',
+  { dogName: 'Wilbur', ownerSurname: 'Quandle', checkIn: STAY_FROM, checkOut: STAY_TO,
     type: 'boarding', feeding: { medication: 'Yes', medicationDetails: 'Twice daily tablet' } },
-  { dogName: 'Bolt', ownerSurname: 'Quixling', checkIn: '2026-08-24', checkOut: '2026-08-30',
+  { dogName: 'Bolt', ownerSurname: 'Quixling', checkIn: STAY_FROM, checkOut: STAY_TO,
     type: 'boarding', feeding: { medication: 'Yes', medicationDetails: 'x' } },
-  { dogName: 'Luna', ownerSurname: 'Snorkelby', checkIn: '2026-08-24', checkOut: '2026-08-30',
+  { dogName: 'Luna', ownerSurname: 'Snorkelby', checkIn: STAY_FROM, checkOut: STAY_TO,
     type: 'boarding', feeding: { medication: 'No', medicationDetails: '' } },
 ];
 const goodPlan = () => ({ ok: true, dogs: PLAN_DOGS.map(d => ({ ...d })), error: '', capturedAt: Date.now() });
@@ -357,6 +373,133 @@ if (skipSpawn) {
       report('parity display and tablet agree on the same inputs', false,
         'tablet harness rx surface unavailable');
     }
+
+    // --- R1: defects found by the independent blind review (criteria 28-34) ---
+    // Each one below is a real failure mode of the FIRST implementation, not a style point.
+
+    // C28 (F1): the medication warning must EXTEND the board banner, never replace it.
+    // The two feeds fail together (one TV network drop), so replacing the board message
+    // destroys the as-of time in exactly the scenario the banner exists for.
+    if (api.updateBanner && api.setPlanMonitoring && api.setConnState) {
+      api.setPlanMonitoring(true);
+      api.planState = { ok: false, dogs: null, error: 'plan feed down', capturedAt: 0 };
+      api.setConnState({ failures: 5, lastSuccessAt: Date.now() - 20 * 60 * 1000 });
+      api.updateBanner();
+      const bt = (d.els['staleBannerText'] || {}).textContent || '';
+      report('banner medication warning composes with the board connection message',
+        /medication/i.test(bt) && /\d{1,2}:\d{2}/.test(bt)
+          && /connection lost|board as it stood/i.test(bt),
+        `the board message AND its as-of time must survive; banner read: "${bt.slice(0, 240)}"`);
+      api.setPlanMonitoring(false);
+      api.setConnState({ failures: 0, lastSuccessAt: Date.now() });
+    } else {
+      report('banner medication warning composes with the board connection message', false,
+        'harness cannot reach planMonitoringStarted / consecutiveFailures / updateStaleBanner');
+    }
+
+    // C29 (F2): an empty roster with NO error is a legitimate quiet boarding day.
+    // Treating it as an outage parks a red banner on the TV all day (the 2026-08-04 pattern).
+    api.planState = { ok: false, dogs: null, error: '', capturedAt: 0 };
+    api.applyPlan({ success: true, dogs: [] }, '');
+    report('outage an empty dogs array with no error is a quiet day',
+      !!(api.planState && api.planState.ok === true),
+      `a quiet day must not black the TV out; planState=${JSON.stringify(api.planState)}`);
+
+    // C30 (F2): ...but an empty roster that CARRIES an error is still an outage.
+    api.planState = { ok: false, dogs: null, error: '', capturedAt: 0 };
+    api.applyPlan({ success: false, dogs: [], error: 'upstream failed' }, '');
+    report('outage an empty dogs array carrying an error is an outage',
+      !!(api.planState && api.planState.ok === false),
+      `planState=${JSON.stringify(api.planState)}`);
+
+    // C31 (F3): the retained snapshot must be READ, positively, during an outage -
+    // otherwise the TV drops the red while the tablet keeps it, and the two disagree again.
+    api.planState = { ok: false, dogs: null, error: '', capturedAt: 0 };
+    api.applyPlan({ dogs: PLAN_DOGS.map(x => ({ ...x })) }, '');
+    api.applyPlan(null, 'plan feed down');
+    {
+      const medDog = api.needs(mk('Wilbur Quandle', false));
+      const plainDog = api.needs(mk('Luna Snorkelby', false));
+      report('outage a retained snapshot still reads red for a plan-declared dog',
+        medDog === true && plainDog === null,
+        `med=${JSON.stringify(medDog)} (want true) plain=${JSON.stringify(plainDog)} (want null, never false)`);
+    }
+
+    // C32 (F5): a degraded payload (dogs AND an error) can be missing a dog's feeding
+    // block entirely, so it must warn rather than answer a confident "no medication".
+    api.planState = { ok: false, dogs: null, error: '', capturedAt: 0 };
+    api.applyPlan({ dogs: PLAN_DOGS.map(x => ({ ...x })), error: 'partial roster' }, '');
+    report('banner a degraded payload raises the medication warning',
+      api.planState.ok === true && api.unavailable() === true,
+      `ok=${api.planState.ok} (want true) unavailable=${api.unavailable()} (want true)`);
+
+    // C33 (F6): a medication dog the join misses is currently invisible on the TV.
+    // The tablet names these; the surface staff read at the kennel must too.
+    // NOTE: a ROUND MUST BE IN PROGRESS for this warning to mean anything. The board is
+    // cleared by submitReport after every meal, so an empty board is the normal
+    // between-rounds state - warning then would light the banner most of the day
+    // (owner decision, Kam 25/08: suppress on an empty board, keep the in-round signal).
+    // C35 below pins the empty-board half; this one pins the in-round half.
+    if (api.unjoined && api.unjoined() !== undefined) {
+      api.planState = goodPlan();
+      if (api.pens) Object.keys(api.pens).forEach(k => { api.pens[k].length = 0; });
+      api.pens['top-1'].push(mk('Luna Snorkelby', false));   // a round IS in progress
+      const names = api.unjoined() || [];
+      report('banner a plan medication dog that joins no tile is named',
+        Array.isArray(names) && names.some(n => /Wilbur/i.test(String(n))),
+        `a medication dog missing from a LIVE board must still be named; got ${JSON.stringify(names).slice(0, 200)}`);
+
+      // C35: ...but say nothing when no round is in progress.
+      Object.keys(api.pens).forEach(k => { api.pens[k].length = 0; });
+      const quiet = api.unjoined() || [];
+      report('banner an empty board raises no unjoined-medication warning',
+        Array.isArray(quiet) && quiet.length === 0,
+        `the board is cleared after every meal - warning between rounds lights the banner all day; got ${JSON.stringify(quiet).slice(0, 200)}`);
+    } else {
+      report('banner a plan medication dog that joins no tile is named', false,
+        'no seam exposing unjoined plan-medication dogs (expected rxPlanMedicationDogsNotOnBoard())');
+      report('banner an empty board raises no unjoined-medication warning', false,
+        'no seam exposing unjoined plan-medication dogs');
+    }
+
+    // C36 (G2): an UNEXPECTED same-day empty roster must not silently erase a confirmed one.
+    // 09:00 healthy -> 09:15 a 200 with dogs:[] and no error would otherwise drop every red
+    // with no warning at all - a confident 'no medication' produced by a transition.
+    api.planState = { ok: false, dogs: null, error: '', capturedAt: 0 };
+    api.applyPlan({ dogs: PLAN_DOGS.map(x => ({ ...x })) }, '');
+    api.applyPlan({ success: true, dogs: [] }, '');
+    {
+      const kept = api.planState && Array.isArray(api.planState.dogs) ? api.planState.dogs.length : -1;
+      const still = api.needs(mk('Wilbur Quandle', false));
+      report('outage a same-day empty roster does not erase a confirmed one',
+        api.planState.ok === false && kept === PLAN_DOGS.length && still === true,
+        `ok=${api.planState.ok} (want false) kept=${kept} (want ${PLAN_DOGS.length}) needs=${JSON.stringify(still)} (want true)`);
+    }
+
+    // C37 (G2): ...and the guard must RELEASE, or a stale snapshot pins it forever.
+    // A quiet day whose last good snapshot came from an earlier local day is legitimate.
+    api.planState = { ok: true, dogs: PLAN_DOGS.map(x => ({ ...x })), error: '',
+                      capturedAt: Date.now() - 36 * 3600 * 1000 };
+    api.applyPlan({ success: true, dogs: [] }, '');
+    report('outage the same-day guard releases on a later day',
+      api.planState.ok === true,
+      `a snapshot from a previous day must not pin the guard; ok=${api.planState.ok} (want true)`);
+
+    // C34 (F7): dark-brown-on-red is illegible at TV distance and redundant beside MED.
+    if (api.pens && api.renderPen) {
+      api.planState = goodPlan();
+      api.pens['top-4'] = api.pens['top-4'] || [];
+      api.pens['top-4'].length = 0;
+      api.pens['top-4'].push(mk('Wilbur Quandle', true));  // staff-flagged AND plan-declared
+      api.renderPen('top-4');
+      const h = (d.els['dogs-top-4'] || {}).innerHTML || '';
+      report('render a red tile suppresses the duplicate prescription pill',
+        /has-rx/.test(h) && /\bMED\b/.test(h) && !/indicator-p/.test(h),
+        h.replace(/\s+/g, ' ').slice(0, 220));
+    } else {
+      report('render a red tile suppresses the duplicate prescription pill', false,
+        'renderPen/pens not reachable');
+    }
   } else {
     for (const n of ['union staff-flagged prescription reads red', 'union plan-declared medication reads red',
                      'union both reads red', 'union neither does not read red',
@@ -369,7 +512,17 @@ if (skipSpawn) {
                      'budget the plan fetch does not use the session timeout',
                      'render a medication dog tile carries has-rx and a MED badge',
                      'render a non-medication dog tile carries neither',
-                     'parity display and tablet agree on the same inputs']) {
+                     'parity display and tablet agree on the same inputs',
+                     'banner medication warning composes with the board connection message',
+                     'outage an empty dogs array with no error is a quiet day',
+                     'outage an empty dogs array carrying an error is an outage',
+                     'outage a retained snapshot still reads red for a plan-declared dog',
+                     'banner a degraded payload raises the medication warning',
+                     'banner a plan medication dog that joins no tile is named',
+                     'render a red tile suppresses the duplicate prescription pill',
+                     'banner an empty board raises no unjoined-medication warning',
+                     'outage a same-day empty roster does not erase a confirmed one',
+                     'outage the same-day guard releases on a later day']) {
       report(n, false, 'the display rx surface does not exist yet');
     }
   }

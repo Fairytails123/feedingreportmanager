@@ -423,7 +423,7 @@
                 <span class="stale-lamp tv-lamp" aria-hidden="true">
                     <svg width="62%" height="62%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"><path d="M12 7.5v6.2"></path><path d="M12 17.4h.01"></path></svg>
                 </span>
-                <span class="stale-title">NOT LIVE</span>
+                <span class="stale-title" id="staleBannerTitle">NOT LIVE</span>
                 <span class="stale-divider"></span>
                 <span class="stale-text" id="staleBannerText">Board as it stood earlier</span>
             </div>
@@ -492,6 +492,8 @@
         const CLOCK_TICK_MS = 20000;          // the TV sits on this page for days
         const PLAN_FETCH_TIMEOUT_MS = 45000;  // the boarding feed legitimately exceeds 12s
         const PLAN_FETCH_INTERVAL_MS = 15 * 60 * 1000;
+        const PLAN_FETCH_RETRY_BASE_MS = 30 * 1000;
+        const PLAN_FETCH_RETRY_MAX_MS = 5 * 60 * 1000;
         const REFRESH_MODE_NORMAL = 'normal';
         const REFRESH_MODE_FAST = 'fast';
 
@@ -571,6 +573,7 @@
         let versionCheckTimer = null;
         let fastModeTimer = null;
         let planFetchTimer = null;
+        let planFetchFailureCount = 0;
 
         function normRxName(value) {
             return String(value === null || value === undefined ? '' : value)
@@ -589,26 +592,40 @@
         }
 
         function applyRxPlanResult(result, errorText) {
-            const usable = result && typeof result === 'object' &&
-                Array.isArray(result.dogs) && result.dogs.length > 0;
+            const isObject = !!result && typeof result === 'object' && !Array.isArray(result);
+            const dogsOk = isObject && Array.isArray(result.dogs);
+            const payloadError = isObject && (result.feedingError || result.error)
+                ? String(result.feedingError || result.error) : '';
+            const lastGoodDogs = rxPlanState && Array.isArray(rxPlanState.dogs)
+                ? rxPlanState.dogs : null;
+            const lastGoodCapturedAt = lastGoodDogs && rxPlanState.capturedAt
+                ? rxPlanState.capturedAt : 0;
+            const suspiciousEmptyTransition = dogsOk && result.dogs.length === 0 &&
+                !payloadError && lastGoodDogs && lastGoodDogs.length > 0 &&
+                lastGoodCapturedAt > 0 &&
+                rxLocalDate(new Date(lastGoodCapturedAt)) === rxLocalDate(new Date());
+            // An empty array without an error is a legitimate quiet day. A non-empty
+            // partial roster remains usable, but its error keeps the TV warning visible.
+            // Within one local day, an unexpected empty response cannot erase a
+            // previously confirmed non-empty roster without raising the warning.
+            const usable = dogsOk && (result.dogs.length > 0 || !payloadError) &&
+                !suspiciousEmptyTransition;
             if (usable) {
                 rxPlanState = {
                     ok: true,
                     dogs: result.dogs,
-                    error: result.feedingError ? String(result.feedingError) : '',
+                    error: payloadError,
                     capturedAt: Date.now()
                 };
                 return true;
             }
 
-            const lastGoodDogs = rxPlanState && Array.isArray(rxPlanState.dogs)
-                ? rxPlanState.dogs : null;
-            const lastGoodCapturedAt = lastGoodDogs && rxPlanState.capturedAt
-                ? rxPlanState.capturedAt : 0;
             rxPlanState = {
                 ok: false,
                 dogs: lastGoodDogs,
-                error: String(errorText || (result && result.feedingError) ||
+                error: String(suspiciousEmptyTransition
+                    ? 'Medication plan unexpectedly returned no dogs; keeping today\'s last confirmed plan.'
+                    : errorText || payloadError ||
                     'Medication data is unavailable.'),
                 capturedAt: lastGoodCapturedAt
             };
@@ -616,7 +633,7 @@
         }
 
         function rxPlanFor(dog) {
-            if (!dog || !rxPlanState || !rxPlanState.ok || !Array.isArray(rxPlanState.dogs)) return null;
+            if (!dog || !rxPlanState || !Array.isArray(rxPlanState.dogs)) return null;
             const boardName = normRxName(dog.matchedName || dog.inputName);
             if (!boardName) return null;
 
@@ -655,13 +672,51 @@
 
         function dogNeedsRx(dog) {
             if (dog && dog.prescription === true) return true;
-            if (!rxPlanState || !rxPlanState.ok) return null;
             const planDog = rxPlanFor(dog);
-            return !!(planDog && planDog.feeding && planDog.feeding.medication === 'Yes');
+            if (planDog && planDog.feeding && planDog.feeding.medication === 'Yes') return true;
+            // A retained or degraded snapshot may prove medication positively, but it
+            // must never prove that medication is absent.
+            if (rxPlanUnavailable()) return null;
+            return false;
         }
 
         function rxPlanUnavailable() {
-            return !rxPlanState || rxPlanState.ok !== true;
+            return !rxPlanState || rxPlanState.ok !== true || !!rxPlanState.error;
+        }
+
+        function rxLocalDate(now) {
+            const date = now || new Date();
+            const pad = value => String(value).padStart(2, '0');
+            return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate());
+        }
+
+        function rxPlanDogIsStayingToday(planDog) {
+            const today = rxLocalDate();
+            return !!(planDog && planDog.checkIn && planDog.checkOut &&
+                planDog.checkIn <= today && planDog.checkOut > today);
+        }
+
+        function rxPlanDogDisplayName(planDog) {
+            return [planDog && planDog.dogName, planDog && planDog.ownerSurname]
+                .filter(Boolean).join(' ').trim();
+        }
+
+        function rxPlanMedicationDogsNotOnBoard() {
+            if (!rxPlanState || !rxPlanState.ok || !Array.isArray(rxPlanState.dogs)) return [];
+            const boardHasDogs = FRM_CONTRACT.PEN_ORDER.some(penId =>
+                (pens[penId] || []).length > 0);
+            if (!boardHasDogs) return [];
+            const joined = new Set();
+            FRM_CONTRACT.PEN_ORDER.forEach(penId => {
+                (pens[penId] || []).forEach(dog => {
+                    const planDog = rxPlanFor(dog);
+                    if (planDog) joined.add(planDog);
+                });
+            });
+            return rxPlanState.dogs.filter(planDog =>
+                rxPlanDogIsStayingToday(planDog) && planDog.feeding &&
+                planDog.feeding.medication === 'Yes' && !joined.has(planDog))
+                .map(rxPlanDogDisplayName).filter(Boolean);
         }
 
         // ============================================
@@ -759,35 +814,46 @@
 
         function updateStaleBanner() {
             const banner = document.getElementById('staleBanner');
+            const title = document.getElementById('staleBannerTitle');
             const text = document.getElementById('staleBannerText');
             const page = document.getElementById('tvContainer');
             const disconnected = consecutiveFailures >= OFFLINE_THRESHOLD;
             const unconfirmedMs = Date.now() - lastSuccessAt;
             const stale = unconfirmedMs > STALE_AFTER_MS;
+            const boardUnavailable = disconnected || stale;
+            const parts = [];
+
+            if (boardUnavailable) {
+                const ageMin = Math.round(unconfirmedMs / 60000);
+                const ageText = ageMin < 1 ? 'moments ago' : ageMin + ' min ago';
+                const asOf = hhmm(new Date(lastSuccessAt));
+                parts.push((disconnected ? 'Connection lost — showing the board from ' : 'Board as it stood at ')
+                    + asOf + ' (' + ageText + ')');
+            }
 
             if (planMonitoringStarted && rxPlanUnavailable()) {
                 const snapshotTime = rxPlanState && rxPlanState.capturedAt
                     ? ' Last confirmed plan: ' + hhmm(new Date(rxPlanState.capturedAt)) + '.' : '';
-                const boardWarning = disconnected || stale
-                    ? ' The feeding board connection may also be stale.' : '';
-                text.textContent = 'Medication data unavailable - check the feeding plan before handling dogs.' +
-                    snapshotTime + boardWarning;
-                banner.classList.add('visible');
-                if (page) page.classList.add('is-stale');
-                return;
+                parts.push('Medication data unavailable — check the feeding plan before handling dogs.' +
+                    snapshotTime);
             }
 
-            if (!disconnected && !stale) {
+            if (planMonitoringStarted && rxPlanState && rxPlanState.ok) {
+                const unjoinedNames = rxPlanMedicationDogsNotOnBoard();
+                if (unjoinedNames.length) {
+                    parts.push('Medication dogs not matched to the board: ' + unjoinedNames.join(', ') +
+                        ' — check the feeding plan.');
+                }
+            }
+
+            if (!parts.length) {
                 banner.classList.remove('visible');
                 if (page) page.classList.remove('is-stale');
                 return;
             }
 
-            const ageMin = Math.round(unconfirmedMs / 60000);
-            const ageText = ageMin < 1 ? 'moments ago' : ageMin + ' min ago';
-            const asOf = hhmm(new Date(lastSuccessAt));
-            text.textContent = (disconnected ? 'Connection lost — showing the board from ' : 'Board as it stood at ')
-                + asOf + ' (' + ageText + ')';
+            if (title) title.textContent = boardUnavailable ? 'NOT LIVE' : 'CHECK MEDS';
+            text.textContent = parts.join(' ');
             banner.classList.add('visible');
             if (page) page.classList.add('is-stale');
         }
@@ -797,16 +863,32 @@
         // ============================================
 
         function startRxPlanPolling() {
-            if (planFetchTimer) clearInterval(planFetchTimer);
+            if (planFetchTimer) clearTimeout(planFetchTimer);
+            planFetchTimer = null;
+            planFetchFailureCount = 0;
             planMonitoringStarted = true;
             updateStaleBanner();
             fetchRxPlan();
-            planFetchTimer = setInterval(fetchRxPlan, PLAN_FETCH_INTERVAL_MS);
+        }
+
+        function scheduleRxPlanFetch(succeeded) {
+            if (planFetchTimer) clearTimeout(planFetchTimer);
+            if (succeeded) {
+                planFetchFailureCount = 0;
+                planFetchTimer = setTimeout(fetchRxPlan, PLAN_FETCH_INTERVAL_MS);
+                return;
+            }
+            planFetchFailureCount++;
+            const retryDelay = Math.min(
+                PLAN_FETCH_RETRY_BASE_MS * Math.pow(2, planFetchFailureCount - 1),
+                PLAN_FETCH_RETRY_MAX_MS);
+            planFetchTimer = setTimeout(fetchRxPlan, retryDelay);
         }
 
         async function fetchRxPlan() {
             if (planFetchInFlight) return;
             planFetchInFlight = true;
+            let succeeded = false;
             try {
                 const url = FRM_CONTRACT.BOARDING_PLANS_URL +
                     '?mode=feeding&token=' + FRM_CONTRACT.BOARDING_PLANS_TOKEN;
@@ -815,13 +897,15 @@
                     throw new Error('Medication plan request failed');
                 }
                 const result = await response.json();
-                applyRxPlanResult(result, 'Medication plan returned no dogs.');
+                applyRxPlanResult(result, 'Medication plan returned unusable data.');
+                succeeded = !rxPlanUnavailable();
             } catch (error) {
                 const detail = error && error.message ? error.message : String(error);
                 applyRxPlanResult(null, 'Medication data is unavailable: ' + detail);
                 console.warn('[rx-plan] ' + rxPlanState.error);
             } finally {
                 planFetchInFlight = false;
+                scheduleRxPlanFetch(succeeded);
                 renderAllPens();
                 updateStaleBanner();
             }
@@ -938,7 +1022,7 @@
                 if (needsRx === true) {
                     indicators += '<span class="rx-badge" title="Prescription medication">MED</span>';
                 }
-                if (dog.prescription) {
+                if (dog.prescription && needsRx !== true) {
                     indicators += '<span class="indicator indicator-p" title="Medicine">' +
                         '<svg width="60%" height="60%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><rect x="2.5" y="8.5" width="19" height="7" rx="3.5" transform="rotate(-45 12 12)"></rect><path d="M8.5 8.5 15.5 15.5"></path></svg></span>';
                 }
