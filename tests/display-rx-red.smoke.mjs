@@ -237,12 +237,24 @@ const mk = (name, presc) => ({
   possibleMatches: [], status: 'all', prescription: !!presc, prescriptionComment: '',
   supplements: false, supplementTypes: [], penId: 'top-1', position: 1000,
 });
+// Fixture stays are computed RELATIVE TO TODAY on purpose. rxPlanDogIsStayingToday()
+// compares against the real clock, so hard-coded dates would silently expire and this
+// permanent suite would then fail every LATER task in this repo (the gate runs them all).
+const isoDay = (offset) => {
+  const t = new Date();
+  t.setDate(t.getDate() + offset);
+  const p2 = (n) => String(n).padStart(2, '0');
+  return t.getFullYear() + '-' + p2(t.getMonth() + 1) + '-' + p2(t.getDate());
+};
+const STAY_FROM = isoDay(-1);   // checked in yesterday
+const STAY_TO   = isoDay(2);    // leaves the day after tomorrow -> staying today, any day
+
 const PLAN_DOGS = [
-  { dogName: 'Wilbur', ownerSurname: 'Quandle', checkIn: '2026-08-25', checkOut: '2026-08-27',
+  { dogName: 'Wilbur', ownerSurname: 'Quandle', checkIn: STAY_FROM, checkOut: STAY_TO,
     type: 'boarding', feeding: { medication: 'Yes', medicationDetails: 'Twice daily tablet' } },
-  { dogName: 'Bolt', ownerSurname: 'Quixling', checkIn: '2026-08-24', checkOut: '2026-08-30',
+  { dogName: 'Bolt', ownerSurname: 'Quixling', checkIn: STAY_FROM, checkOut: STAY_TO,
     type: 'boarding', feeding: { medication: 'Yes', medicationDetails: 'x' } },
-  { dogName: 'Luna', ownerSurname: 'Snorkelby', checkIn: '2026-08-24', checkOut: '2026-08-30',
+  { dogName: 'Luna', ownerSurname: 'Snorkelby', checkIn: STAY_FROM, checkOut: STAY_TO,
     type: 'boarding', feeding: { medication: 'No', medicationDetails: '' } },
 ];
 const goodPlan = () => ({ ok: true, dogs: PLAN_DOGS.map(d => ({ ...d })), error: '', capturedAt: Date.now() });
