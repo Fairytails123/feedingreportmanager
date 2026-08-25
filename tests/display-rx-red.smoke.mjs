@@ -375,7 +375,7 @@ if (skipSpawn) {
       api.updateBanner();
       const bt = (d.els['staleBannerText'] || {}).textContent || '';
       report('banner medication warning composes with the board connection message',
-        /medication/i.test(bt) && /d{1,2}:d{2}/.test(bt)
+        /medication/i.test(bt) && /\d{1,2}:\d{2}/.test(bt)
           && /connection lost|board as it stood/i.test(bt),
         `the board message AND its as-of time must survive; banner read: "${bt.slice(0, 240)}"`);
       api.setPlanMonitoring(false);
@@ -444,8 +444,8 @@ if (skipSpawn) {
       api.renderPen('top-4');
       const h = (d.els['dogs-top-4'] || {}).innerHTML || '';
       report('render a red tile suppresses the duplicate prescription pill',
-        /has-rx/.test(h) && /MED/.test(h) && !/indicator-p/.test(h),
-        h.replace(/s+/g, ' ').slice(0, 220));
+        /has-rx/.test(h) && /\bMED\b/.test(h) && !/indicator-p/.test(h),
+        h.replace(/\s+/g, ' ').slice(0, 220));
     } else {
       report('render a red tile suppresses the duplicate prescription pill', false,
         'renderPen/pens not reachable');
