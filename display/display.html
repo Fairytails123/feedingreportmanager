@@ -596,9 +596,20 @@
             const dogsOk = isObject && Array.isArray(result.dogs);
             const payloadError = isObject && (result.feedingError || result.error)
                 ? String(result.feedingError || result.error) : '';
+            const lastGoodDogs = rxPlanState && Array.isArray(rxPlanState.dogs)
+                ? rxPlanState.dogs : null;
+            const lastGoodCapturedAt = lastGoodDogs && rxPlanState.capturedAt
+                ? rxPlanState.capturedAt : 0;
+            const suspiciousEmptyTransition = dogsOk && result.dogs.length === 0 &&
+                !payloadError && lastGoodDogs && lastGoodDogs.length > 0 &&
+                lastGoodCapturedAt > 0 &&
+                rxLocalDate(new Date(lastGoodCapturedAt)) === rxLocalDate(new Date());
             // An empty array without an error is a legitimate quiet day. A non-empty
             // partial roster remains usable, but its error keeps the TV warning visible.
-            const usable = dogsOk && (result.dogs.length > 0 || !payloadError);
+            // Within one local day, an unexpected empty response cannot erase a
+            // previously confirmed non-empty roster without raising the warning.
+            const usable = dogsOk && (result.dogs.length > 0 || !payloadError) &&
+                !suspiciousEmptyTransition;
             if (usable) {
                 rxPlanState = {
                     ok: true,
@@ -609,14 +620,12 @@
                 return true;
             }
 
-            const lastGoodDogs = rxPlanState && Array.isArray(rxPlanState.dogs)
-                ? rxPlanState.dogs : null;
-            const lastGoodCapturedAt = lastGoodDogs && rxPlanState.capturedAt
-                ? rxPlanState.capturedAt : 0;
             rxPlanState = {
                 ok: false,
                 dogs: lastGoodDogs,
-                error: String(errorText || payloadError ||
+                error: String(suspiciousEmptyTransition
+                    ? 'Medication plan unexpectedly returned no dogs; keeping today\'s last confirmed plan.'
+                    : errorText || payloadError ||
                     'Medication data is unavailable.'),
                 capturedAt: lastGoodCapturedAt
             };
@@ -694,6 +703,9 @@
 
         function rxPlanMedicationDogsNotOnBoard() {
             if (!rxPlanState || !rxPlanState.ok || !Array.isArray(rxPlanState.dogs)) return [];
+            const boardHasDogs = FRM_CONTRACT.PEN_ORDER.some(penId =>
+                (pens[penId] || []).length > 0);
+            if (!boardHasDogs) return [];
             const joined = new Set();
             FRM_CONTRACT.PEN_ORDER.forEach(penId => {
                 (pens[penId] || []).forEach(dog => {
