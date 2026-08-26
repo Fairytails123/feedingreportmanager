@@ -150,6 +150,8 @@ function load(indexPath) {
         isAcked: (...a) => (typeof isRxAcked !== 'undefined' ? isRxAcked(...a) : undefined),
         markAcked: (...a) => (typeof markRxAcked !== 'undefined' ? markRxAcked(...a) : undefined),
         normName: (...a) => (typeof normRxName !== 'undefined' ? normRxName(...a) : undefined),
+        unjoined: (...a) => (typeof rxMedicationPlanDogsNotOnBoard !== 'undefined' ? rxMedicationPlanDogsNotOnBoard(...a) : undefined),
+        displayName: (...a) => (typeof rxPlanDogDisplayName !== 'undefined' ? rxPlanDogDisplayName(...a) : undefined),
         get planState() { return typeof rxPlanState !== 'undefined' ? rxPlanState : undefined; },
         set planState(v) { if (typeof rxPlanState !== 'undefined') rxPlanState = v; },
       },
