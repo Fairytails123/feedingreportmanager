@@ -88,6 +88,11 @@ if (Test-Path -LiteralPath $outDir -PathType Container) {
     Remove-FtbKnownPath (Join-Path $outDir "dom_$scenarioName.html")
     Remove-FtbKnownPath (Join-Path $outDir "harness_$scenarioName.html")
     Remove-FtbKnownPath (Join-Path $outDir "profile_$scenarioName")
+    # Retry profiles (_r2, _r3) created by the launch-retry below must be cleaned too, or
+    # they accumulate in the temp test directory forever. Keep in lockstep with $maxAttempts.
+    for ($r = 2; $r -le 3; $r++) {
+      Remove-FtbKnownPath (Join-Path $outDir ("profile_" + $scenarioName + "_r" + $r))
+    }
   }
 }
 

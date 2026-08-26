@@ -1,5 +1,9 @@
 # Changelog
 
+> ⚠️ **Every commit SHA quoted anywhere in this file is VOID.** Git history was rewritten and
+> force-pushed on 2026-08-25 to purge client PII, so all pre-rewrite SHAs resolve to nothing.
+> Treat them as labels for "the change that did X", never as things you can `git show`.
+
 ## 2026-08-25/26 — prescription medication was invisible on the PENS TV, the screen staff actually read
 
 **Symptom (Kam):** "Ziggy Jones has been added correctly and appears on the tablet with a red
@@ -797,7 +801,7 @@ repo: the **Telegram bot token** in `feeding_report_backend_v2.js` `CONFIG`. The
 secrets out of the tracked files without rotating** — so the working tree / HEAD no longer carry them while
 the values stay valid. Honest limit (documented, not glossed): moving a key that's already been pushed to a
 public repo does **not** un-leak it — both were scraped and remain in git history (commit `b5e6e68`).
-Rotation is the only complete fix and was deferred; history was deliberately **not** rewritten.
+Rotation is the only complete fix and was deferred; history was deliberately **not** rewritten *for the secrets*. ⚠️ **Superseded in part:** history WAS rewritten and force-pushed on 2026-08-25 to purge unrelated client PII (see the entry at the top of this file). The leaked SECRETS are still in history; what changed is that every SHA quoted on this page is now void.
 
 ### JotForm API key → n8n credential
 

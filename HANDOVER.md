@@ -1,6 +1,6 @@
 # HANDOVER — read this before changing anything
 
-Last updated: **2026-08-05**, after the @37 UI redesign (which sits on top of the @36 migration). This file exists to stop the next session
+Last updated: **2026-08-26**, after the prescription-medication port to the pens TV, the tablet empty-board fix, and the TV-harness retry that had been making the gate a ~30% coin flip (see §4). Previous major revision: 2026-08-05, the @37 UI redesign on top of the @36 migration. This file exists to stop the next session
 undoing work that took a day and an outage to get right. It is deliberately short. If you read
 nothing else, read §1 and §2.
 
@@ -53,7 +53,7 @@ lost"*: the tablet was aborting **itself**.
 | set `overscroll-behavior` back to `none` (or `contain`) on html/body | don't — either value kills **vertical scroll chaining out of `.fb-pens`** on Android Chrome, so a populated board can't scroll at all (2026-08-10 bug). It must stay `x: none; y: auto`. `node tests/android-scroll.smoke.mjs` proves it either way. |
 | touch `enqueue` / `flushQueue` | read `CLAUDE.md` → the `it.inFlight` bullet, and `tests/tablet.test.js` **S22**. Merging into a payload that is already on the wire loses the edit silently. |
 | change the n8n session workflow | `LIVE=1 bash tests/run.sh` **after**. Validation is not proof — see §4. |
-| change `index.html`, the backend, or the display | `bash tests/run.sh` — must be green. Never hand-deploy. |
+| change `index.html`, the backend, or the display | `bash tests/run.sh` — must be green. Never hand-deploy. ⚠️ **That is necessary, not sufficient:** `run.sh` runs NO `tests/*.smoke.mjs`, and `gate.ps1` is not in this repo. If you touched anything medication-related also run `node tests/display-rx-red.smoke.mjs` (38) and `node tests/tablet-rx-empty-board.smoke.mjs` (6) — they are the ONLY guards for the red. |
 | touch polling, the queue, or connection state | read `CLAUDE.md` → "One version-first poll" and `tests/tablet.test.js` **S13/S14/S21**. Those three tests are the guard rails. |
 | move a session call back to Apps Script | don't — S21 and `check_contract.js` will fail, and they are right. |
 | add a reader of the Session **tab** | don't — it is a mirror. Read n8n. |
@@ -66,7 +66,7 @@ lost"*: the tablet was aborting **itself**.
 | change `tv-plans/index.html` | its hash is pinned in three suites as `CANONICAL_PAGE_SHA`, and `PUBLISHED_PAGE_SHA` separately tracks what Pages serves. Re-pin CANONICAL when you change the page; re-pin PUBLISHED only **after** publishing. Never "fix" a mismatch by copying one over the other — the mismatch is the signal that the TV is out of date. |
 | write or edit any `tests/*.smoke.mjs` | read `tests/README.md` → "Rules for writing a suite here". A permanent suite may only assert what stays true after its own task merges, and must fail for the right reason. |
 | change the **pens TV** (`display/display.html`) | it is no longer a pure n8n reader — since 2026-08-25 it fetches the boarding-plan feed on its own timer, with its own in-flight guard and its own 45 s budget. Read §5's medication invariants, run `node tests/display-rx-red.smoke.mjs` (38 checks), then publish with `bash scripts/publish_display.sh` — and **refresh the browser on the TV itself**. |
-| "tidy up" the empty-board guard in `rxMedicationPlanDogsNotOnBoard()` (either surface) | don't. It looks like a redundant early return. It is the fix for a safety warning that otherwise fires **most of the day**, because the board is cleared after every meal. `tests/tablet-rx-empty-board.smoke.mjs` C1 and `display-rx-red.smoke.mjs` C35 pin it; C2/C33 pin that the in-round warning still fires. |
+| "tidy up" the empty-board guard — `rxMedicationPlanDogsNotOnBoard()` on the **tablet**, `rxPlanMedicationDogsNotOnBoard()` on the **pens TV** (yes, the two names are transposed — grep for both) | don't. It looks like a redundant early return. It is the fix for a safety warning that otherwise fires **most of the day**, because the board is cleared after every meal. Pinned by test NAME, not number: `tablet-rx-empty-board.smoke.mjs :: empty board raises no unjoined warning` + `:: in-round a missing medication dog is still named`, and `display-rx-red.smoke.mjs :: banner an empty board raises no unjoined-medication warning` + `:: banner a plan medication dog that joins no tile is named`. Both halves matter: suppression without the in-round half is just a deleted warning. |
 | spawn `bash` from any `tests/*.smoke.mjs` | use the `resolveBash()` helper the existing suites carry — **never a bare `'bash'`**. Bare `bash` resolves to the distro-less System32 WSL shim when the gate spawns node from PowerShell, and the step dies with `execvpe(/bin/bash) failed` having tested nothing. It passes when YOU run it (Git Bash) and fails in the gate, which is the worst possible failure shape. |
 | write a test that shells out and reports only a tail of the output | print enough to identify WHICH sub-suite failed. Truncating to the last 250 chars hid a real, reproducible harness defect for a full day (2026-08-25) — every failure looked like unattributable noise. |
 | conclude a gate failure is "flaky" | **prove it before you say it.** On 2026-08-25 that word was used twice, wrongly, for a real defect. Capture the FULL output, identify the failing scenario by name, and check whether it is the same one each time — a different arbitrary one each run means the page never rendered; the same one means logic. See §4. |
@@ -84,43 +84,10 @@ Two things worth knowing before you touch it:
   discard. Live repro: ½ → Medicine → "Metacam" landed only the ½. Fixed with `inFlight`; see
   §5 and `tests/tablet.test.js` **S22**. It was found by exercising the *live* board, not by the
   suite — which is the whole point of §4 below.
-- **The Android drag has not been proven on a real device yet.** Everything else is verified;
+- **~~The Android drag has not been proven on a real device yet.~~ CLOSED 2026-08-10** — Kam confirmed it on his own Android phone the morning of the `overscroll-behavior` fix; `tests/android-scroll.smoke.mjs` now guards it with real CDP touch events. Left here because the *class* of bug (mouse testing cannot see it) is still true. Everything else is verified;
   this one cannot be, from a desktop browser. It is the open item.
 
 ## 4. Things that passed validation and were still broken
-
-### The gate itself was a ~30% coin flip on correct code (found 2026-08-25, fixed 2026-08-26)
-
-`tests/tv-plans/build_and_run.ps1` retried the DUMP-FILE READ, not the Chrome LAUNCH:
-
-```powershell
-for ($try = 0; $try -lt 10; $try++) {
-  try { $domText = [IO.File]::ReadAllText($dumpFile); break } catch { Start-Sleep 500 }
-}
-```
-
-It looks like a retry and guards the wrong failure. When headless Chrome wrote an **empty** dump,
-`ReadAllText` SUCCEEDED, returned `''`, and broke on the first iteration — Chrome was never
-re-run, and the scenario was scored a hard `NO TITLE FOUND`. Measured: **~18% of `run.sh`
-executions lost one ARBITRARY scenario** (`fail_nocache`, `midnight`, `ok_toggle` on separate
-occasions — a *different* one each time, which is what ruled out scenario logic). The gate runs
-the suite **six times**, so P(green) was about `0.82^6 = 30%`. Three gate runs that day went
-fail, pass, fail on code that was correct throughout.
-
-Two lessons worth more than the fix:
-
-- **A retry that protects against the wrong failure is worse than none** — it makes the real
-  failure look handled. The read could never fail in the way that actually happened.
-- **"Flaky" was asserted twice, wrongly, before anyone looked at the full output.** The first
-  explanation ("Chrome contention from six back-to-back suite runs") was disproved by a single
-  standalone run failing. A gate that fails ~1 in 3 for reasons nobody has read is a gate people
-  learn to re-roll — which is how a real failure eventually gets laundered into a pass.
-
-The fix retries the whole launch (3 attempts, fresh `--user-data-dir` each time, stale dump
-deleted first) and is **loud**: `RETRY <scenario>` and `RETRY EXHAUSTED`. It was proved by a
-negative control — `$env:FTBOARD_CHROME` pointed at a stub that emits nothing on first call —
-not by sampling: six consecutive green runs proved nothing, because six passes was ~30% likely
-anyway.
 
 Both of these are why §3 says "validation is not proof".
 
@@ -158,6 +125,39 @@ Both of these are why §3 says "validation is not proof".
 Historical siblings, all documented in `CHANGELOG.md`: a green 30/30 suite shipped a silent
 data-loss bug (2026-08-04); an upstream outage was reported to staff as a quiet day for months; a
 non-idempotent `addDog` put 37 rows on the board for 16 dogs.
+
+### The gate itself was a ~30% coin flip on correct code (found 2026-08-25, fixed 2026-08-26)
+
+`tests/tv-plans/build_and_run.ps1` retried the DUMP-FILE READ, not the Chrome LAUNCH:
+
+```powershell
+for ($try = 0; $try -lt 10; $try++) {
+  try { $domText = [IO.File]::ReadAllText($dumpFile); break } catch { Start-Sleep 500 }
+}
+```
+
+It looks like a retry and guards the wrong failure. When headless Chrome wrote an **empty** dump,
+`ReadAllText` SUCCEEDED, returned `''`, and broke on the first iteration — Chrome was never
+re-run, and the scenario was scored a hard `NO TITLE FOUND`. Measured: **~18% of `run.sh`
+executions lost one ARBITRARY scenario** (`fail_nocache`, `midnight`, `ok_toggle` on separate
+occasions — a *different* one each time, which is what ruled out scenario logic). The gate runs
+the suite **six times**, so P(green) was about `0.82^6 = 30%`. Three gate runs that day went
+fail, pass, fail on code that was correct throughout.
+
+Two lessons worth more than the fix:
+
+- **A retry that protects against the wrong failure is worse than none** — it makes the real
+  failure look handled. The read could never fail in the way that actually happened.
+- **"Flaky" was asserted twice, wrongly, before anyone looked at the full output.** The first
+  explanation ("Chrome contention from six back-to-back suite runs") was disproved by a single
+  standalone run failing. A gate that fails ~1 in 3 for reasons nobody has read is a gate people
+  learn to re-roll — which is how a real failure eventually gets laundered into a pass.
+
+The fix retries the whole launch (3 attempts, fresh `--user-data-dir` each time, stale dump
+deleted first) and is **loud**: `RETRY <scenario>` and `RETRY EXHAUSTED`. It was proved by a
+negative control — `$env:FTBOARD_CHROME` pointed at a stub that emits nothing on first call —
+not by sampling: six consecutive green runs proved nothing, because six passes was ~30% likely
+anyway.
 
 ## 5. Invariants — each one is a bug that already happened
 

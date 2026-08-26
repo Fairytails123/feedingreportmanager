@@ -35,7 +35,7 @@ intermittently**, not that a live socket dropped.
 | **Telegram group** | review + command channel | chat `-1003653235960`, bot "Feeding report bot" (id 8436854999) |
 | **n8n workflow** | handles `/send` `/cancel` `/status` | self-hosted VPS `auto.thefairytails.co.uk`, workflow `yaBIrDOVbJTEMsH9` (this JSON is a mirror) |
 | **JotForm** | per-dog form that emails parents | form `240143730611039`, EU instance |
-| **TV display** | read-only board mirror | source **in this repo** (`display/display.html` + `shared/contract.js`, since 2026-07-26); published via `scripts/publish_display.sh` to the Pages repo `Fairytails123/frmdisplay` (the TV's URL) |
+| **TV display (pens)** | read-only board mirror **+ medication-signal consumer** (own plan fetch) | source **in this repo** (`display/display.html` + `shared/contract.js`, since 2026-07-26); published via `scripts/publish_display.sh` to the Pages repo `Fairytails123/frmdisplay` (the TV's URL) |
 | **White Board project** | roster source for "Add Dogs for Today" | a *separate* GAS app + sheet `1kQsNXee…` |
 
 ## 4. The map
@@ -47,11 +47,17 @@ description of "the Session tab is the live state".
 ```
    THE HOT PATH  (~95% of all traffic: 4 devices, every 5s)
 ┌──────────┐   ┌─────────────┐
-│ Tablet UI│   │ TV Display  │      getSessionVersion / getSession
+│ Tablet UI│   │  PENS TV    │      getSessionVersion / getSession
 │index.html│   │  frmdisplay │      addDog / updateDog / deleteDog
-└────┬─────┘   └──────┬──────┘      setMealType / clearSession
- staff EDIT      read-only
-     │                │
+└────┬──┬──┘   └──┬───────┬──┘      setMealType / clearSession
+ staff EDIT   read-only   │
+     │  │         │       │
+     │  └────┐    │       └────┐   ...and BOTH also read the BOARDING PLAN
+     │       │    │            │   feed for medication (see 4c):
+     │       ▼    │            ▼   GAS /exec?mode=feeding  (45s budget,
+     │   ┌────────┴──────────────┐  NOT the 12s session budget)
+     │   │ boarding Apps Script  │
+     │   └───────────────────────┘
      └────────┬───────┘   POST JSON   ~0.70s mean, 1.83s worst, 0 failures
               ▼
    ┌──────────────────────────────────────────┐
@@ -85,8 +91,12 @@ description of "the Session tab is the live state".
 └──────────┘                   └──────────┘
 ```
 
-**Reading it:** the tablet and TV talk to **n8n** for everything about the live board, and to
-**GAS** only for submit, the whiteboard roster and the dog-name lookup. `submitReport` clears the
+**Reading it:** the tablet and TVs talk to **n8n** for everything about the live board, and to
+**GAS** for submit, the whiteboard roster, the dog-name lookup — and, since 2026-08-25, the
+**boarding-plan medication feed**, which the tablet, the plans TV and the **pens TV** each fetch
+independently (`FRM_CONTRACT.BOARDING_PLANS_URL`, `?mode=feeding&token=…`). The pens TV was a
+single-feed n8n reader until then, which is exactly why a plan-declared medication dog showed no
+red on the one screen staff read at the kennel. See §4c. `submitReport` clears the
 n8n board as well as the sheet (`liveBoardCleared`), because the TV reads n8n. Every handler on
 both sides returns `{success, …}` — neither throws back to the client.
 
@@ -322,3 +332,32 @@ put the sheet out of step with the real board until n8n's next write. Don't.
 > The `CONFIG` object at the top of `feeding_report_backend_v2.js` is the single source of
 > truth for every ID, gid, and field map. If anything here disagrees with `CONFIG`, trust
 > `CONFIG`.
+
+## 4c. The medication leg (added 2026-08-25)
+
+A dog needs medication when EITHER the boarding plan says
+`feeding.medication === 'Yes'` for the joined record, OR staff have set `dog.prescription` on
+the n8n session record. **Both signals, on all three surfaces** — tablet, plans TV, pens TV.
+
+| | |
+|---|---|
+| Endpoint | `FRM_CONTRACT.BOARDING_PLANS_URL` + `?mode=feeding&token=` `FRM_CONTRACT.BOARDING_PLANS_TOKEN` |
+| Budget | `PLAN_FETCH_TIMEOUT_MS` = 45s. **Never** the 12s session budget — that reproduces the 2026-08-04 self-abort. |
+| Cadence | its own timer and its own in-flight guard (`planFetchInFlight`), never awaited inside the session path |
+| Join | `normRxName`, exact on `dogName` and on `dogName + ownerSurname`, then a first-pipe-last token fallback that resolves TOWARD medication |
+| Verdict | `dogNeedsRx` is tri-state: `true` red, `false` safe, `null` unknown. `null` never paints a tile safe. |
+| Contract check | `scripts/check_contract.js` asserts the endpoint + token are identical across **four** files: `index.html`, `tv-plans/index.html`, `feeding_report_backend_v2.js`, `display/display.html` |
+
+### Failure modes this leg survives
+
+| Failure | Behaviour |
+|---|---|
+| Feed unreachable / non-JSON / no `dogs` array | OUTAGE. `dogNeedsRx` returns `null`, never `false`. Last-known-good is consulted for a POSITIVE verdict only, so a dog known to be medicated STAYS red. Banner raised. |
+| `dogs: []` with **no** error | QUIET DAY, not an outage (`ok: true`, silent). Treating it as an outage parks a red banner on the TV all day. |
+| `dogs: []` **with** an error, or arriving after a good roster on the SAME local day | OUTAGE. The confirmed roster is kept, not erased — otherwise every red vanishes with no warning. |
+| 200 with `dogs` **and** an error (degraded) | usable, but `rxPlanUnavailable()` is true so the banner warns — a partial roster can be missing a dog's `feeding` block entirely. |
+| Board EMPTY (between rounds) | the unjoined-medication list is suppressed on every surface. `submitReport` clears the board after each meal, so warning then fires most of the day. The in-round warning is kept. |
+
+The banner **composes** with the board connection banner rather than replacing it, and titles
+itself `CHECK MEDS` when only the plan feed is degraded — claiming the board is dead when it is
+live is a lie staff act on. Full invariants: `HANDOVER.md` §5.

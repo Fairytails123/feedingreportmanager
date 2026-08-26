@@ -1,3 +1,7 @@
+> ⚠️ **Every commit SHA on this page is VOID.** Git history was rewritten and force-pushed on
+> 2026-08-25 to purge client PII. The SHAs below are labels for "the change that did X", not
+> objects you can `git show`. Some were always sibling-repo SHAs and never resolvable from here.
+
 # Feeding Platform Integration — programme tracker
 
 Plan of record: the **"One Feeding Platform"** assessment (Claude artifact, 2026-08-19,
@@ -32,7 +36,7 @@ has shipped and held.
 | 1A Canonical sources (R2) | Keep live boarding GAS as truth; delete the old local mirror; mechanically check it against guarded deploy vehicle `Fairytails123/Boardingplan` | ✅ 2026-08-20 — mirror deleted in sibling commit `34fd274` (NOT pushed); `scripts/check_boarding_drift.sh` added; Boardingplan CI already refuses unknown live state and rolls back failed smoke tests |
 | 1A publish | First publish to the unchanged `fooddata` Pages URL and byte-compare the served page | ⬜ deferred to Kam's explicit publish call — **now safe: dry-run proves the staged payload hashes to the live page exactly** |
 | 2 Shared modules | `shared/name-match.js` + `shared/fetch-kit.js` (ES5), equivalence-tested, adopted per surface | ⬜ |
-| 3 Symbiosis | Prescription-medication red tiles on TV and tablet; plan-data join, blocking tablet acknowledgement, failure banners and preview-sheet warning | ✅ delivered 2026-08-20 (`rx-medication-warnings`; 41 checks / 0 failures with real Chrome; not published) |
+| 3 Symbiosis | Prescription-medication red tiles on the tablet, the plans TV and (since 2026-08-25) the PENS TV; plan-data join, blocking tablet acknowledgement, failure banners and preview-sheet warning | ✅ delivered 2026-08-20 (`rx-medication-warnings`; 41 checks / 0 failures with real Chrome; PUBLISHED 2026-08-25/26: pens TV to frmdisplay, tablet pushed 26/08 13:59) |
 | 3 | Plan-vs-report flag in Telegram summary | ⬜ separate later contract |
 | 4 Measured infra | Instrument checkinout/plans feeds 2 weeks → move to n8n ONLY on measured degradation; token rework | 🟡 **PAUSED MID-BUILD 2026-08-21 20:22 — see "Phase 4: exactly where it stopped" below.** Owner overrode the measure-first gate and asked to build now. Stage A is built but **INERT**: nothing runs, nothing consumes it, no consumer repointed. |
 | Endgame | Merge the OneDrive folders (PII file disposed, memory carried on BOTH machines, redirect stub) | ⬜ after Phase 1 shipped + held |

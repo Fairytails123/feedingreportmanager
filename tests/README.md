@@ -2,8 +2,12 @@
 
 ```bash
 bash tests/run.sh          # syntax + contract + backend + tablet + display + TV feeding plans.  MUST be green before deploying.
+#                          # ...but it runs NO *.smoke.mjs. See the note under this block.
 LIVE=1 bash tests/run.sh   # ...plus 27 assertions against the REAL n8n board (refuses to run mid-round).
 ```
+
+> ⚠️ **`run.sh` is NOT the whole gate.** It runs no `tests/*.smoke.mjs`, and `gate.ps1` lives in the external dual-model harness, not in this repo. The medication signal on BOTH surfaces is guarded ONLY by the smoke suites, so a green `run.sh` can ship a broken red tile. Run them by hand:
+> `node tests/display-rx-red.smoke.mjs` (38) and `node tests/tablet-rx-empty-board.smoke.mjs` (6).
 
 Nothing in this project runs locally as a server, so these harnesses load the **real source** and
 replay acceptance scenarios against it:
@@ -137,7 +141,7 @@ in this repo, forever. That is the point — and it is also the trap they each h
 | `tv-plans-absorb.smoke.mjs` | the TV page + its harness live in ONE place; the publisher stages the canonical bytes. |
 | `tv-plans-eol-fix.smoke.mjs` | the publisher LF-normalises, so a publish can never rewrite every line of the public page. |
 | `canonical-sources.smoke.mjs` | one maintained TV page; `fooddata` is a publish target; no competing boarding-script copy; the boarding drift checker stays read-only. Also reports whether the TV is showing the current design. |
-| `rx-medication-warnings.smoke.mjs` | prescription medication is impossible to overlook — red on both surfaces, acknowledgement that never clears it, ambiguity resolving toward medication, and a failed plan read never meaning "no meds". |
+| `rx-medication-warnings.smoke.mjs` | prescription medication is impossible to overlook — red on the tablet and plans TV (the PENS TV is covered by `display-rx-red.smoke.mjs`), acknowledgement that never clears it, ambiguity resolving toward medication, and a failed plan read never meaning "no meds". |
 | `display-rx-red.smoke.mjs` | (2026-08-25, 38 checks) the **pens TV** medication union: the join agrees with the tablet's exactly, a failed read is never "no medication", an empty roster with no error is a quiet day, a same-day empty never erases a confirmed one, the last-known-good is read for a POSITIVE verdict only, the banner COMPOSES with the board banner, and an empty board raises no unjoined warning. |
 | `tablet-rx-empty-board.smoke.mjs` | (2026-08-26) the tablet says nothing about unjoined medication dogs when the board is empty — and still names them when a round IS in progress. Two halves; one without the other is the bug. |
 

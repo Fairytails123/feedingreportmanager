@@ -61,6 +61,8 @@ Verify each of these by hand after the port. All exist today; none may regress.
 
 | Behaviour | Current implementation |
 |---|---|
+| **Prescription-medication red (SAFETY — verify first)** | tablet `dogNeedsRx`/`rxPlanFor`/`normRxName` + `.has-rx`; pens TV the same names in `display/display.html` + `.dog-card.has-rx`/`.rx-badge`/`--color-danger`. Red = plan `feeding.medication === 'Yes'` **OR** `dog.prescription`. See `AS-BUILT.md` section 9. |
+| **Unjoined-medication warning, suppressed on an EMPTY board** | `rxMedicationPlanDogsNotOnBoard` (tablet) / `rxPlanMedicationDogsNotOnBoard` (pens TV — names transposed) |
 | Add a dog by typing, two-tier name match | `addDog`, `matchDogName`, `fuzzyMatchDogName` |
 | Unmatched dog → pick-a-match card | `renderStagingArea` unmatched branch, `resolveMatch` |
 | Hardcoded `JOTFORM_DOG_NAMES` fallback when Lookup returns < 10 dogs | `loadDogList` |

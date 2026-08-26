@@ -125,6 +125,32 @@ dragging. **Do not "restore the spec" here: `none` and `contain` both reintroduc
 
 ---
 
+## 9. The pens TV has a MEDICATION RED state the design does not describe — SAFETY, added 2026-08-25
+
+The handoff's TV section (`README.md` section 6) enumerates the card states exhaustively —
+`all` sage, `three-quarter`, `half` warm, `quarter` glow, `none` `#402310` + pen warning lamp —
+and closes with "same information as today". **That list is now incomplete, and completing it
+from the spec would delete a safety signal.**
+
+The shipped pens TV additionally has:
+
+- `--color-danger: #b42318` (plus `--color-danger-dark`, `--color-danger-text`) — the palette
+  in the handoff is terracotta/sage only and has no danger colour at all.
+- `.dog-card.has-rx` — the WHOLE tile goes red when the dog needs prescription medication.
+- `.rx-badge` — a small white-on-red `MED` pill.
+- `indicator-p` (the terracotta prescription pill) is SUPPRESSED on a red tile: dark brown on
+  red is illegible at TV distance, and two marks for one fact teaches people to read neither.
+
+**Do not "restore the spec" here.** A dog is red when the boarding plan declares
+`feeding.medication === 'Yes'` OR staff have ticked `dog.prescription`. Kam chose whole-tile
+red plus a short `MED` badge, deliberately with no medication detail text, because detail text
+risks the pen auto-fit layout.
+
+Two constraints the treatment must keep: it **recolours only** — no box dimension may change,
+because `box-sizing: border-box` feeds `calculateScale()`; and it must **not** override
+`border-left-color`, which is the portion/status channel every `.dog-card.status-*` rule owns.
+Both are asserted by `tests/display-rx-red.smoke.mjs`.
+
 ## Still open
 
 **~~The Android drag has never been exercised on a real tablet or phone.~~ CLOSED 2026-08-10:**

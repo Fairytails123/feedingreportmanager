@@ -260,8 +260,12 @@ const PLAN_DOGS = [
 const goodPlan = () => ({ ok: true, dogs: PLAN_DOGS.map(d => ({ ...d })), error: '', capturedAt: Date.now() });
 
 if (skipSpawn) {
-  for (const n of ['union (4 checks)', 'join (2 checks)', 'outage (4 checks)', 'render (2 checks)',
-                   'budget (1 check)', 'parity (1 check)']) {
+  // Counts MUST match the real groups below. An undercounting inventory is the same failure
+  // as a silent skip - it tells the operator less is unguarded than actually is. The `banner`
+  // group was missing entirely here, and it holds the empty-board suppression and the
+  // unjoined-dog naming that CLAUDE.md and HANDOVER.md cite as the pins for an owner decision.
+  for (const n of ['union (4 checks)', 'join (2 checks)', 'outage (9 checks)', 'render (3 checks)',
+                   'banner (4 checks)', 'budget (1 check)', 'parity (1 check)']) {
     skip(`behavioural: ${n}`, 'FTBOARD_SKIP_SPAWN=1');
   }
 } else {

@@ -14,6 +14,14 @@ EVERY task in this repository and are non-negotiable.
    uses a separate derived sheet.
 2. Hosting: GitHub Pages under `fairytails123` is the only permitted
    target for PWAs and web projects. Never Netlify or Vercel.
+2b. THIS REPO IS PUBLIC. Never put a real customer dog name, owner
+   surname, medication text, email or phone number in source, a test
+   fixture, a comment or a commit message. Fabricate values and keep
+   only the SHAPE the test needs. On 2026-08-25 a real dog + owner
+   surname + prescription reached a test fixture and cost a git history
+   rewrite and a force-push. Sanitising the tip does NOT remove it from
+   history - every earlier commit still carries it until history is
+   rewritten.
 3. Additive-only edits: never remove functionality without explicit
    confirmation (sole standing exception: authorised removals named in
    the contract's Authorised scope).
