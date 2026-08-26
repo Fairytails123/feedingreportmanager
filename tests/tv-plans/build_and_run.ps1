@@ -569,12 +569,35 @@ foreach ($scenario in $scenarios) {
   $profile = Join-Path $outDir "profile_$name"
   $fileUrl = "file:///$($file.Replace('\','/'))"
   $dumpFile = Join-Path $outDir "dom_$name.html"
-  cmd /c "`"$chrome`" --headless=new --disable-gpu `"--user-data-dir=$profile`" --window-size=1920,1080 --virtual-time-budget=$($scenario.budget) --dump-dom `"$fileUrl`" > `"$dumpFile`" 2>nul"
-  $domText = $null
-  for ($try = 0; $try -lt 10; $try++) {
-    try { $domText = [IO.File]::ReadAllText($dumpFile); break } catch { Start-Sleep -Milliseconds 500 }
+  # Retry the whole LAUNCH, not just the read.
+  # The old loop retried [IO.File]::ReadAllText only. When Chrome wrote an EMPTY dump the
+  # read SUCCEEDED, returned '' and broke on the first iteration, so Chrome was never re-run
+  # and the scenario was recorded as a hard "NO TITLE FOUND" failure. Measured 25/08/2026:
+  # ~18% of run.sh executions lost one arbitrary scenario this way, which left the gate
+  # (which runs the suite six times) only ~30% likely to pass on correct code.
+  # A retry gets a FRESH profile dir: a not-yet-exited Chrome from the previous scenario can
+  # still hold a lock on the old one, and a locked profile is the likeliest way a launch
+  # produces no output at all.
+  $domText = ''
+  $maxAttempts = 3
+  for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+    if ($attempt -eq 1) { $attemptProfile = $profile } else { $attemptProfile = ($profile + '_r' + $attempt) }
+    if (Test-Path $dumpFile) { Remove-Item $dumpFile -Force -ErrorAction SilentlyContinue }
+    cmd /c "`"$chrome`" --headless=new --disable-gpu `"--user-data-dir=$attemptProfile`" --window-size=1920,1080 --virtual-time-budget=$($scenario.budget) --dump-dom `"$fileUrl`" > `"$dumpFile`" 2>nul"
+    $domText = $null
+    for ($try = 0; $try -lt 10; $try++) {
+      try { $domText = [IO.File]::ReadAllText($dumpFile); break } catch { Start-Sleep -Milliseconds 500 }
+    }
+    if ($null -eq $domText) { $domText = '' }
+    if ($domText -match '<title>') { break }
+    # Loud on purpose: a silent retry would hide a scenario that is genuinely broken.
+    if ($attempt -lt $maxAttempts) {
+      Write-Host ("  RETRY " + $name + ": headless Chrome produced no <title> (attempt " + $attempt + " of " + $maxAttempts + ")")
+      Start-Sleep -Milliseconds 750
+    } else {
+      Write-Host ("  RETRY EXHAUSTED " + $name + ": still no <title> after " + $maxAttempts + " attempts")
+    }
   }
-  if ($null -eq $domText) { $domText = '' }
   if ($domText -match '<title>(.*?)</title>') {
     $decoded = [System.Net.WebUtility]::HtmlDecode($Matches[1])
     $results[$name] = $decoded
