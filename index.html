@@ -1505,6 +1505,18 @@
 
         function rxMedicationPlanDogsNotOnBoard() {
             if (!rxPlanState || !rxPlanState.ok || !Array.isArray(rxPlanState.dogs)) return [];
+            // NOT redundant, and NOT a no-op - it INVERTS the result. With an empty board
+            // `joined` stays empty, so !joined.has(planDog) is true for EVERY plan dog and
+            // this returns all of them. submitReport clears the board after every meal, so an
+            // empty board is the normal BETWEEN-ROUNDS state: without this guard the warning
+            // names every medication dog staying today, all day, and staff learn to swipe past
+            // a SAFETY warning. Owner decision 2026-08-25 (a meal-aware variant was offered
+            // and rejected - the tablet has no "Lunch Y" data and a parsing miss would HIDE a
+            // dose). Pinned by tests/tablet-rx-empty-board.smoke.mjs :: "empty board raises no
+            // unjoined warning" AND :: "in-round a missing medication dog is still named" -
+            // both halves matter; suppression without the in-round half is a deleted warning.
+            // The pens TV has the same guard in rxPlanMedicationDogsNotOnBoard() - note the
+            // two names are TRANSPOSED between the files. See HANDOVER.md section 5.
             if (!dogs.length) return [];
             const joined = new Set();
             dogs.forEach(dog => {

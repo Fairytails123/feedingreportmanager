@@ -151,6 +151,14 @@ because `box-sizing: border-box` feeds `calculateScale()`; and it must **not** o
 `border-left-color`, which is the portion/status channel every `.dog-card.status-*` rule owns.
 Both are asserted by `tests/display-rx-red.smoke.mjs`.
 
+**A known, accepted interaction — do not "fix" it without asking.** A dog that is both `none`
+(refused its food) and `has-rx` carries `.tv-alarm`, whose keyframes animate `box-shadow`. A
+CSS animation beats a static declaration, so the alarm's amber halo wins over the red glow in
+`.dog-card.has-rx`. The card body stays danger red and the `MED` badge still shows, so the
+medication signal survives intact — only the halo is amber. Arguably correct (red body = has
+medication, amber pulse = refusing food, two different facts), but it was never an explicit
+decision. Raise it with Kam rather than silently changing either rule.
+
 ## Still open
 
 **~~The Android drag has never been exercised on a real tablet or phone.~~ CLOSED 2026-08-10:**

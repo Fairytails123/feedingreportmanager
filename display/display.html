@@ -58,7 +58,13 @@
             --color-accent-2-800: #3d472b;
             --color-accent-2-900: #272e1b;
 
-            /* prescription medication danger */
+            /* prescription medication danger.
+           SAFETY - not style drift. These tokens and the .has-rx rule below are in NO handoff
+           token ramp on purpose: design_handoff_feeding_board/README.md section 6 predates
+           them and lists the card states as a closed set. Removing them to "restore the spec"
+           deletes the only medication signal on the screen staff read at the kennel.
+           See design_handoff_feeding_board/AS-BUILT.md section 9. */
+        /* prescription medication danger */
             --color-danger:      #b42318;
             --color-danger-dark: #7a1710;
             --color-danger-text: #fff5f4;
@@ -702,7 +708,23 @@
         }
 
         function rxPlanMedicationDogsNotOnBoard() {
+            // Do NOT "simplify" this line by routing it through rxPlanUnavailable(): that
+            // helper ALSO tests !!rxPlanState.error, so a DEGRADED payload (dogs AND an error)
+            // would stop warning here - and a degraded payload can be missing a dog's
+            // `feeding` block entirely, which is exactly when the warning matters most.
+            // The apparent inconsistency between the two checks IS the correct behaviour.
             if (!rxPlanState || !rxPlanState.ok || !Array.isArray(rxPlanState.dogs)) return [];
+            // NOT redundant - it INVERTS the result. With an empty board `joined` stays empty,
+            // so every plan dog reads as unmatched. submitReport clears the board after every
+            // meal, so an empty board is the normal BETWEEN-ROUNDS state and this would
+            // otherwise light the banner most of the day, diluting the NOT LIVE /
+            // connection-lost channel that is named protected behaviour. Owner decision
+            // 2026-08-25. Pinned by tests/display-rx-red.smoke.mjs :: "banner an empty board
+            // raises no unjoined-medication warning" and :: "banner a plan medication dog that
+            // joins no tile is named".
+            // Keys on PEN membership where the tablet keys on its `dogs` array - deliberate:
+            // staged-but-unpenned dogs make the tablet warn and this stay quiet, which
+            // over-warns on the surface staff act on. Do not make the two match.
             const boardHasDogs = FRM_CONTRACT.PEN_ORDER.some(penId =>
                 (pens[penId] || []).length > 0);
             if (!boardHasDogs) return [];

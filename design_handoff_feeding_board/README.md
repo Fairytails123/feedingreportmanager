@@ -180,6 +180,13 @@ rather than covering it.
 
 ### 6. TV display (`designs/Feeding TV Display.dc.html`)
 
+> ⚠️ **The card states below are NO LONGER the complete list, and completing them from this
+> section would delete a safety signal.** The shipped pens TV adds a MEDICATION RED state
+> (`--color-danger`, `.dog-card.has-rx`, a `MED` badge, and suppression of the duplicate
+> terracotta pill) that this spec never described. **Read `AS-BUILT.md` section 9 before
+> changing any TV card styling.** This pointer is here because the banner at the top of this
+> file is a single point of failure — anyone linked straight to this section never sees it.
+
 A separate full-screen page. Same information as today: 10 pens in two rows, per-dog portion, the
 medicine/supplement flags, the footer counts, and the NOT LIVE staleness banner with the stale board
 still visible behind it.
