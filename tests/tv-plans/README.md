@@ -73,3 +73,42 @@ removes only the known page, DOM, screenshot and browser-profile artefacts belon
 the 20 manifest scenarios. Review fresh screenshots after the automated run.
 
 Kam's screenshot checklist (verbatim): for each shot — 1920×1080 board as expected for the scenario; intended screen (cards vs lists) and pill state; every card readable at TV distance; no clipping or overlap; correct warning/staleness banners; logo present; ONLY fabricated names and medication text.
+
+## The launch retry (added 2026-08-26) — and why you will see RETRY lines
+
+A scenario whose headless Chrome produces **no DOM dump at all** is retried up to 3 times, each
+attempt with a FRESH `--user-data-dir` (a not-yet-exited Chrome from the previous scenario can
+hold a lock on the old one, which is the likeliest way a launch writes nothing). You will see
+these interleaved in stdout:
+
+```
+  RETRY <scenario>: headless Chrome produced no <title> (attempt 1 of 3)
+  RETRY EXHAUSTED <scenario>: still no <title> after 3 attempts
+```
+
+**A `RETRY` line is not a failure** — the scenario recovered and its assertions ran normally.
+**`RETRY EXHAUSTED` is a real failure** and the scenario is recorded as `NO TITLE FOUND`.
+The retries are deliberately loud: a silent retry would hide a scenario that is genuinely broken.
+
+**Why it exists.** The previous code retried only `[IO.File]::ReadAllText` on the dump file.
+When Chrome wrote an EMPTY file that read SUCCEEDED, returned an empty string and broke the loop
+on the first iteration — Chrome was never re-launched. Measured 2026-08-25: ~18% of `run.sh`
+executions lost one arbitrary scenario this way. The dual-model gate runs the whole suite six
+times, so it was only ~30% likely to pass on correct code. Full write-up: `HANDOVER.md` section 4.
+
+Retry profiles are named `profile_<scenario>_r2` / `_r3` and are swept by the same pre-run
+cleanup as the primary ones — **keep that loop in lockstep with `$maxAttempts`** or they
+accumulate in the temp test directory forever.
+
+### Re-proving the fix
+
+`FTBOARD_CHROME` is not only a Chrome-path override — it is the **negative-control seam**. Point
+it at a stub that emits nothing on its first invocation and then delegates to real Chrome; a
+working retry produces `RETRY` lines, zero `NO TITLE FOUND`, and a passing run. Sampling cannot
+prove this fix: at an ~18% base rate, six consecutive green runs are ~30% likely by luck alone.
+
+### `FTBOARD_SKIP_SPAWN=1`
+
+Set by the Codex sandbox, where nested process spawns are denied. Suites that shell out skip
+those checks and print `SKIP … (NOT a pass)`. **A skip is not a pass** — the operator must run
+the full suite outside the sandbox before believing a green result.

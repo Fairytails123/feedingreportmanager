@@ -20,6 +20,11 @@ has shipped and held.
 
 | Phase | Item | Status |
 |---|---|---|
+| **3 Symbiosis** | **Prescription medication on the PENS TV** (`display/display.html`) — it read only n8n and could never see plan-declared medication | ✅ 2026-08-25/26, task `pens-tv-rx-red` (Tier 2). Gate PASS, blind review RE-VERIFY CLEAR. **Published** to `frmdisplay`, byte-verified. |
+| 3 | Unjoined-medication warning suppressed on an EMPTY board (both surfaces) | ✅ 2026-08-26, task `tablet-rx-empty-board` (Tier 1). One line. Owner decision — he rejected a meal-aware variant. |
+| 3 | Client PII reached a fixture in this PUBLIC repo | ⚠️ Purged 2026-08-25: history rewritten + force-pushed, verified by fresh clone; GitHub Support ticket raised for cached objects. **Every pre-rewrite SHA on this page is void.** |
+| Infra | TV harness retried the dump-file READ, not the Chrome LAUNCH — the gate was a ~30% coin flip on correct code | ✅ Fixed 2026-08-26, proved by negative control. `HANDOVER.md` §4. |
+| Infra | Docs anti-regressed across 12 files after an independent audit | ✅ 2026-08-26 |
 | 0 Hygiene | Commit DFRD's dirty tree (2026-08-10 credential-extraction docs) | ✅ 2026-08-19 (`d14fee9`, pushed; diff checked secret-free) |
 | 0 | Push both repos' stranded 2026-08-10 commits | ✅ 2026-08-19 (DFRD `244d145`, FRM `cdce144`) |
 | 0 | Remove stale worktrees (DFRD `frosty-agnesi` + branch; FRM `optimistic-kilby` debris) | ✅ 2026-08-19 |
@@ -115,7 +120,7 @@ much less benefit. Out of scope here.
    it were an answer.
 5. Repoint consumers **with the GAS fallback kept**, through the dual-model pipeline
    (source edits): `tv-plans/index.html` and the tablet's `BOARDING_PLANS_API_URL`. Note
-   `scripts/check_contract.js` asserts those endpoint constants across three files — update
+   `scripts/check_contract.js` asserts those endpoint constants across **FOUR** files as of 2026-08-25 — `index.html`, `tv-plans/index.html`, `feeding_report_backend_v2.js` AND `display/display.html` (the pens TV now fetches the plan feed itself; a repoint that misses it leaves that TV pointed at the old endpoint and silently loses the medication red). Update
    the contract FIRST, then the copies.
 6. Token rework (per-consumer credentials replacing the shared `ft-k9-board-2024-sec`) was
    always the tail of Phase 4 and is untouched.
