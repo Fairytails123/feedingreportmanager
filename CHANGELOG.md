@@ -1,5 +1,86 @@
 # Changelog
 
+## 2026-08-25/26 — prescription medication was invisible on the PENS TV, the screen staff actually read
+
+**Symptom (Kam):** "Ziggy Jones has been added correctly and appears on the tablet with a red
+label. However, the TV screen ... does not show the red label. Staff primarily check the TV screen
+when placing dogs into kennels, so missing the red label could lead to the dog being handled
+incorrectly."
+
+**Verified live 25/08 10:32.** Dog on pen `top-2`: boarding-plan feed said
+`feeding.medication === 'Yes'`; the n8n session said `prescription: false` (staff had not ticked
+the board flag). Tablet: red. Plans TV: red (`class="tcard has-med"`). **Pens TV:
+`class="dog-card status-all tv-in"` — no medication signal at all.**
+
+**Root cause:** `display/display.html` read ONLY the n8n session
+(`FRM_CONTRACT.SESSION_API_URL`) and therefore could not see plan-declared medication. Its only
+prescription-aware code was a small terracotta pill that fires on the board flag, which was false.
+The page had no danger colour token at all.
+
+**Fix (dual-model, Tier 2, task `pens-tv-rx-red`).** The display now fetches the boarding-plan
+feed on its own interval, with its own in-flight guard and its own 45 s budget (never the 12 s
+session budget — that is the 2026-08-04 self-abort defect), ports the tablet's matcher verbatim,
+and unions the two signals. A tile goes red on a `true` verdict only; an unknown verdict raises
+the banner rather than painting a tile safe. New contract keys `BOARDING_PLANS_URL` /
+`BOARDING_PLANS_TOKEN`, enforced across all four surfaces by `scripts/check_contract.js`.
+
+**Six defects the blind reviews caught before any of it shipped** — none reached production:
+
+1. The medication banner **replaced** the board connection banner instead of extending it,
+   destroying the "showing the board from HH:MM" as-of time. The two feeds fail together, so it
+   degraded in exactly the scenario the banner exists for. The nine protected display checks
+   passed only because that harness never fires `DOMContentLoaded`, so the guard was **vacuous**.
+2. An empty roster was treated as an OUTAGE — **the contract said so, and the contract was wrong.**
+   On a day with no boarding dogs the TV would have sat all day behind a red banner. The rule is
+   now the plans-TV rule: `usable = dogsOk && (dogs.length > 0 || !error)`. Contract amended in
+   place with the superseded wording kept.
+3. The last-known-good snapshot was preserved and **never read**, so during a plan outage the TV
+   dropped the red while the tablet kept it — the two surfaces disagreeing again, which is the
+   whole defect the task existed to remove. Now read for a POSITIVE verdict only, never `false`.
+4. No retry/backoff: one transient blip blanked the medication signal for 15 minutes.
+5. A degraded payload (dogs **and** an error) raised no warning, while the tablet warned.
+6. Live customer PII in an acceptance fixture — a real dog, its owner's surname and its
+   prescription — in a **public** repo. See below.
+
+**The unjoined-medication warning, and Kam's second report.** Porting the tablet's "medication
+dogs not matched to the board" list to a continuously-rendered TV banner changed its meaning: on
+the tablet it appears only on the SUBMIT PREVIEW, when the board is supposed to be complete.
+`submitReport` clears the board after every meal, so an empty board is the normal
+between-rounds state — and the warning named every medication dog staying today, all day. Kam saw
+exactly this on the tablet ("Luna Parker, Ziggy Jones") with the board at `count:0`. **Owner
+decision: suppress when the board is empty; keep the in-round signal.** He was offered a
+meal-aware variant (at Lunch only "Lunch Y" dogs are on the board) and rejected it — the tablet
+has no Lunch-Y data, and a parsing miss there would HIDE a dose. Fixed on both surfaces; the
+tablet fix is one line (task `tablet-rx-empty-board`, Tier 1).
+
+**PII incident.** The tests-first commit carried a real dog name, owner surname and medication
+text. It was flagged and sanitised — but only at the TIP, and the earlier commit was pushed with
+the history at 14:16. Kam chose to purge: history rewritten, force-pushed with
+`--force-with-lease` pinned to the observed SHA, verified by FRESH CLONE (117 commits, zero
+carrying the medication term), local backup refs dropped and gc'd, GitHub Support ticket raised
+for cached objects. **Sanitising the tip does not remove data from history.** Note the repo has
+0 PRs and 0 forks, which is why the purge was clean. Every pre-rewrite commit SHA in this repo is
+now void.
+
+**The gate was a ~30% coin flip on correct code.** `tests/tv-plans/build_and_run.ps1` retried
+the dump-file READ, not the Chrome LAUNCH — an empty dump read fine, returned `''` and broke the
+loop, so Chrome was never re-run and the scenario failed hard. ~18% of `run.sh` runs lost one
+arbitrary scenario; the gate runs the suite six times; `0.82^6 = 30%`. Fixed 26/08: retry the
+launch, 3 attempts, fresh profile dir each time, **loud** (`RETRY` / `RETRY EXHAUSTED`).
+Proved by a negative control (`$env:FTBOARD_CHROME` stub emitting nothing on first call), not by
+sampling — six consecutive green runs proved nothing at a 30% base rate. Full write-up:
+`HANDOVER.md` §4.
+
+**Regression guards:** `tests/display-rx-red.smoke.mjs` (38 checks) and
+`tests/tablet-rx-empty-board.smoke.mjs` (6 checks), both proven failing first. Invariants in
+`HANDOVER.md` §5; new tripwire rows in §3; suite-authoring rules in `tests/README.md`.
+
+**Deployed:** pens TV published to `frmdisplay` (byte-verified against the served page); tablet
+deployed 26/08 13:59 with the board empty, verified live — with 0 dogs on the board and two
+medication dogs in the plan, the banner is hidden and `rxMedicationPlanDogsNotOnBoard()` returns
+`[]`. **The TV needs a manual browser refresh to pick up a publish.**
+
+
 ## 2026-08-10 — Android phones could not scroll a populated board: `overscroll-behavior: none` was eating vertical scroll chaining
 
 **Symptom (Kam, on his phone):** once dogs are in pens, the page cannot be scrolled up or down at

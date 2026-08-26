@@ -65,6 +65,11 @@ lost"*: the tablet was aborting **itself**.
 | touch anything about prescription medication (red tiles, the join, the acknowledgement) | read §5's medication invariants first. The rule that matters: **an ambiguous name match must resolve TOWARD medication.** A build that passed 41 checks still let a medication dog render with no red because ambiguity returned a confident "no medication". `tests/rx-medication-warnings.smoke.mjs` reproduces it. |
 | change `tv-plans/index.html` | its hash is pinned in three suites as `CANONICAL_PAGE_SHA`, and `PUBLISHED_PAGE_SHA` separately tracks what Pages serves. Re-pin CANONICAL when you change the page; re-pin PUBLISHED only **after** publishing. Never "fix" a mismatch by copying one over the other — the mismatch is the signal that the TV is out of date. |
 | write or edit any `tests/*.smoke.mjs` | read `tests/README.md` → "Rules for writing a suite here". A permanent suite may only assert what stays true after its own task merges, and must fail for the right reason. |
+| change the **pens TV** (`display/display.html`) | it is no longer a pure n8n reader — since 2026-08-25 it fetches the boarding-plan feed on its own timer, with its own in-flight guard and its own 45 s budget. Read §5's medication invariants, run `node tests/display-rx-red.smoke.mjs` (38 checks), then publish with `bash scripts/publish_display.sh` — and **refresh the browser on the TV itself**. |
+| "tidy up" the empty-board guard in `rxMedicationPlanDogsNotOnBoard()` (either surface) | don't. It looks like a redundant early return. It is the fix for a safety warning that otherwise fires **most of the day**, because the board is cleared after every meal. `tests/tablet-rx-empty-board.smoke.mjs` C1 and `display-rx-red.smoke.mjs` C35 pin it; C2/C33 pin that the in-round warning still fires. |
+| spawn `bash` from any `tests/*.smoke.mjs` | use the `resolveBash()` helper the existing suites carry — **never a bare `'bash'`**. Bare `bash` resolves to the distro-less System32 WSL shim when the gate spawns node from PowerShell, and the step dies with `execvpe(/bin/bash) failed` having tested nothing. It passes when YOU run it (Git Bash) and fails in the gate, which is the worst possible failure shape. |
+| write a test that shells out and reports only a tail of the output | print enough to identify WHICH sub-suite failed. Truncating to the last 250 chars hid a real, reproducible harness defect for a full day (2026-08-25) — every failure looked like unattributable noise. |
+| conclude a gate failure is "flaky" | **prove it before you say it.** On 2026-08-25 that word was used twice, wrongly, for a real defect. Capture the FULL output, identify the failing scenario by name, and check whether it is the same one each time — a different arbitrary one each run means the page never rendered; the same one means logic. See §4. |
 
 ## 3b. The @37 redesign (2026-08-05) — what it did and did not change
 
@@ -83,6 +88,39 @@ Two things worth knowing before you touch it:
   this one cannot be, from a desktop browser. It is the open item.
 
 ## 4. Things that passed validation and were still broken
+
+### The gate itself was a ~30% coin flip on correct code (found 2026-08-25, fixed 2026-08-26)
+
+`tests/tv-plans/build_and_run.ps1` retried the DUMP-FILE READ, not the Chrome LAUNCH:
+
+```powershell
+for ($try = 0; $try -lt 10; $try++) {
+  try { $domText = [IO.File]::ReadAllText($dumpFile); break } catch { Start-Sleep 500 }
+}
+```
+
+It looks like a retry and guards the wrong failure. When headless Chrome wrote an **empty** dump,
+`ReadAllText` SUCCEEDED, returned `''`, and broke on the first iteration — Chrome was never
+re-run, and the scenario was scored a hard `NO TITLE FOUND`. Measured: **~18% of `run.sh`
+executions lost one ARBITRARY scenario** (`fail_nocache`, `midnight`, `ok_toggle` on separate
+occasions — a *different* one each time, which is what ruled out scenario logic). The gate runs
+the suite **six times**, so P(green) was about `0.82^6 = 30%`. Three gate runs that day went
+fail, pass, fail on code that was correct throughout.
+
+Two lessons worth more than the fix:
+
+- **A retry that protects against the wrong failure is worse than none** — it makes the real
+  failure look handled. The read could never fail in the way that actually happened.
+- **"Flaky" was asserted twice, wrongly, before anyone looked at the full output.** The first
+  explanation ("Chrome contention from six back-to-back suite runs") was disproved by a single
+  standalone run failing. A gate that fails ~1 in 3 for reasons nobody has read is a gate people
+  learn to re-roll — which is how a real failure eventually gets laundered into a pass.
+
+The fix retries the whole launch (3 attempts, fresh `--user-data-dir` each time, stale dump
+deleted first) and is **loud**: `RETRY <scenario>` and `RETRY EXHAUSTED`. It was proved by a
+negative control — `$env:FTBOARD_CHROME` pointed at a stub that emits nothing on first call —
+not by sampling: six consecutive green runs proved nothing, because six passes was ~30% likely
+anyway.
 
 Both of these are why §3 says "validation is not proof".
 
@@ -139,7 +177,13 @@ non-idempotent `addDog` put 37 rows on the board for 16 dogs.
   pause. Re-gate the loop and you recreate the gap the deleted 7 s heartbeat used to cover.
 - **Submit is enabled only when online with an empty queue.**
 
-### Prescription medication (added 2026-08-20 — a missed dose is the harm being prevented)
+### Prescription medication (2026-08-20; extended to the PENS TV 2026-08-25 — a missed dose is the harm being prevented)
+
+> Until 2026-08-25 these rules lived only on the tablet. The **pens TV** — the screen staff
+> actually read when putting dogs into kennels — read ONLY the n8n session and so could never
+> see plan-declared medication. A boarding dog whose medication came from the plan showed as a
+> plain tile there while the tablet showed it red. **Both surfaces now implement the same union
+> and must stay in step.** If you change one, change the other or record why not.
 
 - **An ambiguous name match resolves TOWARD medication.** If a board dog matches more than one
   plan entry and *any* of them is medicated, that dog is red. Returning "no match" here once
@@ -163,6 +207,51 @@ non-idempotent `addDog` put 37 rows on the board for 16 dogs.
 - **Anything that re-renders the board from an async callback must check `isDragActive()`.** The
   plan fetch does. A re-render mid-drag replaces the captured tile, fires `pointercancel`, and
   drops the dog somewhere nobody asked for.
+
+**Added 2026-08-25/26, from the pens-TV port and its blind reviews. Each is a defect that was
+caught in review, not in production — which is the only reason they are cheap to read here.**
+
+- **The medication banner EXTENDS the board banner; it never replaces it.** The two failure
+  modes CORRELATE — one TV network drop takes the session feed and the plan feed down together —
+  so a medication message that pre-empts the board message destroys the "showing the board from
+  HH:MM" as-of time in exactly the scenario the banner exists for. Compose into parts; hide only
+  when every part is empty. The title must also say which channel is degraded (`CHECK MEDS` vs
+  `NOT LIVE`) — claiming the board is dead when only the plan feed is stale is a lie staff act on.
+- **An empty roster with NO error is a QUIET DAY, not an outage.** The rule is exactly the
+  plans-TV rule: `usable = dogsOk && (dogs.length > 0 || !error)`. Getting this wrong parks a red
+  banner on the TV **all day** on a day with no boarding dogs, and permanently steals board
+  height. That is the 2026-08-04 "a quiet day is not a failure" pattern, and the first
+  implementation shipped with it inverted because the CONTRACT said so — the contract was wrong.
+- **...but an empty roster that ARRIVES AFTER a good one, on the same local day, is suspicious.**
+  A 200 with `dogs: []` and no error must not erase a confirmed roster: that would drop every red
+  with no warning at all — a confident "no medication" produced by a transition. Keep the old
+  snapshot, go not-ok, explain it. It must self-release on the next local day or it sticks.
+- **A retained last-known-good snapshot is read for a POSITIVE verdict only.** During a plan
+  outage, a dog the last good snapshot says is medicated stays red; everything else returns
+  `null`, never `false`. Preserving a snapshot and then never reading it is worse than not
+  keeping one — the TV silently drops the red while the tablet keeps it, and the two surfaces
+  disagree again, which is the whole defect this work existed to remove.
+- **The plan fetch must NOT use the session budget.** `PLAN_FETCH_TIMEOUT_MS` (45 s) must never
+  equal `FRM_CONTRACT.FETCH_TIMEOUT_MS` (12 s). The boarding feed is legitimately slow
+  (2.8–33 s measured); applying 12 s reproduces the 2026-08-04 defect where the client aborted
+  ITSELF and the resulting `AbortError` was misread as a network fault.
+- **The unjoined-medication warning is SUPPRESSED when the board is empty — on BOTH surfaces.**
+  `submitReport` clears the board after every meal, so an empty board is the normal
+  between-rounds state. Warning then names every medication dog staying today, all day, and
+  staff learn to swipe past a safety warning. Keep the IN-ROUND signal: a medication dog missing
+  from a board that HAS dogs on it is still named. (Owner decision, Kam 25/08. He was offered a
+  meal-aware variant — at Lunch only "Lunch Y" dogs are on the board — and rejected it: the
+  tablet has no Lunch-Y data and a parsing miss there would HIDE a dose.)
+- **The two surfaces key emptiness differently, on purpose.** The tablet uses the module-level
+  `dogs` array; the pens TV uses pen membership (`PEN_ORDER.some(...)`). So dogs staged but not
+  yet penned make the tablet warn and the TV stay quiet. That divergence favours over-warning on
+  the surface staff are acting on, and they converge the moment a dog is penned. Do not "fix" it
+  by making the tablet key on pens — `tests/tablet-rx-empty-board.smoke.mjs` will fail, correctly.
+- **A degraded payload (dogs AND an error) must warn.** It can be missing a dog’s `feeding`
+  block entirely, so a confident `false` for that dog is exactly the wrong answer.
+- **The red tile carries ONE medication mark.** The terracotta `indicator-p` pill is suppressed
+  when a tile is red — dark brown on red is illegible at TV distance, and two marks for one fact
+  is how people learn to read neither.
 
 ## 6. How to verify the whole thing is alive
 

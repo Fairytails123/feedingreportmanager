@@ -83,6 +83,10 @@ copy.
 | About to change the TV feeding-plans page | Edit `tv-plans/index.html`, run the harness, then publish with `bash scripts/publish_plans_tv.sh`; never edit `fooddata`. |
 | About to restyle the TV card | `.tcard.has-med` may recolour the existing border, but must never resize it: `box-sizing` feeds the auto-fit calculation. |
 | About to add a per-dog field | Add it at BOTH construction sites (`addDog` and `addDogsForToday`) and both `applyRemoteState` whitelists, or it will be dropped. |
+| About to change the **pens TV** (`display/display.html`) | It fetches the boarding-plan feed itself now (own timer, own guard, own 45s budget). Read `HANDOVER.md` §5, run `node tests/display-rx-red.smoke.mjs`, publish with `bash scripts/publish_display.sh`, then **refresh the TV browser**. |
+| About to simplify the empty-board guard in `rxMedicationPlanDogsNotOnBoard()` | Don't — on either surface. The board is cleared after every meal, so without it a safety warning fires most of the day. Pinned by `tablet-rx-empty-board.smoke.mjs` C1 and `display-rx-red.smoke.mjs` C35. |
+| About to call a gate/test failure "flaky" | Prove it. Capture FULL output and name the failing scenario. That word was used twice wrongly on 2026-08-25 for a real defect that made the gate a ~30% coin flip — `HANDOVER.md` §4. |
+| About to put any real dog/owner/medication value in a test fixture | Don't — **this repo is PUBLIC**. It happened on 2026-08-25 and cost a history rewrite and a force-push. Sanitising the tip does NOT remove it from history. |
 
 ## ⚠️ THE LIVE SESSION IS IN n8n, NOT THE SHEET (since @36, 2026-08-05)
 
@@ -132,10 +136,15 @@ The repo also owns the **TV feeding-plans surface** in `tv-plans/`: `index.html`
    - **Temp** (7 cols): submission staging that n8n reads. `Dog Name | Parent Email | Meal | Food Consumed | Medicine Supplement | Supplement Types | Comments`.
    - **Meta** (hidden, GAS-owned, added 2026-07-26 @29): `A2` = the real session version, `B2` = session row count. Bumped inside every mutation's script lock; both read endpoints serve it (see "Session versioning is REAL now"). Never edit it by hand and never point an n8n node at it — if it's deleted or blanked, the next read self-heals by minting a fresh version.
 
-## Prescription-medication safety warnings (2026-08-20)
+## Prescription-medication safety warnings (2026-08-20; PENS TV added 2026-08-25)
 
-The feeding-plans TV and the tablet now make prescription medication deliberately hard to
-miss. A dog is red when the boarding plans feed declares
+> **Read `HANDOVER.md` §5 "Prescription medication" before changing any of this.** Every rule
+> there is a defect that already happened, and several were caught only by blind review.
+
+All THREE surfaces now make prescription medication deliberately hard to miss: the tablet,
+the feeding-plans TV (`tv-plans/index.html`), and — since 2026-08-25 — the **pens TV**
+(`display/display.html`), which is the screen staff read when putting dogs into kennels and
+which until then had no medication signal at all. A dog is red when the boarding plans feed declares
 `feeding.medication === 'Yes'` **OR** staff have set `dog.prescription`; this union favours
 over-warning because an under-warning can mean a missed dose. The entire medication tile is
 red on both surfaces, including tablet staging, and acknowledgement never clears that red
@@ -154,9 +163,38 @@ in `localStorage['feedingManager.rxAck.v1']`, keyed by dog ID + date + meal. The
 move onto the dog object: `applyRemoteState` rebuilds dogs from explicit whitelists and
 would silently drop an acknowledgement within roughly five seconds.
 
-An unavailable or empty plan response is never interpreted as "no dog needs medication".
-The tablet shows a persistent unavailable-data banner, and separately names plan-medication
-dogs that could not be joined safely to the board.
+An unavailable plan response is never interpreted as "no dog needs medication". The surface
+shows a persistent unavailable-data banner, and separately names plan-medication dogs that
+could not be joined safely to the board.
+
+⚠️ **"Empty" is not the same as "unavailable", and conflating them is a bug in BOTH
+directions.** A payload with an empty `dogs` array and NO error is a legitimate quiet day
+(`ok: true`, silent) — treating it as an outage parks a red banner on the TV all day. But an
+empty array that carries an error, or one that arrives *after* a good roster on the same local
+day, IS an outage and must not erase the confirmed snapshot. The canonical rule, shared with the
+plans TV, is `usable = dogsOk && (dogs.length > 0 || !error)`.
+
+### The pens TV (`display/display.html`) — added 2026-08-25
+
+It fetches the boarding-plan feed **itself**, on its own interval, with its own in-flight guard
+(`planFetchInFlight`, separate from `loadInFlight`/`versionCheckInFlight`) and its own
+`PLAN_FETCH_TIMEOUT_MS` of 45s — **never** the 12s session budget, which would reproduce the
+2026-08-04 self-abort defect. It ports the tablet's matcher verbatim (`normRxName`, exact match
+on `dogName` and on `dogName + ownerSurname`, then a first|last-token fallback resolving toward
+medication) so the two surfaces AGREE. `dogNeedsRx` is tri-state: `true` red, `false` safe,
+`null` unknown — and `null` never paints a tile safe, it raises the banner. The tile gets
+`.dog-card.has-rx` plus a `MED` badge; the treatment recolours only and must not change any box
+dimension or override `border-left-color`, which is the portion/status channel. Its medication
+banner COMPOSES with the board connection banner rather than replacing it, and titles itself
+`CHECK MEDS` when only the plan feed is degraded. Publish with `bash scripts/publish_display.sh`;
+guarded by `tests/display-rx-red.smoke.mjs` (38 checks).
+
+**The unjoined-medication list is suppressed when the board is EMPTY, on every surface.**
+`submitReport` clears the board after each meal, so an empty board is the normal between-rounds
+state; warning then names every medication dog staying today, all day, and staff learn to ignore
+it. The IN-ROUND signal is kept: a medication dog missing from a board that HAS dogs is still
+named. Owner decision (Kam, 2026-08-25), who explicitly rejected a meal-eligibility variant
+because the tablet has no "Lunch Y" data and a parsing miss there would hide a dose.
 
 Submission remains non-blocking beyond the established connection/queue gate. Every submit
 passes through the mandatory preview route — `submitReport()` → `showPreview()` → **Submit
@@ -168,7 +206,7 @@ the existing `isOnline && queue empty` gate is unchanged.
 
 The tablet UI and any Feeding Display are **independent clients of the same GAS web app**, each polling the shared **Session** sheet. "Lost connection" in user reports means *GAS calls are failing intermittently*, not a socket dropping.
 
-The **Feeding Display** (TV) is a real consumer whose **source lives IN THIS REPO since 2026-07-26** (phase 2 of the consolidation): `display/display.html` (page) + `shared/contract.js` (injected at publish time — the display defines NO copies of the exec URL/pen IDs/status values/fetch timeout itself). It is still **served from the separate Pages repo `Fairytails123/frmdisplay`** (as `index.html`, live at https://fairytails123.github.io/frmdisplay/ — the TV's URL, never re-pointed), published by the **one-command script `bash scripts/publish_display.sh "msg"`** (runs the contract drift-check, injects the contract, clones frmdisplay, pushes). The old un-tracked OneDrive source `..\Feeding report display\Feedingreport_display.html` is **RETIRED** (renamed `.RETIRED-*.bak`; that folder's CLAUDE.md is a redirect stub) — never edit or deploy it. The display is **read-only**: version-gated polling (`getSessionVersion` every 10s; on a real change one full `getSession` then 30s of **fast mode — which since @35 probes the version every 3s rather than blindly re-reading the whole session, and reads only on a further real change**), the tablet's hardened-fetch patterns (12s abort via `frmMakeGasFetch`, in-flight guards, 2-failure offline detection), a **TV-readable staleness banner** ("CONNECTION LOST / NOT LIVE — showing data from HH:MM") when nothing is confirmed for >60s, and the shared per-pen `Position` sort (`frmSortPenByPosition`). ⚠️ The TV shows a long-lived page — after a publish it picks the new version up only on a **browser refresh/restart** on the TV itself.
+The **Feeding Display** (TV) is a real consumer whose **source lives IN THIS REPO since 2026-07-26** (phase 2 of the consolidation): `display/display.html` (page) + `shared/contract.js` (injected at publish time — the display defines NO copies of the exec URL/pen IDs/status values/fetch timeout itself). It is still **served from the separate Pages repo `Fairytails123/frmdisplay`** (as `index.html`, live at https://fairytails123.github.io/frmdisplay/ — the TV's URL, never re-pointed), published by the **one-command script `bash scripts/publish_display.sh "msg"`** (runs the contract drift-check, injects the contract, clones frmdisplay, pushes). The old un-tracked OneDrive source `..\Feeding report display\Feedingreport_display.html` is **RETIRED** (renamed `.RETIRED-*.bak`; that folder's CLAUDE.md is a redirect stub) — never edit or deploy it. The display is **read-only** (it never writes), but since 2026-08-25 it is **no longer a single-feed reader** — see "The pens TV shows prescription medication" below. Its session path is unchanged: version-gated polling (`getSessionVersion` every 10s; on a real change one full `getSession` then 30s of **fast mode — which since @35 probes the version every 3s rather than blindly re-reading the whole session, and reads only on a further real change**), the tablet's hardened-fetch patterns (12s abort via `frmMakeGasFetch`, in-flight guards, 2-failure offline detection), a **TV-readable staleness banner** ("CONNECTION LOST / NOT LIVE — showing data from HH:MM") when nothing is confirmed for >60s, and the shared per-pen `Position` sort (`frmSortPenByPosition`). ⚠️ The TV shows a long-lived page — after a publish it picks the new version up only on a **browser refresh/restart** on the TV itself.
 
 ### Sync model — durable outbound mutation queue (read this before touching sync code)
 
@@ -275,7 +313,7 @@ When building any URL that a mobile Telegram user will tap, **emit zero `%XX` se
 
 Still inline **intentionally** (not secrets): `TELEGRAM_CHAT_ID` (group id), `JOTFORM_ID` (public form id), `SHEET_ID`, `CHECKINOUT_TOKEN` (already public in the Pages whiteboard). Don't add new secrets to source — put them in Script Properties / an n8n credential.
 
-**⚠️ Residual exposure.** Both secrets were public in `github.com/Fairytails123/feedingreportmanager` (JotForm key `…cbc7`, flagged by JotForm 2026-06-04; the bot token was committed too) and were scraped before removal; both stay readable in **git history** (commit `b5e6e68` etc.), which was deliberately **not** rewritten. Status per secret: the **bot token WAS rotated 2026-07-05** (scam-bot scare — old token revoked, so the leaked one is dead; current token in `_SECRETS\telegram-bots.md` + the VPS n8n cred `uMLzq2C84fMZqZPj`); the **JotForm key is still the leaked one** (owner chose not to rotate) — regenerating it in the JotForm UI → update credential `XT7arES7w7GdlpOm` remains the outstanding fix. **Rotation gotcha (bit us 2026-07-06):** the bot token lives in **TWO places** — the n8n bot credential AND the GAS `TELEGRAM_BOT_TOKEN` Script Property. The 07-05 rotation updated only n8n, so every tablet submit failed with `Telegram delivery failed … 401 Unauthorized` (submit-gating correctly preserved the data) until the Script Property was updated on 2026-07-06 (deployment @28). On any future rotation update **both**, plus re-set the bot webhook if n8n's Telegram Trigger registration was cleared by the revoke.
+**⚠️ Residual exposure.** Both secrets were public in `github.com/Fairytails123/feedingreportmanager` (JotForm key `…cbc7`, flagged by JotForm 2026-06-04; the bot token was committed too) and were scraped before removal; both stay readable in **git history**, which was deliberately **not** rewritten for the SECRETS. ⚠️ **Do not quote a commit SHA for this: history WAS rewritten on 2026-08-25 for an unrelated PII purge and force-pushed, so every pre-rewrite SHA in this repo — including the `b5e6e68` this line used to cite — is now VOID and resolves to nothing.** The leaked secrets are still in history; only the SHAs that pointed at them changed. Status per secret: the **bot token WAS rotated 2026-07-05** (scam-bot scare — old token revoked, so the leaked one is dead; current token in `_SECRETS\telegram-bots.md` + the VPS n8n cred `uMLzq2C84fMZqZPj`); the **JotForm key is still the leaked one** (owner chose not to rotate) — regenerating it in the JotForm UI → update credential `XT7arES7w7GdlpOm` remains the outstanding fix. **Rotation gotcha (bit us 2026-07-06):** the bot token lives in **TWO places** — the n8n bot credential AND the GAS `TELEGRAM_BOT_TOKEN` Script Property. The 07-05 rotation updated only n8n, so every tablet submit failed with `Telegram delivery failed … 401 Unauthorized` (submit-gating correctly preserved the data) until the Script Property was updated on 2026-07-06 (deployment @28). On any future rotation update **both**, plus re-set the bot webhook if n8n's Telegram Trigger registration was cleared by the revoke.
 
 The `CONFIG` object at the top of `feeding_report_backend_v2.js` is the **canonical source of truth** for every ID, gid, and field map this app uses — tab gids, the lunch pen source `PEN_SHEET_ID`/`PEN_TAB_GID`/`PEN_COL_FALLBACK_INDEX`, the whiteboard/check-in-out URLs and token, the JotForm question-ID map (`JOTFORM_FIELDS`), and the full `SESSION_COLS`/`TEMP` schemas (the bot token now comes from Script Properties, not `CONFIG`). Constants quoted elsewhere in this doc are for context; read `CONFIG` rather than trusting a scattered mention if they ever disagree.
 

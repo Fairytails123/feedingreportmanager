@@ -138,8 +138,10 @@ in this repo, forever. That is the point — and it is also the trap they each h
 | `tv-plans-eol-fix.smoke.mjs` | the publisher LF-normalises, so a publish can never rewrite every line of the public page. |
 | `canonical-sources.smoke.mjs` | one maintained TV page; `fooddata` is a publish target; no competing boarding-script copy; the boarding drift checker stays read-only. Also reports whether the TV is showing the current design. |
 | `rx-medication-warnings.smoke.mjs` | prescription medication is impossible to overlook — red on both surfaces, acknowledgement that never clears it, ambiguity resolving toward medication, and a failed plan read never meaning "no meds". |
+| `display-rx-red.smoke.mjs` | (2026-08-25, 38 checks) the **pens TV** medication union: the join agrees with the tablet's exactly, a failed read is never "no medication", an empty roster with no error is a quiet day, a same-day empty never erases a confirmed one, the last-known-good is read for a POSITIVE verdict only, the banner COMPOSES with the board banner, and an empty board raises no unjoined warning. |
+| `tablet-rx-empty-board.smoke.mjs` | (2026-08-26) the tablet says nothing about unjoined medication dogs when the board is empty — and still names them when a round IS in progress. Two halves; one without the other is the bug. |
 
-## Rules for writing a suite here — each one is a real failure from 2026-08-19/20
+## Rules for writing a suite here — each one is a real failure from 2026-08-19/20 (and 08-25/26)
 
 1. **Assert only what stays true after your own task merges.** Two suites asserted
    "`index.html` unchanged on this branch" — correct scope control for *their* task, but once
@@ -171,3 +173,33 @@ in this repo, forever. That is the point — and it is also the trap they each h
    bug under test is "scrolling doesn't work", the pre-fix build masks the harness bug entirely:
    `android-scroll.smoke.mjs` failed its own regression guards only *after* the fix landed,
    because the fix made the page actually move. Reset → settle (~150ms) → measure, per block.
+
+### Four more, learned the hard way on 2026-08-25/26
+
+**1. Never spawn a bare `'bash'` — use `resolveBash()`.** Every suite here that shells out
+carries a `resolveBash()` that probes the Git Bash paths explicitly. A bare `'bash'` resolves to
+the **distro-less System32 WSL shim** when `gate.ps1` spawns node from PowerShell, and the step
+dies with `execvpe(/bin/bash) failed: No such file or directory` having tested nothing. The
+failure shape is the worst kind: it PASSES when a human runs it (their shell finds Git Bash) and
+FAILS in the gate. Cost: one full gate cycle plus a wrong diagnosis.
+
+**2. If you shell out, print enough to identify WHICH sub-suite failed.** A suite that reports
+only `exit=1` plus the last 250 characters turns every failure into unattributable noise. That
+truncation hid a real, reproducible harness defect for a full day — the fix took twenty minutes
+once the full output was finally captured. Print the failing section name, or write the full log
+somewhere the operator can read it.
+
+**3. Fixture dates must be computed RELATIVE to today, with LOCAL date arithmetic.** Anything
+that compares against the real clock (`rxPlanDogIsStayingToday`) makes a hard-coded date a
+time bomb: the suite starts failing on a specific future date, and because `gate.ps1` runs
+**every** `tests/*.smoke.mjs`, one stale suite then fails every LATER task in this repo. Use a
+local-day helper (`getFullYear`/`getMonth`/`getDate`), never `toISOString()` — the UTC day flips
+at the wrong moment for this estate. A blind review caught exactly this two days before it
+would have fired.
+
+**4. No real customer data in a fixture — this repo is PUBLIC.** A dog's name, its owner's
+surname and its prescription were committed here on 2026-08-25 and had to be purged from public
+git history with a force-push. Sanitising the tip is NOT enough: the data stays in every earlier
+commit, and a later push publishes the whole history. Fabricate values and keep the SHAPE that
+the test actually needs (here: plan `dogName` as a single token plus a separate `ownerSurname`,
+joined against a combined board `matchedName`). The matcher is name-agnostic, so nothing is lost.
